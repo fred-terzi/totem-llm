@@ -1,0 +1,43 @@
+# node_modules in sub-packages are installed by postinstall — never ship them
+**/node_modules/
+
+# Development environment files (may contain secrets)
+# .env.example files are safe to include; plain .env files are not
+**/.env
+!**/.env.example
+
+# Test suites
+**/__tests__/**
+**/*.test.js
+**/*.spec.js
+
+# Dev configuration files
+**/nodemon.json
+server/swagger/**
+
+# User data / runtime artifacts (never ship these)
+server/storage/**
+collector/hotdir/**
+collector/storage/**
+collector/outputs/**
+
+# Build artifacts from frontend source (we ship server/public/ instead)
+frontend/**
+
+# Project management / infrastructure (not needed at runtime)
+.github/**
+.agents/**
+.vscode/**
+cloud-deployments/**
+browser-extension/**
+docker/**
+extras/**
+images/**
+locales/**
+embed/**
+
+# Misc
+**/*.bak
+**/*.map
+.DS_Store
+*.log
