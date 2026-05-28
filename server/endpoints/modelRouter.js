@@ -1,6 +1,5 @@
 const { ModelRouter } = require("../models/modelRouter");
 const { ModelRouterRule } = require("../models/modelRouterRule");
-const { Telemetry } = require("../models/telemetry");
 const { ModelRouterService } = require("../utils/router");
 const { reqBody, userFromSession } = require("../utils/http");
 const {
@@ -62,7 +61,6 @@ function modelRouterEndpoints(app) {
         );
 
         if (error) return response.status(400).json({ router, error });
-        await Telemetry.sendTelemetry("model_router_created");
         return response.status(200).json({ router });
       } catch (e) {
         console.error(e);
@@ -125,7 +123,6 @@ function modelRouterEndpoints(app) {
         );
         if (error) return response.status(400).json({ rule, error });
 
-        await Telemetry.sendTelemetry("model_router_rule_created");
         ModelRouterService.invalidateRouter(routerId);
         return response.status(200).json({ rule });
       } catch (e) {

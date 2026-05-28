@@ -12,7 +12,6 @@ const { WorkspaceChats } = require("../models/workspaceChats");
 const { Workspace } = require("../models/workspace");
 const { ScheduledJobRun } = require("../models/scheduledJobRun");
 const createFilesLib = require("../utils/agents/aibitat/plugins/create-files/lib");
-const { Telemetry } = require("../models/telemetry");
 
 /**
  * Endpoints for serving agent-generated files (PPTX, etc.) with authentication
@@ -76,9 +75,6 @@ function agentFileServerEndpoints(app) {
         );
         response.setHeader("Content-Length", fileData.buffer.length);
         response.send(fileData.buffer);
-        Telemetry.sendTelemetry("agent_generated_file_downloaded", {
-          type: mimeType,
-        }).catch(() => {});
         return;
       } catch (error) {
         console.error("[agentFileServer] Download error:", error.message);

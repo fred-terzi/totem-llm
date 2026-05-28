@@ -1,7 +1,6 @@
 const { reqBody, multiUserMode, userFromSession } = require("../utils/http");
 const { handleFileUpload } = require("../utils/files/multer");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
-const { Telemetry } = require("../models/telemetry");
 const {
   flexUserRoleValid,
   ROLES,
@@ -96,7 +95,6 @@ function workspaceParsedFilesEndpoints(app) {
           });
         }
 
-        await Telemetry.sendTelemetry("document_embedded");
         await EventLogs.logEvent(
           "document_embedded",
           {

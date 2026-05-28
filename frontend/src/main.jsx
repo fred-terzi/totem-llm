@@ -186,15 +186,6 @@ const router = createBrowserRouter([
         },
       },
       {
-        path: "/settings/privacy",
-        lazy: async () => {
-          const { default: PrivacyAndData } = await import(
-            "@/pages/GeneralSettings/PrivacyAndData"
-          );
-          return { element: <AdminRoute Component={PrivacyAndData} /> };
-        },
-      },
-      {
         path: "/settings/interface",
         lazy: async () => {
           const { default: InterfaceSettings } = await import(
