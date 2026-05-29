@@ -1,0 +1,7 @@
+# This file intentionally overrides server/.gitignore for npm packaging.
+# server/.gitignore excludes public/ (the dev build output), but the npm
+# package must include server/public/ — the pre-built frontend copied here
+# by scripts/build-frontend.mjs during prepublishOnly.
+#
+# All sensitive exclusions (node_modules, .env.*, storage/, swagger/) are
+# handled by the root .npmignore and do not need to be repeated here.
