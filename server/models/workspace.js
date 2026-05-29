@@ -531,7 +531,6 @@ const Workspace = {
     )
       await PromptHistory.handlePromptChange(prevData, user); // log the change to the prompt history
 
-    const { Telemetry } = require("./telemetry");
     const { EventLogs } = require("./eventLogs");
     if (
       !newData?.openAiPrompt || // no prompt change
@@ -540,7 +539,6 @@ const Workspace = {
     )
       return;
 
-    await Telemetry.sendTelemetry("workspace_prompt_changed");
     await EventLogs.logEvent(
       "workspace_prompt_changed",
       {

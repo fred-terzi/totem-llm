@@ -68,7 +68,6 @@ const SystemSettings = {
   ],
   supportedFields: [
     "logo_filename",
-    "telemetry_id",
     "footer_data",
     "support_email",
 
@@ -467,7 +466,6 @@ const SystemSettings = {
       MultiUserMode: await this.isMultiUserMode(),
       MemoryEnabled: await this.memoriesEnabled(),
       MemoryAutoExtraction: await this.memoryAutoExtractionSetting(),
-      DisableTelemetry: process.env.DISABLE_TELEMETRY || "false",
 
       // --------------------------------------------------------
       // Embedder Provider Selection Settings & Configs
@@ -742,8 +740,6 @@ const SystemSettings = {
   markOnboardingComplete: async function () {
     try {
       await this._updateSettings({ onboarding_complete: true });
-      const { Telemetry } = require("./telemetry");
-      await Telemetry.sendTelemetry("onboarding_complete");
       return true;
     } catch (error) {
       console.error(error.message);

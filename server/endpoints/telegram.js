@@ -1,7 +1,6 @@
 const {
   ExternalCommunicationConnector,
 } = require("../models/externalCommunicationConnector");
-const { Telemetry } = require("../models/telemetry");
 const { TelegramBotService } = require("../utils/telegramBot");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { isSingleUserMode } = require("../utils/middleware/multiUserProtected");
@@ -146,7 +145,6 @@ function telegramEndpoints(app) {
         await EventLogs.logEvent("telegram_bot_connected", {
           bot_username: verification.username,
         });
-        await Telemetry.sendTelemetry("telegram_bot_connected");
         return response.status(200).json({
           success: true,
           bot_username: verification.username,

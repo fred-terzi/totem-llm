@@ -1,8 +1,6 @@
-const { Telemetry } = require("../../models/telemetry");
 const { BackgroundService } = require("../BackgroundWorkers");
 const { EncryptionManager } = require("../EncryptionManager");
 const { CommunicationKey } = require("../comKey");
-const setupTelemetry = require("../telemetry");
 const eagerLoadContextWindows = require("./eagerLoadContextWindows");
 const markOnboarded = require("./markOnboarded");
 const { PushNotifications } = require("../PushNotifications");
@@ -32,7 +30,6 @@ function bootSSL(app, port = 3001) {
     server
       .listen(port, async () => {
         await markOnboarded();
-        await setupTelemetry();
         new CommunicationKey(true);
         new EncryptionManager();
         new BackgroundService().boot();
@@ -65,7 +62,6 @@ function bootHTTP(app, port = 3001) {
   app
     .listen(port, async () => {
       await markOnboarded();
-      await setupTelemetry();
       new CommunicationKey(true);
       new EncryptionManager();
       new BackgroundService().boot();
@@ -81,11 +77,9 @@ function bootHTTP(app, port = 3001) {
 
 function catchSigTerms() {
   process.once("SIGUSR2", function () {
-    Telemetry.flush();
     process.kill(process.pid, "SIGUSR2");
   });
   process.on("SIGINT", function () {
-    Telemetry.flush();
     process.kill(process.pid, "SIGINT");
   });
 }

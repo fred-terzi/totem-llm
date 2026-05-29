@@ -15,6 +15,7 @@ import {
 import AgentIcon from "@/media/animations/agent-static.png";
 import CommunityHubIcon from "@/media/illustrations/community-hub.png";
 import useUser from "@/hooks/useUser";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 import { isMobile } from "react-device-detect";
 import Footer from "../Footer";
 import { Link } from "react-router-dom";
@@ -110,18 +111,6 @@ export default function SettingsSidebar() {
                 <div className="h-auto md:sidebar-items">
                   <div className="flex flex-col gap-y-4 pb-[60px] overflow-y-scroll no-scroll">
                     <SidebarOptions user={user} t={t} />
-                    <div className="h-[1.5px] bg-[#3D4147] mx-3 mt-[14px]" />
-                    <SupportEmail />
-                    <Link
-                      hidden={
-                        user?.hasOwnProperty("role") && user.role !== "admin"
-                      }
-                      to={paths.settings.privacy()}
-                      className="text-theme-text-secondary hover:text-white text-xs leading-[18px] mx-3"
-                    >
-                      {t("settings.privacy")}
-                    </Link>
-                    <AppVersion />
                   </div>
                 </div>
               </div>
@@ -161,18 +150,6 @@ export default function SettingsSidebar() {
               <div className="h-auto sidebar-items">
                 <div className="flex flex-col gap-y-2 pb-[60px] overflow-y-scroll no-scroll">
                   <SidebarOptions user={user} t={t} />
-                  <div className="h-[1.5px] bg-[#3D4147] mx-3 mt-[14px]" />
-                  <SupportEmail />
-                  <Link
-                    hidden={
-                      user?.hasOwnProperty("role") && user.role !== "admin"
-                    }
-                    to={paths.settings.privacy()}
-                    className="text-theme-text-secondary hover:text-white hover:light:text-theme-text-primary text-xs leading-[18px] mx-3"
-                  >
-                    {t("settings.privacy")}
-                  </Link>
-                  <AppVersion />
                 </div>
               </div>
             </div>
@@ -212,7 +189,11 @@ function SupportEmail() {
   );
 }
 
-const SidebarOptions = ({ user = null, t }) => (
+const SidebarOptions = ({ user = null, t }) => {
+  const { enabled: modelRouterEnabled } = useFeatureFlag("modelRouter");
+  const { enabled: communityHubEnabled } = useFeatureFlag("communityHub");
+  const { enabled: brandingWhitelabelEnabled } = useFeatureFlag("brandingWhitelabel");
+  return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
       <>
@@ -257,12 +238,16 @@ const SidebarOptions = ({ user = null, t }) => (
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.model-router"),
-              href: paths.settings.modelRouters(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(modelRouterEnabled
+              ? [
+                  {
+                    btnText: t("settings.model-router"),
+                    href: paths.settings.modelRouters(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
           ]}
         />
         <Option
@@ -314,37 +299,39 @@ const SidebarOptions = ({ user = null, t }) => (
           flex={true}
           roles={["admin"]}
         />
-        <Option
-          btnText={t("settings.community-hub.title")}
-          icon={
-            <img
-              src={CommunityHubIcon}
-              alt="Community Hub"
-              className="h-5 w-5 flex-shrink-0 light:invert"
-            />
-          }
-          user={user}
-          childOptions={[
-            {
-              btnText: t("settings.community-hub.trending"),
-              href: paths.communityHub.trending(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.community-hub.your-account"),
-              href: paths.communityHub.authentication(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.community-hub.import-item"),
-              href: paths.communityHub.importItem(),
-              flex: true,
-              roles: ["admin"],
-            },
-          ]}
-        />
+        {communityHubEnabled && (
+          <Option
+            btnText={t("settings.community-hub.title")}
+            icon={
+              <img
+                src={CommunityHubIcon}
+                alt="Community Hub"
+                className="h-5 w-5 flex-shrink-0 light:invert"
+              />
+            }
+            user={user}
+            childOptions={[
+              {
+                btnText: t("settings.community-hub.trending"),
+                href: paths.communityHub.trending(),
+                flex: true,
+                roles: ["admin"],
+              },
+              {
+                btnText: t("settings.community-hub.your-account"),
+                href: paths.communityHub.authentication(),
+                flex: true,
+                roles: ["admin"],
+              },
+              {
+                btnText: t("settings.community-hub.import-item"),
+                href: paths.communityHub.importItem(),
+                flex: true,
+                roles: ["admin"],
+              },
+            ]}
+          />
+        )}
         <Option
           btnText={t("settings.customization")}
           icon={<PencilSimpleLine className="h-5 w-5 flex-shrink-0" />}
@@ -356,12 +343,16 @@ const SidebarOptions = ({ user = null, t }) => (
               flex: true,
               roles: ["admin", "manager"],
             },
-            {
-              btnText: t("settings.branding"),
-              href: paths.settings.branding(),
-              flex: true,
-              roles: ["admin", "manager"],
-            },
+            ...(brandingWhitelabelEnabled
+              ? [
+                  {
+                    btnText: t("settings.branding"),
+                    href: paths.settings.branding(),
+                    flex: true,
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.chat"),
               href: paths.settings.chat(),
@@ -455,7 +446,8 @@ const SidebarOptions = ({ user = null, t }) => (
       </>
     )}
   </CanViewChatHistoryProvider>
-);
+  );
+};
 
 function HoldToReveal({ children, holdForMs = 3_000 }) {
   let timeout = null;

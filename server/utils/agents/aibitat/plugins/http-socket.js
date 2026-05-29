@@ -1,5 +1,4 @@
 const chalk = require("chalk");
-const { Telemetry } = require("../../../../models/telemetry");
 const { v4: uuidv4 } = require("uuid");
 const { skillIsAutoApproved } = require("../../../helpers/agents");
 const TOOL_APPROVAL_TIMEOUT_MS = 120 * 1_000; // 2 mins for tool approval
@@ -232,7 +231,6 @@ const httpSocket = {
         // so we end on first response.
         aibitat.onMessage((message) => {
           if (message.from !== "USER")
-            Telemetry.sendTelemetry("agent_chat_sent");
           if (message.from === "USER" && muteUserReply) return;
           handler.send(JSON.stringify(message));
           handler.close();

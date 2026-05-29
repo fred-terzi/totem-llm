@@ -46,6 +46,7 @@ import CerebrasLogo from "@/media/llmprovider/cerebras.png";
 
 import PreLoader from "@/components/Preloader";
 import ModelRouterOptions from "@/components/LLMSelection/ModelRouterOptions";
+import { useFeatureFlags } from "@/context/FeatureFlagContext";
 import OpenAiOptions from "@/components/LLMSelection/OpenAiOptions";
 import GenericOpenAiOptions from "@/components/LLMSelection/GenericOpenAiOptions";
 import AzureAiOptions from "@/components/LLMSelection/AzureAiOptions";
@@ -98,6 +99,8 @@ export const AVAILABLE_LLM_PROVIDERS = [
     description:
       "Route messages to different LLM providers based on rules you define.",
     requiredConfig: [],
+    // Hidden when the modelRouter feature is disabled in the active build profile
+    requiredFeature: "modelRouter",
   },
   {
     name: "OpenAI",
@@ -461,6 +464,19 @@ export default function GeneralLLMPreference() {
   const searchInputRef = useRef(null);
   const { t } = useTranslation();
 
+  // Build-time feature flags determine which providers are visible.
+  // `llmProviders.allowlist` is null (show all) or a string[] of allowed values.
+  const featureFlags = useFeatureFlags();
+  const providerAllowlist = featureFlags.llmProviders?.allowlist ?? null;
+  const visibleLLMProviders = AVAILABLE_LLM_PROVIDERS.filter((p) => {
+    // Remove any provider whose required feature is disabled
+    if (p.requiredFeature && !featureFlags[p.requiredFeature]?.enabled)
+      return false;
+    // Apply the provider allowlist when one is set
+    if (providerAllowlist && !providerAllowlist.includes(p.value)) return false;
+    return true;
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const form = e.target;
@@ -522,11 +538,11 @@ export default function GeneralLLMPreference() {
   }, []);
 
   useEffect(() => {
-    const filtered = AVAILABLE_LLM_PROVIDERS.filter((llm) =>
+    const filtered = visibleLLMProviders.filter((llm) =>
       llm.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
     setFilteredLLMs(filtered);
-  }, [searchQuery, selectedLLM]);
+  }, [searchQuery, selectedLLM, visibleLLMProviders]);
 
   const selectedLLMObject = AVAILABLE_LLM_PROVIDERS.find(
     (llm) => llm.value === selectedLLM
