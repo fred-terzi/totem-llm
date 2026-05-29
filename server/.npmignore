@@ -24,7 +24,7 @@ sslcert/
 
 # Development tooling
 nodemon.json
-swagger/
+swagger/init.js
 __tests__/
 *.test.js
 *.spec.js
