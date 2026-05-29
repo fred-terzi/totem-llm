@@ -30,7 +30,7 @@ function bin(name) {
 /** Run a command, streaming output, resolving on exit-0, rejecting otherwise. */
 function run(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin(cmd), args, { cwd, stdio: "inherit", shell: false });
+    const child = spawn(bin(cmd), args, { cwd, stdio: "inherit", shell: isWin });
     child.on("close", (code) =>
       code === 0
         ? resolve()
