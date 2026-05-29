@@ -55,6 +55,10 @@ const FEATURE_DEFINITIONS = {
     label: "LLM Provider Allowlist",
     tier: "free",
   },
+  brandingWhitelabel: {
+    label: "Branding & Whitelabeling",
+    tier: "premium",
+  },
 };
 
 /**
@@ -68,8 +72,8 @@ const PROFILES = {
   npm: {
     communityHub: false,
     modelRouter: false,
-    // Only Ollama and OpenRouter are exposed in the npm release
     llmProviders: ["ollama", "openrouter"],
+    brandingWhitelabel: false,
   },
 
   /** Future free-tier desktop app */
@@ -77,6 +81,7 @@ const PROFILES = {
     communityHub: false,
     modelRouter: true,
     llmProviders: null, // all providers visible
+    brandingWhitelabel: false,
   },
 
   /** Future paid desktop app */
@@ -84,6 +89,7 @@ const PROFILES = {
     communityHub: true,
     modelRouter: true,
     llmProviders: null,
+    brandingWhitelabel: true,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -91,6 +97,7 @@ const PROFILES = {
     communityHub: true,
     modelRouter: true,
     llmProviders: null,
+    brandingWhitelabel: true,
   },
 };
 

@@ -200,15 +200,21 @@ const router = createBrowserRouter([
           return { element: <ManagerRoute Component={InterfaceSettings} /> };
         },
       },
-      {
-        path: "/settings/branding",
-        lazy: async () => {
-          const { default: BrandingSettings } = await import(
-            "@/pages/GeneralSettings/Settings/Branding"
-          );
-          return { element: <ManagerRoute Component={BrandingSettings} /> };
-        },
-      },
+      ...(featureEnabled("brandingWhitelabel")
+        ? [
+            {
+              path: "/settings/branding",
+              lazy: async () => {
+                const { default: BrandingSettings } = await import(
+                  "@/pages/GeneralSettings/Settings/Branding"
+                );
+                return {
+                  element: <ManagerRoute Component={BrandingSettings} />,
+                };
+              },
+            },
+          ]
+        : []),
       {
         path: "/settings/default-system-prompt",
         lazy: async () => {

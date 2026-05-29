@@ -198,6 +198,7 @@ function SupportEmail() {
 const SidebarOptions = ({ user = null, t }) => {
   const { enabled: modelRouterEnabled } = useFeatureFlag("modelRouter");
   const { enabled: communityHubEnabled } = useFeatureFlag("communityHub");
+  const { enabled: brandingWhitelabelEnabled } = useFeatureFlag("brandingWhitelabel");
   return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
@@ -348,12 +349,16 @@ const SidebarOptions = ({ user = null, t }) => {
               flex: true,
               roles: ["admin", "manager"],
             },
-            {
-              btnText: t("settings.branding"),
-              href: paths.settings.branding(),
-              flex: true,
-              roles: ["admin", "manager"],
-            },
+            ...(brandingWhitelabelEnabled
+              ? [
+                  {
+                    btnText: t("settings.branding"),
+                    href: paths.settings.branding(),
+                    flex: true,
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.chat"),
               href: paths.settings.chat(),
