@@ -2,8 +2,80 @@
 
 Totem LLM is a sovereign AI solution, aimed at optimizing for consumer hardware and ensuring data privacy. It is designed to run efficiently on consumer-grade hardware, such as laptops and desktops, without the need for cloud-based processing. This allows users to have full control over their data and AI interactions, without relying on third-party services.
 
+## Quick Start (Build from Source)
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) v18 or later
+- [Yarn](https://yarnpkg.com/) v1.x (`npm install -g yarn`)
+- [Ollama](https://ollama.com/) (recommended local LLM provider) or an [OpenRouter](https://openrouter.ai/) API key
+- Linux build machine - current build relies on `cp` command with `--reflink` option for efficient file copying. Building on non-Linux platforms may require additional setup (e.g. WSL on Windows).
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/fred-terzi/totem-llm.git
+cd totem-llm
+```
+
+### 2. Install dependencies and initialise the database
+
+```bash
+yarn setup
+```
+
+This installs dependencies for all three packages (`server`, `collector`, `frontend`), copies the example `.env` files, generates the Prisma client, and runs database migrations.
+
+### 3. Configure environment variables
+
+Open `server/.env.development` and set at minimum:
+
+```env
+STORAGE_DIR="/absolute/path/to/your/storage"
+```
+
+All other settings (LLM provider, embedding model, etc.) can be changed later through the UI.
+
+### 4. Start in development mode
+
+```bash
+yarn dev:all
+```
+
+This starts the server (port `3001`), collector (port `8888`), and frontend dev server (port `5173`) concurrently. Open [http://localhost:5173](http://localhost:5173) to access the UI.
+
+> Alternatively, run each service in its own terminal: `yarn dev:server`, `yarn dev:collector`, `yarn dev:frontend`.
+
+### 5. Build for production
+
+Choose a build profile and run the frontend build + deploy script:
+
+```bash
+# Available profiles: npm | desktop-free | desktop-premium | source
+TOTEM_BUILD_PROFILE=source node scripts/build-frontend.mjs
+```
+
+This builds the Vite frontend and copies the output into `server/public/`. Then start the server:
+
+```bash
+node bin/totem-llm.js start
+```
+
+The app will be available at [http://localhost:3001](http://localhost:3001).
+
+#### Build profiles
+
+| Profile | Community Hub | Model Router | LLM Providers | Branding & Whitelabeling |
+|---|---|---|---|---|
+| `npm` | ✗ | ✗ | Ollama, OpenRouter only | ✗ |
+| `desktop-free` | ✗ | ✓ | All | ✗ |
+| `desktop-premium` | ✓ | ✓ | All | ✓ |
+| `source` | ✓ | ✓ | All | ✓ |
+
+---
+
 ## Thanks
 
-Massive thank you and appreciate to AnythingLLM. Totem LLM is a fork of AnythingLLM, and we are grateful for the foundation they have provided. We will continue to build on their work and contribute back to the community.
+Massive thank you and appreciation to AnythingLLM. Totem LLM is a fork of AnythingLLM, and we are grateful for the foundation they have provided. We will continue to build on their work and contribute back to the community.
 
 https://github.com/Mintplex-Labs/anything-llm
