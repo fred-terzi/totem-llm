@@ -10,10 +10,16 @@ import PrivateRoute, {
 import Login from "@/pages/Login";
 import SimpleSSOPassthrough from "@/pages/Login/SSO/simple";
 import OnboardingFlow from "@/pages/OnboardingFlow";
+import { FeatureFlagProvider } from "@/context/FeatureFlagContext";
 import "@/index.css";
 
 const isDev = import.meta.env.DEV;
 const REACTWRAP = isDev ? React.Fragment : React.StrictMode;
+
+/* global __TOTEM_FEATURES__ */
+const _totemFeatures =
+  typeof __TOTEM_FEATURES__ !== "undefined" ? __TOTEM_FEATURES__ : {};
+const featureEnabled = (key) => _totemFeatures[key]?.enabled === true;
 
 const router = createBrowserRouter([
   {
@@ -239,24 +245,30 @@ const router = createBrowserRouter([
           return { element: <AdminRoute Component={GeneralApiKeys} /> };
         },
       },
-      {
-        path: "/settings/model-routers",
-        lazy: async () => {
-          const { default: ModelRouters } = await import(
-            "@/pages/GeneralSettings/ModelRouters"
-          );
-          return { element: <AdminRoute Component={ModelRouters} /> };
-        },
-      },
-      {
-        path: "/settings/model-routers/:id",
-        lazy: async () => {
-          const { default: RouterRulesPage } = await import(
-            "@/pages/GeneralSettings/ModelRouters/RouterRulesPage"
-          );
-          return { element: <AdminRoute Component={RouterRulesPage} /> };
-        },
-      },
+      ...(featureEnabled("modelRouter")
+        ? [
+            {
+              path: "/settings/model-routers",
+              lazy: async () => {
+                const { default: ModelRouters } = await import(
+                  "@/pages/GeneralSettings/ModelRouters"
+                );
+                return { element: <AdminRoute Component={ModelRouters} /> };
+              },
+            },
+            {
+              path: "/settings/model-routers/:id",
+              lazy: async () => {
+                const { default: RouterRulesPage } = await import(
+                  "@/pages/GeneralSettings/ModelRouters/RouterRulesPage"
+                );
+                return {
+                  element: <AdminRoute Component={RouterRulesPage} />,
+                };
+              },
+            },
+          ]
+        : []),
       {
         path: "/settings/system-prompt-variables",
         lazy: async () => {
@@ -334,37 +346,45 @@ const router = createBrowserRouter([
           };
         },
       },
-      {
-        path: "/settings/community-hub/trending",
-        lazy: async () => {
-          const { default: CommunityHubTrending } = await import(
-            "@/pages/GeneralSettings/CommunityHub/Trending"
-          );
-          return { element: <AdminRoute Component={CommunityHubTrending} /> };
-        },
-      },
-      {
-        path: "/settings/community-hub/authentication",
-        lazy: async () => {
-          const { default: CommunityHubAuthentication } = await import(
-            "@/pages/GeneralSettings/CommunityHub/Authentication"
-          );
-          return {
-            element: <AdminRoute Component={CommunityHubAuthentication} />,
-          };
-        },
-      },
-      {
-        path: "/settings/community-hub/import-item",
-        lazy: async () => {
-          const { default: CommunityHubImportItem } = await import(
-            "@/pages/GeneralSettings/CommunityHub/ImportItem"
-          );
-          return {
-            element: <AdminRoute Component={CommunityHubImportItem} />,
-          };
-        },
-      },
+      ...(featureEnabled("communityHub")
+        ? [
+            {
+              path: "/settings/community-hub/trending",
+              lazy: async () => {
+                const { default: CommunityHubTrending } = await import(
+                  "@/pages/GeneralSettings/CommunityHub/Trending"
+                );
+                return {
+                  element: <AdminRoute Component={CommunityHubTrending} />,
+                };
+              },
+            },
+            {
+              path: "/settings/community-hub/authentication",
+              lazy: async () => {
+                const { default: CommunityHubAuthentication } = await import(
+                  "@/pages/GeneralSettings/CommunityHub/Authentication"
+                );
+                return {
+                  element: (
+                    <AdminRoute Component={CommunityHubAuthentication} />
+                  ),
+                };
+              },
+            },
+            {
+              path: "/settings/community-hub/import-item",
+              lazy: async () => {
+                const { default: CommunityHubImportItem } = await import(
+                  "@/pages/GeneralSettings/CommunityHub/ImportItem"
+                );
+                return {
+                  element: <AdminRoute Component={CommunityHubImportItem} />,
+                };
+              },
+            },
+          ]
+        : []),
       {
         path: "/settings/mobile-connections",
         lazy: async () => {
@@ -426,6 +446,8 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <REACTWRAP>
-    <RouterProvider router={router} />
+    <FeatureFlagProvider>
+      <RouterProvider router={router} />
+    </FeatureFlagProvider>
   </REACTWRAP>
 );

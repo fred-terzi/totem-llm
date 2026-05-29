@@ -3,20 +3,25 @@ import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import paths from "@/utils/paths";
 import ModelRouter from "@/models/modelRouter";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 export default function ModelRouterOptions({ settings }) {
   const { t } = useTranslation();
+  const { enabled: modelRouterEnabled } = useFeatureFlag("modelRouter");
   const [routers, setRouters] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!modelRouterEnabled) return;
     async function fetchRouters() {
       const results = await ModelRouter.getAll();
       setRouters(results);
       setLoading(false);
     }
     fetchRouters();
-  }, []);
+  }, [modelRouterEnabled]);
+
+  if (!modelRouterEnabled) return null;
 
   if (loading) {
     return (

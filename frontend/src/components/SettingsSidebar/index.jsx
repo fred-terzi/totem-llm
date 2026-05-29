@@ -15,6 +15,7 @@ import {
 import AgentIcon from "@/media/animations/agent-static.png";
 import CommunityHubIcon from "@/media/illustrations/community-hub.png";
 import useUser from "@/hooks/useUser";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 import { isMobile } from "react-device-detect";
 import Footer from "../Footer";
 import { Link } from "react-router-dom";
@@ -194,7 +195,10 @@ function SupportEmail() {
   );
 }
 
-const SidebarOptions = ({ user = null, t }) => (
+const SidebarOptions = ({ user = null, t }) => {
+  const { enabled: modelRouterEnabled } = useFeatureFlag("modelRouter");
+  const { enabled: communityHubEnabled } = useFeatureFlag("communityHub");
+  return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
       <>
@@ -239,12 +243,16 @@ const SidebarOptions = ({ user = null, t }) => (
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.model-router"),
-              href: paths.settings.modelRouters(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(modelRouterEnabled
+              ? [
+                  {
+                    btnText: t("settings.model-router"),
+                    href: paths.settings.modelRouters(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
           ]}
         />
         <Option
@@ -296,37 +304,39 @@ const SidebarOptions = ({ user = null, t }) => (
           flex={true}
           roles={["admin"]}
         />
-        <Option
-          btnText={t("settings.community-hub.title")}
-          icon={
-            <img
-              src={CommunityHubIcon}
-              alt="Community Hub"
-              className="h-5 w-5 flex-shrink-0 light:invert"
-            />
-          }
-          user={user}
-          childOptions={[
-            {
-              btnText: t("settings.community-hub.trending"),
-              href: paths.communityHub.trending(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.community-hub.your-account"),
-              href: paths.communityHub.authentication(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.community-hub.import-item"),
-              href: paths.communityHub.importItem(),
-              flex: true,
-              roles: ["admin"],
-            },
-          ]}
-        />
+        {communityHubEnabled && (
+          <Option
+            btnText={t("settings.community-hub.title")}
+            icon={
+              <img
+                src={CommunityHubIcon}
+                alt="Community Hub"
+                className="h-5 w-5 flex-shrink-0 light:invert"
+              />
+            }
+            user={user}
+            childOptions={[
+              {
+                btnText: t("settings.community-hub.trending"),
+                href: paths.communityHub.trending(),
+                flex: true,
+                roles: ["admin"],
+              },
+              {
+                btnText: t("settings.community-hub.your-account"),
+                href: paths.communityHub.authentication(),
+                flex: true,
+                roles: ["admin"],
+              },
+              {
+                btnText: t("settings.community-hub.import-item"),
+                href: paths.communityHub.importItem(),
+                flex: true,
+                roles: ["admin"],
+              },
+            ]}
+          />
+        )}
         <Option
           btnText={t("settings.customization")}
           icon={<PencilSimpleLine className="h-5 w-5 flex-shrink-0" />}
@@ -437,7 +447,8 @@ const SidebarOptions = ({ user = null, t }) => (
       </>
     )}
   </CanViewChatHistoryProvider>
-);
+  );
+};
 
 function HoldToReveal({ children, holdForMs = 3_000 }) {
   let timeout = null;

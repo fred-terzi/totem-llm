@@ -7,9 +7,13 @@ const {
   ROLES,
 } = require("../utils/middleware/multiUserProtected");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
+const { requireFeature } = require("../utils/middleware/requireFeature");
 
 function modelRouterEndpoints(app) {
   if (!app) return;
+
+  // Gate all model router routes based on the active build profile
+  app.use("/model-routers", requireFeature("modelRouter"));
 
   app.get(
     "/model-routers",

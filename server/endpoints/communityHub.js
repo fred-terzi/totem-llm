@@ -11,9 +11,13 @@ const {
   flexUserRoleValid,
   ROLES,
 } = require("../utils/middleware/multiUserProtected");
+const { requireFeature } = require("../utils/middleware/requireFeature");
 
 function communityHubEndpoints(app) {
   if (!app) return;
+
+  // Gate all community hub routes based on the active build profile
+  app.use("/community-hub", requireFeature("communityHub"));
 
   app.get(
     "/community-hub/settings",
