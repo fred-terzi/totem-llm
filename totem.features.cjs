@@ -29,6 +29,10 @@
  * Master list of every feature Totem LLM knows about.
  * Keys are used throughout the codebase — treat them as stable identifiers.
  *
+ * Boolean features: profile value is `true` (enabled) or `false` (disabled).
+ * List features:    profile value is an array (enabled + restricted to listed values),
+ *                   `null` (enabled, no restriction), or `false` (disabled entirely).
+ *
  * @type {Record<string, FeatureDef>}
  */
 const FEATURE_DEFINITIONS = {
@@ -39,6 +43,17 @@ const FEATURE_DEFINITIONS = {
   modelRouter: {
     label: "Model Router",
     tier: "standard",
+  },
+  /**
+   * Controls which LLM providers appear in the provider dropdown.
+   * Profile value:
+   *   null           → show all providers (no restriction)
+   *   ['ollama', …]  → show only the listed provider values
+   *   false          → disable the feature entirely (hides all — avoid unless intentional)
+   */
+  llmProviders: {
+    label: "LLM Provider Allowlist",
+    tier: "free",
   },
 };
 
@@ -53,24 +68,29 @@ const PROFILES = {
   npm: {
     communityHub: false,
     modelRouter: false,
+    // Only Ollama and OpenRouter are exposed in the npm release
+    llmProviders: ["ollama", "openrouter"],
   },
 
   /** Future free-tier desktop app */
   "desktop-free": {
     communityHub: false,
     modelRouter: true,
+    llmProviders: null, // all providers visible
   },
 
   /** Future paid desktop app */
   "desktop-premium": {
     communityHub: true,
     modelRouter: true,
+    llmProviders: null,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
   source: {
     communityHub: true,
     modelRouter: true,
+    llmProviders: null,
   },
 };
 
@@ -93,11 +113,16 @@ function resolveFeatures() {
 
   const resolved = {};
   for (const [key, def] of Object.entries(FEATURE_DEFINITIONS)) {
+    const profileValue = profile[key];
+    // Arrays and null signal a list-type feature (enabled with optional restriction).
+    // false or missing signals a boolean feature that is disabled.
+    const isListFeature = Array.isArray(profileValue) || profileValue === null;
     resolved[key] = {
       label: def.label,
       tier: def.tier,
-      // Default to false for safety if a feature is missing from the profile
-      enabled: profile[key] === true,
+      enabled: isListFeature ? true : profileValue === true,
+      // `allowlist` is null (no restriction) or a string[] of permitted values
+      allowlist: isListFeature ? (Array.isArray(profileValue) ? profileValue : null) : null,
     };
   }
   return resolved;
