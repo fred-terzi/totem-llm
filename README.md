@@ -2,6 +2,42 @@
 
 Totem LLM is a sovereign AI solution, aimed at optimizing for consumer hardware and ensuring data privacy. It is designed to run efficiently on consumer-grade hardware, such as laptops and desktops, without the need for cloud-based processing. This allows users to have full control over their data and AI interactions, without relying on third-party services.
 
+## Install Quick Start Package
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) v18 or later
+- [Ollama](https://ollama.com/) (recommended) or an [OpenRouter](https://openrouter.ai/) API key
+
+### 1. Install the package
+
+```bash
+npm install -g totem-llm
+```
+
+This downloads Totem LLM and installs all server and collector dependencies automatically.
+
+### 2. Start Totem LLM
+
+```bash
+totem-llm start
+```
+
+On first run this performs one-time setup (creates `~/.totem-llm/`, migrates the database) then launches the server and document collector. Open [http://localhost:3001](http://localhost:3001) to access the UI.
+
+### Options
+
+```
+totem-llm --no-collector    Start without the document collector
+totem-llm --port=8080       Override the server port (default: 3001)
+totem-llm setup             Run first-time setup without starting
+totem-llm --help            Show all options
+```
+
+> **Storage**: All data is kept in `~/.totem-llm/` by default. Override with `TOTEM_STORAGE_DIR=/your/path totem-llm start`.
+
+---
+
 ## Quick Start (Build from Source)
 
 ### Prerequisites

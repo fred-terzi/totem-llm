@@ -3,5 +3,29 @@
 # package must include server/public/ — the pre-built frontend copied here
 # by scripts/build-frontend.mjs during prepublishOnly.
 #
-# All sensitive exclusions (node_modules, .env.*, storage/, swagger/) are
-# handled by the root .npmignore and do not need to be repeated here.
+# IMPORTANT: because this file exists, the root .npmignore rules do NOT
+# propagate into server/ — every exclusion must be stated explicitly here.
+
+# Dependencies — installed at runtime by postinstall, never ship these
+node_modules/
+
+# Secrets and local environment overrides
+.env.development
+.env.production
+.env.test
+.env.test.*
+
+# Runtime data — created at first run, not part of the package
+storage/
+logs/
+sslcert/
+*.db
+*.db-journal
+
+# Development tooling
+nodemon.json
+swagger/
+__tests__/
+*.test.js
+*.spec.js
+eslint.config.mjs
