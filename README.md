@@ -36,6 +36,12 @@ totem-llm --help            Show all options
 
 > **Storage**: All data is kept in `~/.totem-llm/` by default. Override with `TOTEM_STORAGE_DIR=/your/path totem-llm start`.
 
+> **Windows (PowerShell)**: If you see `cannot be loaded because running scripts is disabled`, run this once in PowerShell then retry:
+> ```powershell
+> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+> ```
+> Alternatively, use **Command Prompt** (`cmd.exe`) where `totem-llm.cmd` runs without any policy change.
+
 ---
 
 ## Quick Start (Build from Source)
