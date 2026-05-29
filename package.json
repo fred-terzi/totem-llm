@@ -1,6 +1,6 @@
 {
   "name": "totem-llm",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Totem LLM – Your Private AI. Run a self-hosted AI assistant locally on Linux, macOS, or Windows.",
   "main": "bin/totem-llm.js",
   "type": "module",
@@ -54,7 +54,8 @@
     "translations:prune": "cd frontend/src/locales && node findUnusedTranslations.mjs --delete && cd ../../../ && yarn translations:normalize",
     "translations:create": "cd extras/translator && node index.mjs --all && cd ../../frontend && yarn lint && cd ../..",
     "prepublishOnly": "node scripts/build-frontend.mjs",
-    "postinstall": "node scripts/postinstall.mjs"
+    "postinstall": "node scripts/postinstall.mjs",
+    "test:install": "node scripts/test-install.mjs"
   },
   "private": false,
   "devDependencies": {

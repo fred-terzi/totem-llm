@@ -86,9 +86,12 @@ async function main() {
     );
     if (!prismaClientExists) {
       console.log("  [server] generating Prisma client…");
+      // Use the locally-installed Prisma binary to avoid picking up a globally-
+      // installed incompatible Prisma CLI version.
+      const prismaBin = join(serverDir, "node_modules", ".bin", "prisma");
       await run(
-        "npx",
-        ["prisma", "generate", "--schema", join(serverDir, "prisma", "schema.prisma")],
+        prismaBin,
+        ["generate", "--schema", join(serverDir, "prisma", "schema.prisma")],
         serverDir
       );
     } else {
