@@ -18,6 +18,8 @@ const root = join(__dirname, "..");
 
 const pairs = [
   ["frontend/.env.example", "frontend/.env"],
+  // Create both .env (for Prisma CLI) and .env.development (for the runtime dev server)
+  ["server/.env.example", "server/.env"],
   ["server/.env.example", "server/.env.development"],
   ["collector/.env.example", "collector/.env"],
   ["docker/.env.example", "docker/.env"],
