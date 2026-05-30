@@ -59,6 +59,14 @@ const FEATURE_DEFINITIONS = {
     label: "Branding & Whitelabeling",
     tier: "premium",
   },
+  /**
+   * Controls whether the File System Access agent skill is available.
+   * When enabled, agents can read, write, and manage files on the host filesystem.
+   */
+  filesystemAgent: {
+    label: "File System Access",
+    tier: "free",
+  },
 };
 
 /**
@@ -74,6 +82,7 @@ const PROFILES = {
     modelRouter: false,
     llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: false,
+    filesystemAgent: true,
   },
 
   /** Future free-tier desktop app */
@@ -82,6 +91,7 @@ const PROFILES = {
     modelRouter: true,
     llmProviders: null, // all providers visible
     brandingWhitelabel: false,
+    filesystemAgent: true,
   },
 
   /** Future paid desktop app */
@@ -90,6 +100,7 @@ const PROFILES = {
     modelRouter: true,
     llmProviders: null,
     brandingWhitelabel: true,
+    filesystemAgent: true,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -98,6 +109,7 @@ const PROFILES = {
     modelRouter: true,
     llmProviders: null,
     brandingWhitelabel: true,
+    filesystemAgent: true,
   },
 };
 
