@@ -1,0 +1,26 @@
+# This file overrides collector/.gitignore for npm packaging purposes.
+# IMPORTANT: because this file exists, the root .npmignore rules do NOT
+# propagate into collector/ — every exclusion must be stated explicitly here.
+
+# Dependencies — installed at runtime by postinstall on the target platform.
+# Shipping Linux node_modules would break native modules (puppeteer, sharp)
+# on macOS and Windows since postinstall skips install if the folder exists.
+node_modules/
+
+# Runtime data — created at first run, not part of the package
+storage/
+hotdir/*
+!hotdir/__HOTDIR__.md
+outputs/
+
+# Secrets and local environment overrides
+.env.development
+.env.production
+.env.test
+
+# Development tooling
+nodemon.json
+__tests__/
+*.test.js
+*.spec.js
+eslint.config.mjs

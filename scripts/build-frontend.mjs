@@ -24,8 +24,14 @@ const frontendDir = join(packageRoot, "frontend");
 const distDir = join(frontendDir, "dist");
 const publicDir = join(packageRoot, "server", "public");
 
+const isWin = process.platform === "win32";
+/** Resolve the correct executable name on Windows (.cmd wrapper required). */
+function bin(name) {
+  return isWin ? `${name}.cmd` : name;
+}
+
 function run(cmd, args, cwd) {
-  const result = spawnSync(cmd, args, { cwd, stdio: "inherit", shell: false });
+  const result = spawnSync(bin(cmd), args, { cwd, stdio: "inherit", shell: false });
   if (result.status !== 0) {
     process.stderr.write(
       `"${cmd} ${args.join(" ")}" failed with exit code ${result.status}\n`

@@ -30,7 +30,7 @@ function bin(name) {
 /** Run a command, streaming output, resolving on exit-0, rejecting otherwise. */
 function run(cmd, args, cwd) {
   return new Promise((resolve, reject) => {
-    const child = spawn(bin(cmd), args, { cwd, stdio: "inherit", shell: false });
+    const child = spawn(bin(cmd), args, { cwd, stdio: "inherit", shell: isWin });
     child.on("close", (code) =>
       code === 0
         ? resolve()
@@ -48,8 +48,12 @@ async function installDeps(label, dir) {
     return;
   }
   console.log(`  [${label}] installing production dependencies…`);
-  // Prefer npm (always available in npm-installed contexts) over yarn
-  await run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], dir);
+  // --no-global: overrides npm_config_global=true inherited from the outer `npm install -g`
+  //   so packages install into dir/node_modules instead of the global prefix.
+  // --prefix dir: explicit local install target (belt-and-suspenders with --no-global).
+  // --legacy-peer-deps: the project has known peer-dep conflicts (e.g. apache-arrow,
+  //   prettier version ranges) that are fine at runtime but fail strict npm v7+ resolution.
+  await run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund", "--legacy-peer-deps", "--no-global", "--prefix", dir], dir);
 }
 
 async function main() {
@@ -60,7 +64,11 @@ async function main() {
   // cloned the repo and run `yarn install` at the root). We detect this by
   // checking whether the root package.json name matches AND we are NOT being
   // installed as a dependency of something else.
+  // NOTE: npm_config_global is "true" for `npm install -g` (even with --prefix),
+  // so we must NOT skip when it is set — otherwise the postinstall is a no-op
+  // when the tarball is installed from within the project directory.
   const isLocalDev =
+    !process.env.npm_config_global &&
     process.env.npm_config_local_prefix &&
     process.env.npm_config_local_prefix === process.env.INIT_CWD;
   if (isLocalDev) return;
@@ -86,9 +94,12 @@ async function main() {
     );
     if (!prismaClientExists) {
       console.log("  [server] generating Prisma client…");
+      // Use the locally-installed Prisma binary to avoid picking up a globally-
+      // installed incompatible Prisma CLI version.
+      const prismaBin = join(serverDir, "node_modules", ".bin", "prisma");
       await run(
-        "npx",
-        ["prisma", "generate", "--schema", join(serverDir, "prisma", "schema.prisma")],
+        prismaBin,
+        ["generate", "--schema", join(serverDir, "prisma", "schema.prisma")],
         serverDir
       );
     } else {
