@@ -137,15 +137,16 @@ class OllamaAILLM {
       if (!("OLLAMA_RESPONSE_TIMEOUT" in process.env)) return fetch;
       const { Agent } = require("undici");
       const moment = require("moment");
-      let timeout = process.env.OLLAMA_RESPONSE_TIMEOUT;
+      // Parse only the leading numeric portion to handle values like "7200000 (some description)"
+      let timeout = parseInt(process.env.OLLAMA_RESPONSE_TIMEOUT, 10);
 
-      if (!timeout || isNaN(Number(timeout)) || Number(timeout) <= 5 * 60_000) {
+      if (!timeout || isNaN(timeout) || timeout <= 5 * 60_000) {
         OllamaAILLM.#slog(
-          "Timeout option was not set, is not a number, or is less than 5 minutes in ms - falling back to default",
-          { timeout }
+          `Timeout option was not set, is not a valid number, or is less than 5 minutes in ms - falling back to default`,
+          { rawValue: process.env.OLLAMA_RESPONSE_TIMEOUT, parsedValue: timeout }
         );
         return fetch;
-      } else timeout = Number(timeout);
+      }
 
       const noTimeoutFetch = (input, init = {}) => {
         return fetch(input, {
