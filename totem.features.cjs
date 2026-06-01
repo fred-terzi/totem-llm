@@ -89,8 +89,7 @@ const PROFILES = {
   "L1": {
     communityHub: false,
     modelRouter: true,
-    llmProviders: null, // all providers visible
-    brandingWhitelabel: false,
+    llmProviders: ["ollama", "openrouter"], 
     filesystemAgent: true,
   },
 
@@ -98,7 +97,7 @@ const PROFILES = {
   "L2": {
     communityHub: true,
     modelRouter: true,
-    llmProviders: null,
+    llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: true,
     filesystemAgent: true,
   },
@@ -107,7 +106,7 @@ const PROFILES = {
   source: {
     communityHub: true,
     modelRouter: true,
-    llmProviders: null,
+    llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: true,
     filesystemAgent: true,
   },

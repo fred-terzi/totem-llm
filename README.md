@@ -2,6 +2,8 @@
 
 Totem LLM is a sovereign AI solution, aimed at optimizing for consumer hardware and ensuring data privacy. It is designed to run efficiently on consumer-grade hardware, such as laptops and desktops, without the need for cloud-based processing. This allows users to have full control over their data and AI interactions, without relying on third-party services.
 
+While local AI is the core focus, Totem LLM supports both local and cloud-based LLM providers, giving users the flexibility to choose based on their needs and preferences. The system is built with a modular architecture, allowing for easy integration of new features and providers over time.
+
 ## Install Quick Start Package
 
 ### Prerequisites

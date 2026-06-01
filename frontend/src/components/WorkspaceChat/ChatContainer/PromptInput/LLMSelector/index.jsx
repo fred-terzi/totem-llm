@@ -16,6 +16,7 @@ import { NoSetupWarning } from "./SetupProvider";
 import showToast from "@/utils/toast";
 import Workspace from "@/models/workspace";
 import System from "@/models/system";
+import { useFeatureFlags } from "@/context/FeatureFlagContext";
 
 export default function LLMSelectorModal({
   workspaceSlug = null,
@@ -24,13 +25,25 @@ export default function LLMSelectorModal({
   const { slug: urlSlug } = useParams();
   const slug = urlSlug ?? workspaceSlug;
   const { t } = useTranslation();
+
+  // Apply the llmProviders feature-flag allowlist so the chat provider
+  // picker shows only the same providers as the LLM settings page.
+  const featureFlags = useFeatureFlags();
+  const providerAllowlist = featureFlags.llmProviders?.allowlist ?? null;
+  const filteredProviders = WORKSPACE_LLM_PROVIDERS.filter((p) => {
+    if (p.requiredFeature && !featureFlags[p.requiredFeature]?.enabled)
+      return false;
+    if (providerAllowlist && !providerAllowlist.includes(p.value)) return false;
+    return true;
+  });
+
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState(null);
   const [selectedLLMProvider, setSelectedLLMProvider] = useState(null);
   const [selectedLLMModel, setSelectedLLMModel] = useState("");
   const [selectedRouterId, setSelectedRouterId] = useState(null);
   const [availableProviders, setAvailableProviders] = useState(
-    WORKSPACE_LLM_PROVIDERS
+    filteredProviders
   );
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -66,15 +79,15 @@ export default function LLMSelectorModal({
 
   function handleSearch(e) {
     const searchTerm = e.target.value.toLowerCase();
-    const filteredProviders = WORKSPACE_LLM_PROVIDERS.filter((provider) =>
+    const searchResults = filteredProviders.filter((provider) =>
       provider.name.toLowerCase().includes(searchTerm)
     );
-    setAvailableProviders(filteredProviders);
+    setAvailableProviders(searchResults);
   }
 
   function handleProviderSelection(provider) {
     setSelectedLLMProvider(provider);
-    setAvailableProviders(WORKSPACE_LLM_PROVIDERS);
+    setAvailableProviders(filteredProviders);
     autoScrollToSelectedLLMProvider(provider, 50);
     document.getElementById("llm-search-input").value = "";
     setHasChanges(true);
