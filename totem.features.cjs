@@ -12,9 +12,9 @@
  *   TOTEM_BUILD_PROFILE=source yarn build
  *
  * ─── Tiers ────────────────────────────────────────────────────────────────────
- *   free      Available in all build profiles where the feature is enabled.
- *   standard  Intended for paid or higher-tier builds (future enforcement).
- *   premium   Intended for premium paid builds (future enforcement).
+ *   L1      Available in all build profiles where the feature is enabled.
+ *   L2  Intended for paid or higher-tier builds (future enforcement).
+ *   L3   Intended for premium paid builds (future enforcement).
  *
  * ─── Adding a new feature ─────────────────────────────────────────────────────
  *   1. Add the key to the `FEATURE_DEFINITIONS` object below.
@@ -23,7 +23,7 @@
  *   4. Use `requireFeature('yourKey')` middleware on server routes to gate APIs.
  */
 
-/** @typedef {{ label: string, tier: 'free'|'standard'|'premium' }} FeatureDef */
+/** @typedef {{ label: string, tier: 'L1'|'L2'|'L3' }} FeatureDef */
 
 /**
  * Master list of every feature Totem LLM knows about.
@@ -38,11 +38,11 @@
 const FEATURE_DEFINITIONS = {
   communityHub: {
     label: "Community Hub",
-    tier: "premium",
+    tier: "L3",
   },
   modelRouter: {
     label: "Model Router",
-    tier: "standard",
+    tier: "L2",
   },
   /**
    * Controls which LLM providers appear in the provider dropdown.
@@ -53,11 +53,11 @@ const FEATURE_DEFINITIONS = {
    */
   llmProviders: {
     label: "LLM Provider Allowlist",
-    tier: "free",
+    tier: "L1",
   },
   brandingWhitelabel: {
     label: "Branding & Whitelabeling",
-    tier: "premium",
+    tier: "L3",
   },
   /**
    * Controls whether the File System Access agent skill is available.
@@ -65,7 +65,7 @@ const FEATURE_DEFINITIONS = {
    */
   filesystemAgent: {
     label: "File System Access",
-    tier: "free",
+    tier: "L1",
   },
 };
 
@@ -85,8 +85,8 @@ const PROFILES = {
     filesystemAgent: true,
   },
 
-  /** Future free-tier desktop app */
-  "desktop-free": {
+  /** Future L1-tier desktop app */
+  "L1": {
     communityHub: false,
     modelRouter: true,
     llmProviders: null, // all providers visible
@@ -94,8 +94,8 @@ const PROFILES = {
     filesystemAgent: true,
   },
 
-  /** Future paid desktop app */
-  "desktop-premium": {
+  /** Future L2-tier paid desktop app */
+  "L2": {
     communityHub: true,
     modelRouter: true,
     llmProviders: null,
