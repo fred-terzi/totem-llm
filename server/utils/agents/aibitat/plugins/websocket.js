@@ -284,7 +284,6 @@ const websocket = {
         // });
 
         aibitat.onMessage((message) => {
-          if (message.from !== "USER")
           if (message.from === "USER" && muteUserReply) return;
           socket.send(JSON.stringify(message));
         });
