@@ -12,8 +12,8 @@
  *   TOTEM_BUILD_PROFILE=source yarn build
  *
  * ─── Tiers ────────────────────────────────────────────────────────────────────
- *   L1      Available in all build profiles where the feature is enabled.
- *   L2  Intended for paid or higher-tier builds (future enforcement).
+ *   L1   Available in all build profiles where the feature is enabled.
+ *   L2   Intended for paid or higher-tier builds (future enforcement).
  *   L3   Intended for premium paid builds (future enforcement).
  *
  * ─── Adding a new feature ─────────────────────────────────────────────────────

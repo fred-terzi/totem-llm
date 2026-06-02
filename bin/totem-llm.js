@@ -3,6 +3,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { setup } from "../lib/setup.js";
 import { launch } from "../lib/launcher.js";
+import { getPackageVersion } from "../lib/version.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -10,6 +11,7 @@ const packageRoot = join(__dirname, "..");
 
 const args = process.argv.slice(2);
 const isHelp = args.includes("--help") || args.includes("-h");
+const isVersion = args.some((a) => a === "--version" || a === "-v");
 const command = isHelp
   ? "help"
   : (args.find((a) => !a.startsWith("--")) ?? "start");
@@ -18,6 +20,11 @@ const portArg = args.find((a) => a.startsWith("--port="));
 const port = portArg ? portArg.split("=")[1] : undefined;
 
 async function main() {
+  if (isVersion) {
+    console.log(getPackageVersion(packageRoot));
+    return;
+  }
+
   switch (command) {
     case "start":
       await setup({ packageRoot });
@@ -59,6 +66,7 @@ Commands:
 Options:
   --no-collector   Start without the document collector (skips Puppeteer/ffmpeg)
   --port=<port>    Override the server port (default: 3001)
+  --version, -v    Print Totem LLM version and exit
   --force          (setup only) Regenerate configuration even if it already exists
 
 Environment Variables:
