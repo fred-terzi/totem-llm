@@ -27,6 +27,10 @@ totem-llm start
 
 On first run this performs one-time setup (creates `~/.totem-llm/`, migrates the database) then launches the server and document collector. Open [http://localhost:3001](http://localhost:3001) to access the UI.
 
+### 3. Install to Desktop (optional)
+
+In the browser, click the install icon in the address bar (or use the browser menu) to install Totem LLM as a desktop application. This creates a standalone app with its own window and taskbar/dock icon.
+
 ### Options
 
 ```
