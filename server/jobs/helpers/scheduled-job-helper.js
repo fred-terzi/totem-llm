@@ -6,7 +6,7 @@ const { stripThinkingFromText } = require("./index.js");
  * @type {number}
  */
 const SCHEDULED_JOB_TIMEOUT_MS =
-  Number(process.env.SCHEDULED_JOB_TIMEOUT_MS) || 5 * 60 * 1000;
+  Number(process.env.SCHEDULED_JOB_TIMEOUT_MS) || 60 * 60 * 1000;
 
 /**
  * Create a callback function for the agent action.

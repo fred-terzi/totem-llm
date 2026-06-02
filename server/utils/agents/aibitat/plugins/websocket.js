@@ -2,7 +2,7 @@ const chalk = require("chalk");
 const { v4: uuidv4 } = require("uuid");
 const { safeJsonParse } = require("../../../http");
 const { skillIsAutoApproved } = require("../../../helpers/agents");
-const SOCKET_TIMEOUT_MS = 300 * 1_000; // 5 mins
+const SOCKET_TIMEOUT_MS = 3600 * 1_000; // 1 hour
 const TOOL_APPROVAL_TIMEOUT_MS = 120 * 1_000; // 2 mins for tool approval
 const CLARIFICATION_DEFAULT_TIMEOUT_MS = 120 * 1_000; // 2 mins for clarifying questions
 
