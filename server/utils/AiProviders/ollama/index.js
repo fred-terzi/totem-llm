@@ -25,7 +25,7 @@ class OllamaAILLM {
     this.model = modelPreference || process.env.OLLAMA_MODEL_PREF;
     this.keepAlive = process.env.OLLAMA_KEEP_ALIVE_TIMEOUT
       ? Number(process.env.OLLAMA_KEEP_ALIVE_TIMEOUT)
-      : 300; // Default 5-minute timeout for Ollama model loading.
+      : 3600; // Default 60-minute timeout for Ollama model loading.
 
     const headers = this.authToken
       ? { Authorization: `Bearer ${this.authToken}` }
@@ -133,19 +133,18 @@ class OllamaAILLM {
    * @returns {Function} The custom fetch function.
    */
   static applyOllamaFetch() {
+    const ONE_HOUR_MS = 60 * 60_000;
     try {
-      if (!("OLLAMA_RESPONSE_TIMEOUT" in process.env)) return fetch;
       const { Agent } = require("undici");
       const moment = require("moment");
-      // Parse only the leading numeric portion to handle values like "7200000 (some description)"
       let timeout = parseInt(process.env.OLLAMA_RESPONSE_TIMEOUT, 10);
 
-      if (!timeout || isNaN(timeout) || timeout <= 5 * 60_000) {
+      if (!timeout || isNaN(timeout)) {
+        timeout = ONE_HOUR_MS;
         OllamaAILLM.#slog(
-          `Timeout option was not set, is not a valid number, or is less than 5 minutes in ms - falling back to default`,
-          { rawValue: process.env.OLLAMA_RESPONSE_TIMEOUT, parsedValue: timeout }
+          `OLLAMA_RESPONSE_TIMEOUT was not set or is invalid - defaulting to 1 hour`,
+          { rawValue: process.env.OLLAMA_RESPONSE_TIMEOUT }
         );
-        return fetch;
       }
 
       const noTimeoutFetch = (input, init = {}) => {
@@ -160,10 +159,20 @@ class OllamaAILLM {
       return noTimeoutFetch;
     } catch (error) {
       OllamaAILLM.#slog(
-        "Error applying custom fetch - using default fetch",
+        `Error applying custom fetch - ${error.message}`,
         error
       );
-      return fetch;
+      // Last resort: use undici Agent with 1 hour timeout directly
+      try {
+        const { Agent } = require("undici");
+        return (input, init = {}) =>
+          fetch(input, {
+            ...init,
+            dispatcher: new Agent({ headersTimeout: ONE_HOUR_MS }),
+          });
+      } catch (_) {
+        return fetch;
+      }
     }
   }
 
