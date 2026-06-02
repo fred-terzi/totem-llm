@@ -67,6 +67,14 @@ const FEATURE_DEFINITIONS = {
     label: "File System Access",
     tier: "L1",
   },
+  /**
+   * Controls whether the documentation link is visible in the footer.
+   * When disabled, the help docs link is hidden from the UI.
+   */
+  documentationLink: {
+    label: "Documentation Link",
+    tier: "L1",
+  },
 };
 
 /**
@@ -83,6 +91,7 @@ const PROFILES = {
     llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: false,
     filesystemAgent: true,
+    documentationLink: false,
   },
 
   /** Future L1-tier desktop app */
@@ -91,6 +100,7 @@ const PROFILES = {
     modelRouter: true,
     llmProviders: ["ollama", "openrouter"], 
     filesystemAgent: true,
+    documentationLink: false,
   },
 
   /** Future L2-tier paid desktop app */
@@ -100,6 +110,7 @@ const PROFILES = {
     llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: true,
     filesystemAgent: true,
+    documentationLink: true,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -109,6 +120,7 @@ const PROFILES = {
     llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: true,
     filesystemAgent: true,
+    documentationLink: true,
   },
 };
 
