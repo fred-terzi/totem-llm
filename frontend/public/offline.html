@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Totem Offline</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        background: #111827;
+        color: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        margin: 0;
+        text-align: center;
+      }
+      .container {
+        max-width: 500px;
+        padding: 32px;
+        border-radius: 16px;
+        background: rgba(15, 23, 42, 0.9);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+      }
+      h1 {
+        margin: 0 0 16px;
+        font-size: 2rem;
+      }
+      p {
+        margin: 0 0 24px;
+        line-height: 1.6;
+      }
+      a {
+        color: #38bdf8;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Totem is offline</h1>
+      <p>
+        The backend server is unavailable. Please make sure the CLI/server is running in the terminal
+        and refresh this page.
+      </p>
+      <p>
+        <a href="javascript:window.location.reload();">Retry</a>
+      </p>
+    </div>
+  </body>
+</html>

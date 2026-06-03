@@ -1,5 +1,6 @@
 import System from "@/models/system";
 import paths from "@/utils/paths";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 import {
   BookOpen,
   DiscordLogo,
@@ -32,6 +33,7 @@ export const ICON_COMPONENTS = {
 
 export default function Footer() {
   const [footerData, setFooterData] = useState(false);
+  const { enabled: documentationLinkEnabled } = useFeatureFlag("documentationLink");
 
   useEffect(() => {
     async function fetchFooterData() {
@@ -65,22 +67,24 @@ export default function Footer() {
               />
             </Link>
           </div>
-          <div className="flex w-fit">
-            <Link
-              to={paths.docs()}
-              target="_blank"
-              rel="noreferrer"
-              className="transition-all duration-300 p-2 rounded-full bg-theme-sidebar-footer-icon hover:bg-theme-sidebar-footer-icon-hover"
-              aria-label="Docs"
-              data-tooltip-id="footer-item"
-              data-tooltip-content="Open AnythingLLM help docs"
-            >
-              <BookOpen
-                weight="fill"
-                className="h-5 w-5 text-white light:text-slate-800"
-              />
-            </Link>
-          </div>
+          {documentationLinkEnabled && (
+            <div className="flex w-fit">
+              <Link
+                to={paths.docs()}
+                target="_blank"
+                rel="noreferrer"
+                className="transition-all duration-300 p-2 rounded-full bg-theme-sidebar-footer-icon hover:bg-theme-sidebar-footer-icon-hover"
+                aria-label="Docs"
+                data-tooltip-id="footer-item"
+                data-tooltip-content="Open AnythingLLM help docs"
+              >
+                <BookOpen
+                  weight="fill"
+                  className="h-5 w-5 text-white light:text-slate-800"
+                />
+              </Link>
+            </div>
+          )}
           {!isMobile && <SettingsButton />}
         </div>
         <Tooltip

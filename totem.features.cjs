@@ -12,8 +12,8 @@
  *   TOTEM_BUILD_PROFILE=source yarn build
  *
  * ─── Tiers ────────────────────────────────────────────────────────────────────
- *   L1      Available in all build profiles where the feature is enabled.
- *   L2  Intended for paid or higher-tier builds (future enforcement).
+ *   L1   Available in all build profiles where the feature is enabled.
+ *   L2   Intended for paid or higher-tier builds (future enforcement).
  *   L3   Intended for premium paid builds (future enforcement).
  *
  * ─── Adding a new feature ─────────────────────────────────────────────────────
@@ -67,6 +67,14 @@ const FEATURE_DEFINITIONS = {
     label: "File System Access",
     tier: "L1",
   },
+  /**
+   * Controls whether the documentation link is visible in the footer.
+   * When disabled, the help docs link is hidden from the UI.
+   */
+  documentationLink: {
+    label: "Documentation Link",
+    tier: "L1",
+  },
 };
 
 /**
@@ -83,33 +91,36 @@ const PROFILES = {
     llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: false,
     filesystemAgent: true,
+    documentationLink: false,
   },
 
   /** Future L1-tier desktop app */
   "L1": {
     communityHub: false,
     modelRouter: true,
-    llmProviders: null, // all providers visible
-    brandingWhitelabel: false,
+    llmProviders: ["ollama", "openrouter"], 
     filesystemAgent: true,
+    documentationLink: false,
   },
 
   /** Future L2-tier paid desktop app */
   "L2": {
     communityHub: true,
     modelRouter: true,
-    llmProviders: null,
+    llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: true,
     filesystemAgent: true,
+    documentationLink: true,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
   source: {
     communityHub: true,
     modelRouter: true,
-    llmProviders: null,
+    llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: true,
     filesystemAgent: true,
+    documentationLink: true,
   },
 };
 

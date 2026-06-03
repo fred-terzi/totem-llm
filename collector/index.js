@@ -2,11 +2,21 @@ process.env.NODE_ENV === "development"
   ? require("dotenv").config({ path: `.env.${process.env.NODE_ENV}` })
   : require("dotenv").config();
 
+const os = require("os");
+const path = require("path");
+const { mkdirSync } = require("fs");
+if (!process.env.STORAGE_DIR) {
+  process.env.STORAGE_DIR = path.join(os.homedir(), "totem-llm");
+}
+// Ensure all required storage subdirectories exist
+for (const sub of ["documents", "vector-cache", "models", "direct-uploads", "generated-files", "comkey", "tmp"]) {
+  mkdirSync(path.join(process.env.STORAGE_DIR, sub), { recursive: true });
+}
+
 require("./utils/logger")();
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
-const path = require("path");
 const { ACCEPTED_MIMES } = require("./utils/constants");
 const { reqBody, getCollectorPort } = require("./utils/http");
 const { processSingleFile } = require("./processSingleFile");
