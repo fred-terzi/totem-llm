@@ -64,7 +64,7 @@ function printHelp() {
 
    Your Private AI
 
-   
+
 Usage:
   totem-llm [command] [options]
 
@@ -80,7 +80,7 @@ Options:
   --force          (setup only) Regenerate configuration even if it already exists
 
 Environment Variables:
-  TOTEM_STORAGE_DIR    Override storage directory (default: ~/.totem-llm)
+  TOTEM_STORAGE_DIR    Override storage directory (default: ~/totem-llm)
   SERVER_PORT          Override server port
   COLLECTOR_PORT       Override collector port (default: 8888)
 

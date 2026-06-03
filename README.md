@@ -25,7 +25,7 @@ This downloads Totem LLM and installs all server and collector dependencies auto
 totem-llm start
 ```
 
-On first run this performs one-time setup (creates `~/.totem-llm/`, migrates the database) then launches the server and document collector. Open [http://localhost:3001](http://localhost:3001) to access the UI.
+On first run this performs one-time setup (creates `~/totem-llm/`, migrates the database) then launches the server and document collector. Open [http://localhost:3001](http://localhost:3001) to access the UI.
 
 ### 3. Install to Desktop (optional)
 
@@ -40,7 +40,7 @@ totem-llm setup             Run first-time setup without starting
 totem-llm --help            Show all options
 ```
 
-> **Storage**: All data is kept in `~/.totem-llm/` by default. Override with `TOTEM_STORAGE_DIR=/your/path totem-llm start`.
+> **Storage**: All data is kept in `~/totem-llm/` by default. Override with `TOTEM_STORAGE_DIR=/your/path totem-llm start`.
 
 > **Windows (PowerShell)**: If you see `cannot be loaded because running scripts is disabled`, run this once in PowerShell then retry:
 > ```powershell
