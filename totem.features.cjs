@@ -13,8 +13,7 @@
  *
  * ─── Tiers ────────────────────────────────────────────────────────────────────
  *   L1   Available in all build profiles where the feature is enabled.
- *   L2   Intended for paid or higher-tier builds (future enforcement).
- *   L3   Intended for premium paid builds (future enforcement).
+ *   L2   Reserved for a additional tiers of builds (future enforcement).
  *
  * ─── Adding a new feature ─────────────────────────────────────────────────────
  *   1. Add the key to the `FEATURE_DEFINITIONS` object below.
@@ -38,7 +37,7 @@
 const FEATURE_DEFINITIONS = {
   communityHub: {
     label: "Community Hub",
-    tier: "L3",
+    tier: "L2",
   },
   modelRouter: {
     label: "Model Router",
@@ -57,7 +56,7 @@ const FEATURE_DEFINITIONS = {
   },
   brandingWhitelabel: {
     label: "Branding & Whitelabeling",
-    tier: "L3",
+    tier: "L2",
   },
   /**
    * Controls whether the File System Access agent skill is available.
@@ -65,7 +64,7 @@ const FEATURE_DEFINITIONS = {
    */
   filesystemAgent: {
     label: "File System Access",
-    tier: "L1",
+    tier: "L2",
   },
   /**
    * Controls whether the documentation link is visible in the footer.
@@ -73,7 +72,14 @@ const FEATURE_DEFINITIONS = {
    */
   documentationLink: {
     label: "Documentation Link",
-    tier: "L1",
+    tier: "L2",
+  },
+  /**
+   * Multi-User Mode: when enabled, users can create accounts and have personalized settings.
+   */
+  multiUser: {
+    label: "Multi-User Mode",
+    tier: "L2",
   },
 };
 
@@ -84,7 +90,7 @@ const FEATURE_DEFINITIONS = {
  * @type {Record<string, Record<string, boolean>>}
  */
 const PROFILES = {
-  /** Default npm / Docker release — minimal feature set */
+  /** Default npm — minimal feature set */
   npm: {
     communityHub: false,
     modelRouter: false,
@@ -92,18 +98,20 @@ const PROFILES = {
     brandingWhitelabel: false,
     filesystemAgent: true,
     documentationLink: false,
+    multiUser: false,
   },
 
-  /** Future L1-tier desktop app */
+  /** Future L1-tier build — includes all features for testing and iteration before wider release */
   "L1": {
     communityHub: false,
     modelRouter: true,
     llmProviders: ["ollama", "openrouter"], 
     filesystemAgent: true,
     documentationLink: false,
+    multiUser: false,
   },
 
-  /** Future L2-tier paid desktop app */
+  /** Future L2-tier build — includes all features for testing and iteration before wider release */
   "L2": {
     communityHub: true,
     modelRouter: true,
@@ -111,6 +119,7 @@ const PROFILES = {
     brandingWhitelabel: true,
     filesystemAgent: true,
     documentationLink: true,
+    multiUser: false,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -121,6 +130,7 @@ const PROFILES = {
     brandingWhitelabel: true,
     filesystemAgent: true,
     documentationLink: true,
+    multiUser: true,
   },
 };
 

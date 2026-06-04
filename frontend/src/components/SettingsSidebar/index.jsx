@@ -193,6 +193,7 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: modelRouterEnabled } = useFeatureFlag("modelRouter");
   const { enabled: communityHubEnabled } = useFeatureFlag("communityHub");
   const { enabled: brandingWhitelabelEnabled } = useFeatureFlag("brandingWhitelabel");
+  const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
   return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
@@ -255,11 +256,15 @@ const SidebarOptions = ({ user = null, t }) => {
           icon={<UserCircleGear className="h-5 w-5 flex-shrink-0" />}
           user={user}
           childOptions={[
-            {
-              btnText: t("settings.users"),
-              href: paths.settings.users(),
-              roles: ["admin", "manager"],
-            },
+            ...(multiUserEnabled
+              ? [
+                  {
+                    btnText: t("settings.users"),
+                    href: paths.settings.users(),
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.workspaces"),
               href: paths.settings.workspaces(),
@@ -272,11 +277,15 @@ const SidebarOptions = ({ user = null, t }) => {
               flex: true,
               roles: ["admin", "manager"],
             },
-            {
-              btnText: t("settings.invites"),
-              href: paths.settings.invites(),
-              roles: ["admin", "manager"],
-            },
+            ...(multiUserEnabled
+              ? [
+                  {
+                    btnText: t("settings.invites"),
+                    href: paths.settings.invites(),
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
             {
               btnText: "Default System Prompt",
               href: paths.settings.defaultSystemPrompt(),
