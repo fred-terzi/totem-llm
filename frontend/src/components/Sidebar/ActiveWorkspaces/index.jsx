@@ -14,6 +14,7 @@ import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 import showToast from "@/utils/toast";
 import { LAST_VISITED_WORKSPACE } from "@/utils/constants";
 import { safeJsonParse } from "@/utils/request";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 export default function ActiveWorkspaces() {
   const navigate = useNavigate();
@@ -25,6 +26,8 @@ export default function ActiveWorkspaces() {
   const { user } = useUser();
   const isInWorkspaceSettings = !!useMatch("/workspace/:slug/settings/:tab");
   const isHomePage = !!useMatch("/");
+  const agentModeEnabled = useFeatureFlag("agentMode");
+
 
   useEffect(() => {
     async function getWorkspaces() {
@@ -159,21 +162,24 @@ export default function ActiveWorkspaces() {
                               <div
                                 className={`flex items-center gap-x-[2px] transition-opacity duration-200 ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}
                               >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    setSelectedWs(workspace);
-                                    showModal();
-                                  }}
-                                  data-tooltip-id="upload-workspace"
-                                  data-tooltip-content="Upload documents to this workspace for RAG indexing"
-                                  className={`group/upload border-none rounded-md flex items-center justify-center ml-auto p-[2px] ${isActive ? "hover:bg-zinc-500 light:hover:bg-sky-800/30" : "hover:bg-zinc-500 light:hover:bg-slate-400"}`}
-                                >
-                                  <UploadSimple
-                                    className={`h-[20px] w-[20px] ${isActive ? "text-zinc-400 hover:text-white light:text-blue-700 light:group-hover/upload:text-blue-900" : "text-zinc-400 hover:text-white light:text-slate-600 light:group-hover/upload:text-slate-950"}`}
-                                  />
-                                </button>
+                                {agentModeEnabled.enabled && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      setSelectedWs(workspace);
+                                      showModal();
+                                    }}
+                                    data-tooltip-id="upload-workspace"
+                                    data-tooltip-content="Upload documents to this workspace for RAG indexing"
+                                    className={`group/upload border-none rounded-md flex items-center justify-center ml-auto p-[2px] ${isActive ? "hover:bg-zinc-500 light:hover:bg-sky-800/30" : "hover:bg-zinc-500 light:hover:bg-slate-400"}`
+                                    }
+                                  >
+                                    <UploadSimple
+                                      className={`h-[20px] w-[20px] ${isActive ? "text-zinc-400 hover:text-white light:text-blue-700 light:group-hover/upload:text-blue-900" : "text-zinc-400 hover:text-white light:text-slate-600 light:group-hover/upload:text-slate-950"}`}
+                                    />
+                                  </button>
+                                )}
                                 <button
                                   onClick={(e) => {
                                     e.preventDefault();
