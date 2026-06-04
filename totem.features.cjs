@@ -81,6 +81,13 @@ const FEATURE_DEFINITIONS = {
     label: "Multi-User Mode",
     tier: "L2",
   },
+  /**
+   * Totem LLM Mobile: This is entirely AnythingLLM mobile, it needs to be disabled. 
+   */
+  mobile: {
+    label: "Totem LLM Mobile",
+    tier: "L2",
+  },
 };
 
 /**
@@ -99,6 +106,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: false,
     multiUser: false,
+    mobile: false,
   },
 
   /** Future L1-tier build — includes all features for testing and iteration before wider release */
@@ -109,6 +117,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: false,
     multiUser: false,
+    mobile: false,
   },
 
   /** Future L2-tier build — includes all features for testing and iteration before wider release */
@@ -120,6 +129,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: true,
     multiUser: false,
+    mobile: false,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -131,6 +141,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: true,
     multiUser: true,
+    mobile: false,
   },
 };
 

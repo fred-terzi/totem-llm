@@ -194,6 +194,7 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: communityHubEnabled } = useFeatureFlag("communityHub");
   const { enabled: brandingWhitelabelEnabled } = useFeatureFlag("brandingWhitelabel");
   const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
+  const { enabled: mobileEnabled } = useFeatureFlag("mobile");
   return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
@@ -425,12 +426,16 @@ const SidebarOptions = ({ user = null, t }) => {
               flex: true,
               roles: ["admin", "manager"],
             },
-            {
-              btnText: t("settings.mobile-app"),
-              href: paths.settings.mobile(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(mobileEnabled
+              ? [
+                  {
+                    btnText: t("settings.mobile-app"),
+                    href: paths.settings.mobile(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
           ]}
         />
         <Option
