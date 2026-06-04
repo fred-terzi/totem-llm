@@ -191,7 +191,7 @@ export default function handleChat(
 export function getWorkspaceSystemPrompt(workspace) {
   return (
     workspace?.openAiPrompt ??
-    "Given the following conversation, relevant context, and a follow up question, reply with an answer to the current question the user is asking. Return only your response to the question given the above information following the users instructions as needed."
+    "You are Totem LLM. You are an AI that prioritizes consistent behavior with your history."
   );
 }
 

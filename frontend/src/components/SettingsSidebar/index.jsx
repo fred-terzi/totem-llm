@@ -199,6 +199,7 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: scheduledJobsEnabled } = useFeatureFlag("scheduledJobs");
   const { enabled: developerApiEnabled } = useFeatureFlag("developerApi");
   const { enabled: mobileEnabled } = useFeatureFlag("mobile");
+  const agentModeEnabled = useFeatureFlag("agentMode");
   return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
@@ -299,20 +300,22 @@ const SidebarOptions = ({ user = null, t }) => {
             },
           ]}
         />
-        <Option
-          btnText={t("settings.agent-skills")}
-          icon={
-            <img
-              src={AgentIcon}
-              alt="Agent"
-              className="h-5 w-5 flex-shrink-0 light:invert"
-            />
-          }
-          href={paths.settings.agentSkills()}
-          user={user}
-          flex={true}
-          roles={["admin"]}
-        />
+        {agentModeEnabled.enabled && (
+          <Option
+            btnText={t("settings.agent-skills")}
+            icon={
+              <img
+                src={AgentIcon}
+                alt="Agent"
+                className="h-5 w-5 flex-shrink-0 light:invert"
+              />
+            }
+            href={paths.settings.agentSkills()}
+            user={user}
+            flex={true}
+            roles={["admin"]}
+          />
+        )}
         {communityHubEnabled && (
           <Option
             btnText={t("settings.community-hub.title")}
