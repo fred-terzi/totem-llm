@@ -16,6 +16,7 @@ import {
 import paths from "@/utils/paths";
 import { Link } from "react-router-dom";
 import { NavLink } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import GeneralAppearance from "./GeneralAppearance";
 import ChatSettings from "./ChatSettings";
 import VectorDatabase from "./VectorDatabase";
@@ -24,6 +25,12 @@ import WorkspaceAgentConfiguration from "./AgentConfig";
 import useUser from "@/hooks/useUser";
 import { useTranslation } from "react-i18next";
 import System from "@/models/system";
+
+/**
+ * If agentmode is disabled, the entire agent configuration section must be hidden 
+ */
+import useFeatureFlag from "@/hooks/useFeatureFlag";
+
 
 const TABS = {
   "general-appearance": GeneralAppearance,
@@ -48,6 +55,7 @@ function ShowWorkspaceChat() {
   const { t } = useTranslation();
   const { slug, tab } = useParams();
   const { user } = useUser();
+  const agentModeEnabled = useFeatureFlag("agentMode");
   const [workspace, setWorkspace] = useState(null);
   const [deletionProtected, setDeletionProtected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -75,6 +83,11 @@ function ShowWorkspaceChat() {
   }, [slug, tab]);
 
   if (loading) return <FullScreenLoader />;
+
+  // If agent-config tab is disabled and user is on it, redirect to general-appearance
+  if (tab === "agent-config" && !agentModeEnabled.enabled) {
+    return <Navigate to={paths.workspace.settings.generalAppearance(slug)} replace />;
+  }
 
   const TabContent = TABS[tab];
   return (
@@ -116,6 +129,7 @@ function ShowWorkspaceChat() {
             title={t("workspaces—settings.agent")}
             icon={<Robot className="h-6 w-6" />}
             to={paths.workspace.settings.agentConfig(slug)}
+            visible={agentModeEnabled.enabled}
           />
         </div>
         <div className="px-16 py-6">

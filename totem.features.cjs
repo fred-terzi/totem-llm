@@ -184,7 +184,7 @@ const PROFILES = {
     scheduledJobs: true,
     developerApi: true,
     mobile: false,
-    agentMode: true,
+    agentMode: false,
   },
 };
 
