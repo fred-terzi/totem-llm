@@ -194,6 +194,7 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: communityHubEnabled } = useFeatureFlag("communityHub");
   const { enabled: brandingWhitelabelEnabled } = useFeatureFlag("brandingWhitelabel");
   const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
+  const { enabled: browserExtensionEnabled } = useFeatureFlag("browserExtension");
   const { enabled: mobileEnabled } = useFeatureFlag("mobile");
   return (
   <CanViewChatHistoryProvider>
@@ -420,12 +421,16 @@ const SidebarOptions = ({ user = null, t }) => {
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.browser-extension"),
-              href: paths.settings.browserExtension(),
-              flex: true,
-              roles: ["admin", "manager"],
-            },
+            ...(browserExtensionEnabled
+              ? [
+                  {
+                    btnText: t("settings.browser-extension"),
+                    href: paths.settings.browserExtension(),
+                    flex: true,
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
             ...(mobileEnabled
               ? [
                   {

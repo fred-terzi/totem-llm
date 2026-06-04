@@ -81,6 +81,10 @@ const FEATURE_DEFINITIONS = {
     label: "Multi-User Mode",
     tier: "L2",
   },
+  browserExtension: {
+    label: "Browser Extension",
+    tier: "L2",
+  },
   /**
    * Totem LLM Mobile: This is entirely AnythingLLM mobile, it needs to be disabled. 
    */
@@ -106,6 +110,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: false,
     multiUser: false,
+    browserExtension: false,
     mobile: false,
   },
 
@@ -117,6 +122,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: false,
     multiUser: false,
+    browserExtension: false,
     mobile: false,
   },
 
@@ -129,6 +135,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: true,
     multiUser: false,
+    browserExtension: false,
     mobile: false,
   },
 
@@ -141,6 +148,7 @@ const PROFILES = {
     filesystemAgent: true,
     documentationLink: true,
     multiUser: true,
+    browserExtension: false,
     mobile: false,
   },
 };
