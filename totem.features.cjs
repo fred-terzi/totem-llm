@@ -104,6 +104,13 @@ const FEATURE_DEFINITIONS = {
     label: "Totem LLM Mobile",
     tier: "L2",
   },
+  /**
+   * Agent Mode: when enabled, the program will allow the use of tools.
+   */
+  agentMode: {
+    label: "Agent Mode",
+    tier: "L2",
+  },
 };
 
 /**
@@ -127,6 +134,7 @@ const PROFILES = {
     scheduledJobs: false,
     developerApi: false,
     mobile: false,
+    agentMode: false,
   },
 
   /** Future L1-tier build — includes all features for testing and iteration before wider release */
@@ -142,11 +150,12 @@ const PROFILES = {
     scheduledJobs: false,
     developerApi: false,
     mobile: false,
+    agentMode: false,
   },
 
   /** Future L2-tier build — includes all features for testing and iteration before wider release */
   "L2": {
-    communityHub: true,
+    communityHub: false,
     modelRouter: true,
     llmProviders: ["ollama", "openrouter"],
     brandingWhitelabel: true,
@@ -158,6 +167,7 @@ const PROFILES = {
     scheduledJobs: false,
     developerApi: false,
     mobile: false,
+    agentMode: false,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -170,10 +180,11 @@ const PROFILES = {
     documentationLink: true,
     multiUser: true,
     browserExtension: false,
-    chatEmbed: false,
-    scheduledJobs: false,
-    developerApi: false,
+    chatEmbed: true,
+    scheduledJobs: true,
+    developerApi: true,
     mobile: false,
+    agentMode: true,
   },
 };
 
