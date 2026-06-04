@@ -96,7 +96,7 @@ const Workspace = {
     },
     chatMode: (value) => {
       if (!value || !Workspace.VALID_CHAT_MODES.includes(value))
-        return "automatic";
+        return "chat";
       return value;
     },
     chatProvider: (value) => {
@@ -214,7 +214,7 @@ const Workspace = {
       const workspace = await prisma.workspaces.create({
         data: {
           name: this.validations.name(name),
-          chatMode: "automatic",
+          chatMode: "chat",
           ...this.validateFields(additionalFields),
           slug,
         },
