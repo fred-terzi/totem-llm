@@ -118,6 +118,7 @@ function ShowWorkspaceChat() {
             title={t("workspaces—settings.vector")}
             icon={<Database className="h-6 w-6" />}
             to={paths.workspace.settings.vectorDatabase(slug)}
+            visible={agentModeEnabled.enabled}
           />
           <TabItem
             title={t("workspaces—settings.members")}
