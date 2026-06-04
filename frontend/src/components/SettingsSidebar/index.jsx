@@ -195,6 +195,9 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: brandingWhitelabelEnabled } = useFeatureFlag("brandingWhitelabel");
   const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
   const { enabled: browserExtensionEnabled } = useFeatureFlag("browserExtension");
+  const { enabled: chatEmbedEnabled } = useFeatureFlag("chatEmbed");
+  const { enabled: scheduledJobsEnabled } = useFeatureFlag("scheduledJobs");
+  const { enabled: developerApiEnabled } = useFeatureFlag("developerApi");
   const { enabled: mobileEnabled } = useFeatureFlag("mobile");
   return (
   <CanViewChatHistoryProvider>
@@ -390,31 +393,43 @@ const SidebarOptions = ({ user = null, t }) => {
           icon={<Toolbox className="h-5 w-5 flex-shrink-0" />}
           user={user}
           childOptions={[
-            {
-              hidden: !canViewChatHistory,
-              btnText: t("settings.embeds"),
-              href: paths.settings.embedChatWidgets(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(chatEmbedEnabled
+              ? [
+                  {
+                    hidden: !canViewChatHistory,
+                    btnText: t("settings.embeds"),
+                    href: paths.settings.embedChatWidgets(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.event-logs"),
               href: paths.settings.logs(),
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.scheduled-jobs"),
-              href: paths.settings.scheduledJobs(),
-              flex: true,
-              hidden: !!user,
-            },
-            {
-              btnText: t("settings.api-keys"),
-              href: paths.settings.apiKeys(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(scheduledJobsEnabled
+              ? [
+                  {
+                    btnText: t("settings.scheduled-jobs"),
+                    href: paths.settings.scheduledJobs(),
+                    flex: true,
+                    hidden: !!user,
+                  },
+                ]
+              : []),
+            ...(developerApiEnabled
+              ? [
+                  {
+                    btnText: t("settings.api-keys"),
+                    href: paths.settings.apiKeys(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.system-prompt-variables"),
               href: paths.settings.systemPromptVariables(),

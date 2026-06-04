@@ -85,6 +85,18 @@ const FEATURE_DEFINITIONS = {
     label: "Browser Extension",
     tier: "L2",
   },
+  chatEmbed: {
+    label: "Chat Embed",
+    tier: "L2",
+  },
+  scheduledJobs: {
+    label: "Scheduled Jobs",
+    tier: "L2",
+  },
+  developerApi: {
+    label: "Developer API",
+    tier: "L2",
+  },
   /**
    * Totem LLM Mobile: This is entirely AnythingLLM mobile, it needs to be disabled. 
    */
@@ -111,6 +123,9 @@ const PROFILES = {
     documentationLink: false,
     multiUser: false,
     browserExtension: false,
+    chatEmbed: false,
+    scheduledJobs: false,
+    developerApi: false,
     mobile: false,
   },
 
@@ -123,6 +138,9 @@ const PROFILES = {
     documentationLink: false,
     multiUser: false,
     browserExtension: false,
+    chatEmbed: false,
+    scheduledJobs: false,
+    developerApi: false,
     mobile: false,
   },
 
@@ -136,6 +154,9 @@ const PROFILES = {
     documentationLink: true,
     multiUser: false,
     browserExtension: false,
+    chatEmbed: false,
+    scheduledJobs: false,
+    developerApi: false,
     mobile: false,
   },
 
@@ -149,6 +170,9 @@ const PROFILES = {
     documentationLink: true,
     multiUser: true,
     browserExtension: false,
+    chatEmbed: false,
+    scheduledJobs: false,
+    developerApi: false,
     mobile: false,
   },
 };
