@@ -1,0 +1,158 @@
+{
+  "FEATURE_DEFINITIONS": {
+    "communityHub": {
+      "label": "Community Hub",
+      "tier": "L2"
+    },
+    "modelRouter": {
+      "label": "Model Router",
+      "tier": "L2"
+    },
+    "llmProviders": {
+      "label": "LLM Provider Allowlist",
+      "tier": "L1"
+    },
+    "brandingWhitelabel": {
+      "label": "Branding & Whitelabeling",
+      "tier": "L2"
+    },
+    "filesystemAgent": {
+      "label": "File System Access",
+      "tier": "L2"
+    },
+    "documentationLink": {
+      "label": "Documentation Link",
+      "tier": "L2"
+    },
+    "multiUser": {
+      "label": "Multi-User Mode",
+      "tier": "L2"
+    },
+    "browserExtension": {
+      "label": "Browser Extension",
+      "tier": "L2"
+    },
+    "chatEmbed": {
+      "label": "Chat Embed",
+      "tier": "L2"
+    },
+    "scheduledJobs": {
+      "label": "Scheduled Jobs",
+      "tier": "L2"
+    },
+    "developerApi": {
+      "label": "Developer API",
+      "tier": "L2"
+    },
+    "mobile": {
+      "label": "Totem LLM Mobile",
+      "tier": "L2"
+    },
+    "agentMode": {
+      "label": "Agent Mode",
+      "tier": "L2"
+    },
+    "memories": {
+      "label": "Memories Feature",
+      "tier": "L2"
+    },
+    "vectorDB": {
+      "label": "Vector Database Integrations",
+      "tier": "L2"
+    },
+    "embedder": {
+      "label": "Embedder Integrations",
+      "tier": "L2"
+    },
+    "textSplitter": {
+      "label": "Text Splitter Integrations",
+      "tier": "L2"
+    },
+    "transcription": {
+      "label": "Audio Transcription",
+      "tier": "L2"
+    }
+  },
+  "PROFILES": {
+    "npm": {
+      "communityHub": false,
+      "modelRouter": false,
+      "llmProviders": ["ollama", "openrouter"],
+      "brandingWhitelabel": false,
+      "filesystemAgent": true,
+      "documentationLink": false,
+      "multiUser": false,
+      "browserExtension": false,
+      "chatEmbed": false,
+      "scheduledJobs": false,
+      "developerApi": false,
+      "mobile": false,
+      "agentMode": false,
+      "memories": false,
+      "vectorDB": false,
+      "embedder": false,
+      "textSplitter": false,
+      "transcription": false
+    },
+    "L1": {
+      "communityHub": false,
+      "modelRouter": true,
+      "llmProviders": ["ollama", "openrouter"],
+      "brandingWhitelabel": false,
+      "filesystemAgent": true,
+      "documentationLink": false,
+      "multiUser": false,
+      "browserExtension": false,
+      "chatEmbed": false,
+      "scheduledJobs": false,
+      "developerApi": false,
+      "mobile": false,
+      "agentMode": false,
+      "memories": false,
+      "vectorDB": false,
+      "embedder": false,
+      "textSplitter": false,
+      "transcription": false
+    },
+    "L2": {
+      "communityHub": false,
+      "modelRouter": true,
+      "llmProviders": ["ollama", "openrouter"],
+      "brandingWhitelabel": true,
+      "filesystemAgent": true,
+      "documentationLink": true,
+      "multiUser": false,
+      "browserExtension": false,
+      "chatEmbed": false,
+      "scheduledJobs": false,
+      "developerApi": false,
+      "mobile": false,
+      "agentMode": false,
+      "memories": false,
+      "vectorDB": false,
+      "embedder": false,
+      "textSplitter": false,
+      "transcription": false
+    },
+    "source": {
+      "communityHub": true,
+      "modelRouter": true,
+      "llmProviders": ["ollama", "openrouter"],
+      "brandingWhitelabel": true,
+      "filesystemAgent": true,
+      "documentationLink": true,
+      "multiUser": true,
+      "browserExtension": false,
+      "chatEmbed": true,
+      "scheduledJobs": true,
+      "developerApi": true,
+      "mobile": false,
+      "agentMode": false,
+      "memories": false,
+      "vectorDB": false,
+      "embedder": false,
+      "textSplitter": false,
+      "transcription": false
+    }
+  }
+}
