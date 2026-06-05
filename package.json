@@ -1,6 +1,6 @@
 {
   "name": "totem-llm",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Totem LLM – Your Private AI. Run a self-hosted AI assistant locally on Linux, macOS, or Windows.",
   "main": "bin/totem-llm.js",
   "type": "module",
