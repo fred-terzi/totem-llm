@@ -193,6 +193,17 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: modelRouterEnabled } = useFeatureFlag("modelRouter");
   const { enabled: communityHubEnabled } = useFeatureFlag("communityHub");
   const { enabled: brandingWhitelabelEnabled } = useFeatureFlag("brandingWhitelabel");
+  const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
+  const { enabled: browserExtensionEnabled } = useFeatureFlag("browserExtension");
+  const { enabled: chatEmbedEnabled } = useFeatureFlag("chatEmbed");
+  const { enabled: scheduledJobsEnabled } = useFeatureFlag("scheduledJobs");
+  const { enabled: developerApiEnabled } = useFeatureFlag("developerApi");
+  const { enabled: mobileEnabled } = useFeatureFlag("mobile");
+  const agentModeEnabled = useFeatureFlag("agentMode");
+  const { enabled: vectorDBEnabled } = useFeatureFlag("vectorDB");
+  const { enabled: embedderEnabled } = useFeatureFlag("embedder");
+  const { enabled: textSplitterEnabled } = useFeatureFlag("textSplitter");
+  const { enabled: transcriptionEnabled } = useFeatureFlag("transcription");
   return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
@@ -208,36 +219,52 @@ const SidebarOptions = ({ user = null, t }) => {
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.vector-database"),
-              href: paths.settings.vectorDatabase(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.embedder"),
-              href: paths.settings.embedder.modelPreference(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.text-splitting"),
-              href: paths.settings.embedder.chunkingPreference(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(vectorDBEnabled
+              ? [
+                  {
+                    btnText: t("settings.vector-database"),
+                    href: paths.settings.vectorDatabase(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
+            ...(embedderEnabled
+              ? [
+                  {
+                    btnText: t("settings.embedder"),
+                    href: paths.settings.embedder.modelPreference(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
+            ...(textSplitterEnabled
+              ? [
+                  {
+                    btnText: t("settings.text-splitting"),
+                    href: paths.settings.embedder.chunkingPreference(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.voice-speech"),
               href: paths.settings.audioPreference(),
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.transcription"),
-              href: paths.settings.transcriptionPreference(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(transcriptionEnabled
+              ? [
+                  {
+                    btnText: t("settings.transcription"),
+                    href: paths.settings.transcriptionPreference(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             ...(modelRouterEnabled
               ? [
                   {
@@ -255,11 +282,15 @@ const SidebarOptions = ({ user = null, t }) => {
           icon={<UserCircleGear className="h-5 w-5 flex-shrink-0" />}
           user={user}
           childOptions={[
-            {
-              btnText: t("settings.users"),
-              href: paths.settings.users(),
-              roles: ["admin", "manager"],
-            },
+            ...(multiUserEnabled
+              ? [
+                  {
+                    btnText: t("settings.users"),
+                    href: paths.settings.users(),
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.workspaces"),
               href: paths.settings.workspaces(),
@@ -272,11 +303,15 @@ const SidebarOptions = ({ user = null, t }) => {
               flex: true,
               roles: ["admin", "manager"],
             },
-            {
-              btnText: t("settings.invites"),
-              href: paths.settings.invites(),
-              roles: ["admin", "manager"],
-            },
+            ...(multiUserEnabled
+              ? [
+                  {
+                    btnText: t("settings.invites"),
+                    href: paths.settings.invites(),
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
             {
               btnText: "Default System Prompt",
               href: paths.settings.defaultSystemPrompt(),
@@ -285,20 +320,22 @@ const SidebarOptions = ({ user = null, t }) => {
             },
           ]}
         />
-        <Option
-          btnText={t("settings.agent-skills")}
-          icon={
-            <img
-              src={AgentIcon}
-              alt="Agent"
-              className="h-5 w-5 flex-shrink-0 light:invert"
-            />
-          }
-          href={paths.settings.agentSkills()}
-          user={user}
-          flex={true}
-          roles={["admin"]}
-        />
+        {agentModeEnabled.enabled && (
+          <Option
+            btnText={t("settings.agent-skills")}
+            icon={
+              <img
+                src={AgentIcon}
+                alt="Agent"
+                className="h-5 w-5 flex-shrink-0 light:invert"
+              />
+            }
+            href={paths.settings.agentSkills()}
+            user={user}
+            flex={true}
+            roles={["admin"]}
+          />
+        )}
         {communityHubEnabled && (
           <Option
             btnText={t("settings.community-hub.title")}
@@ -379,49 +416,69 @@ const SidebarOptions = ({ user = null, t }) => {
           icon={<Toolbox className="h-5 w-5 flex-shrink-0" />}
           user={user}
           childOptions={[
-            {
-              hidden: !canViewChatHistory,
-              btnText: t("settings.embeds"),
-              href: paths.settings.embedChatWidgets(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(chatEmbedEnabled
+              ? [
+                  {
+                    hidden: !canViewChatHistory,
+                    btnText: t("settings.embeds"),
+                    href: paths.settings.embedChatWidgets(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.event-logs"),
               href: paths.settings.logs(),
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.scheduled-jobs"),
-              href: paths.settings.scheduledJobs(),
-              flex: true,
-              hidden: !!user,
-            },
-            {
-              btnText: t("settings.api-keys"),
-              href: paths.settings.apiKeys(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(scheduledJobsEnabled
+              ? [
+                  {
+                    btnText: t("settings.scheduled-jobs"),
+                    href: paths.settings.scheduledJobs(),
+                    flex: true,
+                    hidden: !!user,
+                  },
+                ]
+              : []),
+            ...(developerApiEnabled
+              ? [
+                  {
+                    btnText: t("settings.api-keys"),
+                    href: paths.settings.apiKeys(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.system-prompt-variables"),
               href: paths.settings.systemPromptVariables(),
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.browser-extension"),
-              href: paths.settings.browserExtension(),
-              flex: true,
-              roles: ["admin", "manager"],
-            },
-            {
-              btnText: t("settings.mobile-app"),
-              href: paths.settings.mobile(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(browserExtensionEnabled
+              ? [
+                  {
+                    btnText: t("settings.browser-extension"),
+                    href: paths.settings.browserExtension(),
+                    flex: true,
+                    roles: ["admin", "manager"],
+                  },
+                ]
+              : []),
+            ...(mobileEnabled
+              ? [
+                  {
+                    btnText: t("settings.mobile-app"),
+                    href: paths.settings.mobile(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
           ]}
         />
         <Option

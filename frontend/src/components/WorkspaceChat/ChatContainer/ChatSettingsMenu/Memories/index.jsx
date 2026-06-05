@@ -4,12 +4,18 @@ import useUser from "@/hooks/useUser";
 import System from "@/models/system";
 import { useMemoriesSidebar, useSourcesSidebar } from "../../ChatSidebar";
 
+/**
+ * Hides the memories if feature is disabled
+ */
+import useFeatureFlag from "@/hooks/useFeatureFlag";
+
 export default function MemoriesRow({ onClose }) {
   const { t } = useTranslation();
   const { user } = useUser();
   const { toggleSidebar } = useMemoriesSidebar();
   const { closeSidebar } = useSourcesSidebar();
   const [memoryEnabled, setMemoryEnabled] = useState(null);
+  const memoryFeatureEnabled = useFeatureFlag("memories");
 
   const isAdmin = !user || user?.role === "admin";
 
@@ -26,7 +32,7 @@ export default function MemoriesRow({ onClose }) {
   }
 
   if (memoryEnabled === null) return null;
-  if (!isAdmin && !memoryEnabled) return null;
+  if (!memoryEnabled || !memoryFeatureEnabled.enabled) return null;
 
   return (
     <div

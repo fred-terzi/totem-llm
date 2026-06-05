@@ -1,9 +1,19 @@
 import { useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
+
+
+/**
+ * If agentmode is disabled, this component must be hidden
+ */
+
 
 export default function ChatModeSelection({ workspace, setHasChanges }) {
   const { t } = useTranslation();
+  const { enabled: agentModeEnabled } = useFeatureFlag("agentMode");
   const [chatMode, setChatMode] = useState(workspace?.chatMode || "chat");
+
+  if (!agentModeEnabled) return null;
 
   return (
     <div>

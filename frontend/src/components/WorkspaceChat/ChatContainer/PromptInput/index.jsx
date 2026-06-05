@@ -18,6 +18,7 @@ import usePromptInputStorage from "@/hooks/usePromptInputStorage";
 import ToolsMenu, { TOOLS_MENU_KEYBOARD_EVENT } from "./ToolsMenu";
 import { useSearchParams } from "react-router-dom";
 import { useIsAgentSessionActive } from "@/utils/chat/agent";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 export const PROMPT_INPUT_ID = "primary-prompt-input";
 export const PROMPT_INPUT_EVENT = "set_prompt_input";
@@ -46,6 +47,7 @@ export default function PromptInput({
   const { t } = useTranslation();
   const { showAgentCommand = true } = workspace ?? {};
   const { isDisabled } = useIsDisabled();
+  const { enabled: agentModeEnabled } = useFeatureFlag("agentMode");
   const agentSessionActive = useIsAgentSessionActive();
   const [promptInput, setPromptInput] = useState("");
   const [showTools, setShowTools] = useState(false);
@@ -376,7 +378,7 @@ export default function PromptInput({
                       sendCommand={sendCommand}
                       promptInput={promptInput}
                       textareaRef={textareaRef}
-                      visible={!agentSessionActive & showAgentCommand}
+                      visible={agentModeEnabled && !agentSessionActive && showAgentCommand}
                     />
                   </div>
                   <ToolsButton
@@ -384,6 +386,7 @@ export default function PromptInput({
                     setShowTools={setShowTools}
                     textareaRef={textareaRef}
                     autoOpenedToolsRef={autoOpenedToolsRef}
+                    visible={agentModeEnabled}
                   />
                 </div>
                 <div className="flex gap-x-2 items-center">
@@ -455,8 +458,11 @@ function ToolsButton({
   setShowTools,
   textareaRef,
   autoOpenedToolsRef,
+  visible = true,
 }) {
   const { t } = useTranslation();
+
+  if (!visible) return null;
 
   return (
     <button

@@ -4,6 +4,9 @@ const {
 } = require("../../models/workspaceAgentInvocation");
 const { writeResponseChunk } = require("../helpers/chat/responses");
 const { Workspace } = require("../../models/workspace");
+const { SystemSettings } = require("../../models/systemSettings");
+
+
 
 /**
  * In-memory cache for attachments associated with agent invocations.
@@ -44,6 +47,11 @@ async function grepAgents({
   thread = null,
   attachments = [],
 }) {
+  // When agent mode is disabled, ensure agent mode is never initiated
+  const agentModeEnabled = (
+    await SystemSettings.get({ label: "agentMode" })
+  )?.value === "enabled";
+
   let nativeToolingEnabled = false;
 
   // If the workspace is in automatic mode, check if the workspace supports native tooling
@@ -52,7 +60,7 @@ async function grepAgents({
     nativeToolingEnabled = await Workspace.supportsNativeToolCalling(workspace);
 
   const agentHandles = WorkspaceAgentInvocation.parseAgents(message);
-  if (agentHandles.length > 0 || nativeToolingEnabled) {
+  if (agentModeEnabled && (agentHandles.length > 0 || nativeToolingEnabled)) {
     const { invocation: newInvocation } = await WorkspaceAgentInvocation.new({
       prompt: message,
       workspace: workspace,

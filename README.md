@@ -13,6 +13,8 @@ While local AI is the core focus, Totem LLM supports both local and cloud-based 
 
 ### 1. Install the package
 
+Search for `terminal` in your applications and open it. Then run:
+
 ```bash
 npm install -g totem-llm
 ```
@@ -41,6 +43,16 @@ totem-llm --help            Show all options
 ```
 
 > **Storage**: All data is kept in `~/totem-llm/` by default. Override with `TOTEM_STORAGE_DIR=/your/path totem-llm start`.
+
+### Troubleshooting
+
+**npm not found after node.js install**: 
+
+Common on windows, you may need to run `npm.cmd` instead of just `npm`
+
+**totem-llm command not found after install**:
+
+Run `npx.cmd totem-llm start` instead of `totem-llm start`, or add the npm global bin directory to your PATH.
 
 > **Windows (PowerShell)**: If you see `cannot be loaded because running scripts is disabled`, run this once in PowerShell then retry:
 > ```powershell

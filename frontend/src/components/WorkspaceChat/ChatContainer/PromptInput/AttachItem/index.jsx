@@ -12,6 +12,11 @@ import { useTheme } from "@/hooks/useTheme";
 import ParsedFilesMenu from "./ParsedFilesMenu";
 
 /**
+ * If agentmode is disabled, the attachment feature must be hidden since it relies on the agent to process the files and add them to the context.
+ */
+import useFeatureFlag from "@/hooks/useFeatureFlag";
+
+/**
  * This is a simple proxy component that clicks on the DnD file uploader for the user.
  * @returns
  */
@@ -21,9 +26,13 @@ export default function AttachItem({
 }) {
   const { t } = useTranslation();
   const { theme } = useTheme();
+  const { enabled: agentModeEnabled } = useFeatureFlag("agentMode");
   const params = useParams();
   const slug = workspaceSlug || params.slug;
   const threadSlug = workspaceThreadSlug ?? params.threadSlug ?? null;
+
+  if (!agentModeEnabled) return null;
+  
   const tooltipRef = useRef(null);
   const [isEmbedding, setIsEmbedding] = useState(false);
   const [files, setFiles] = useState([]);

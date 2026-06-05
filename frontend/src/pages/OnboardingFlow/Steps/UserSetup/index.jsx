@@ -8,9 +8,11 @@ import { AUTH_TIMESTAMP, AUTH_TOKEN, AUTH_USER } from "@/utils/constants";
 import { useTranslation } from "react-i18next";
 import { USERNAME_MIN_LENGTH, USERNAME_MAX_LENGTH } from "@/utils/username";
 import { PW_REGEX } from "@/pages/GeneralSettings/Security";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 export default function UserSetup({ setHeader, setForwardBtn, setBackBtn }) {
   const { t } = useTranslation();
+  const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
   const [selectedOption, setSelectedOption] = useState("");
   const [singleUserPasswordValid, setSingleUserPasswordValid] = useState(false);
   const [multiUserLoginValid, setMultiUserLoginValid] = useState(false);
@@ -75,6 +77,7 @@ export default function UserSetup({ setHeader, setForwardBtn, setBackBtn }) {
               {t("onboarding.userSetup.justMe")}
             </div>
           </button>
+          {multiUserEnabled && (
           <button
             onClick={() => setSelectedOption("my_team")}
             className={`${
@@ -87,6 +90,7 @@ export default function UserSetup({ setHeader, setForwardBtn, setBackBtn }) {
               {t("onboarding.userSetup.myTeam")}
             </div>
           </button>
+          )}
         </div>
       </div>
       {selectedOption === "just_me" && (
@@ -98,7 +102,7 @@ export default function UserSetup({ setHeader, setForwardBtn, setBackBtn }) {
           navigate={navigate}
         />
       )}
-      {selectedOption === "my_team" && (
+      {selectedOption === "my_team" && multiUserEnabled && (
         <MyTeam
           setMultiUserLoginValid={setMultiUserLoginValid}
           myTeamSubmitRef={myTeamSubmitRef}

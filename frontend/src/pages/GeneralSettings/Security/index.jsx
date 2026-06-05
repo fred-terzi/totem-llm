@@ -14,9 +14,11 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_PATTERN,
 } from "@/utils/username";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 export default function GeneralSecurity() {
   const { t } = useTranslation();
+  const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
   return (
     <div className="w-screen h-screen overflow-hidden bg-theme-bg-container flex">
       <Sidebar />
@@ -29,7 +31,7 @@ export default function GeneralSecurity() {
             {t("security.title")}
           </p>
         </div>
-        <MultiUserMode />
+        {multiUserEnabled && <MultiUserMode />}
         <PasswordProtection />
       </div>
     </div>

@@ -5,8 +5,10 @@ import System from "@/models/system";
 import PreLoader from "@/components/Preloader";
 import { LOCALAI_COMMON_URLS } from "@/utils/constants";
 import useProviderEndpointAutoDiscovery from "@/hooks/useProviderEndpointAutoDiscovery";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 export default function LocalAiOptions({ settings, showAlert = false }) {
+  const { enabled: embedderEnabled } = useFeatureFlag("embedder");
   const {
     autoDetecting: loading,
     basePath,
@@ -24,7 +26,7 @@ export default function LocalAiOptions({ settings, showAlert = false }) {
 
   return (
     <div className="w-full flex flex-col gap-y-7">
-      {showAlert && (
+      {showAlert && embedderEnabled && (
         <div className="flex flex-col md:flex-row md:items-center gap-x-2 text-white mb-6 bg-blue-800/30 w-fit rounded-lg px-4 py-2">
           <div className="gap-x-2 flex items-center">
             <Info size={12} className="hidden md:visible" />
