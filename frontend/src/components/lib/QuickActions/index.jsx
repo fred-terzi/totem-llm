@@ -20,11 +20,11 @@ export default function QuickActions({
 
   return (
     <div className="flex flex-wrap justify-center gap-2 mt-6">
-      <QuickActionButton
+      {/* <QuickActionButton
         label={t("main-page.quickActions.createAgent")}
         onClick={onCreateAgent}
         show={!user || ["admin"].includes(user?.role)}
-      />
+      /> */}
       <QuickActionButton
         label={t("main-page.quickActions.editWorkspace")}
         onClick={onEditWorkspace}
@@ -33,12 +33,12 @@ export default function QuickActions({
           (!user || ["admin", "manager"].includes(user?.role))
         }
       />
-      <QuickActionButton
+      {/* <QuickActionButton
         label={t("main-page.quickActions.uploadDocument")}
         onClick={onUploadDocument}
         // Any user can upload documents.
         show={true}
-      />
+      /> */}
     </div>
   );
 }
