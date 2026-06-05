@@ -111,6 +111,10 @@ const FEATURE_DEFINITIONS = {
     label: "Agent Mode",
     tier: "L2",
   },
+  memories: {
+    label: "Memories Feature",
+    tier: "L2",
+  },
 };
 
 /**
@@ -135,6 +139,7 @@ const PROFILES = {
     developerApi: false,
     mobile: false,
     agentMode: false,
+    memories: false,
   },
 
   /** Future L1-tier build — includes all features for testing and iteration before wider release */
@@ -151,6 +156,7 @@ const PROFILES = {
     developerApi: false,
     mobile: false,
     agentMode: false,
+    memories: false,
   },
 
   /** Future L2-tier build — includes all features for testing and iteration before wider release */
@@ -168,6 +174,7 @@ const PROFILES = {
     developerApi: false,
     mobile: false,
     agentMode: false,
+    memories: false,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -185,6 +192,7 @@ const PROFILES = {
     developerApi: true,
     mobile: false,
     agentMode: false,
+    memories: false
   },
 };
 

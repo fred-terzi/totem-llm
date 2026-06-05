@@ -6,6 +6,7 @@ import PersonalizationToggle from "./PersonalizationToggle";
 import MemoryTabs from "./MemoryTabs";
 import MemoryCard from "./MemoryCard";
 import MemoryModal from "./MemoryModal";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 export { useMemoriesSidebar } from "../ChatSidebar";
 
@@ -19,8 +20,10 @@ export default function MemoriesSidebar({ workspace }) {
 
 function MemoriesSidebarContent() {
   const { sidebarOpen, canToggle, enabled } = useMemoriesContext();
+  const memoryFeatureEnabled = useFeatureFlag("memories");
 
   if (!canToggle && !enabled) return null;
+  if (!memoryFeatureEnabled.enabled) return null;
   return (
     <>
       <ChatSidebar isOpen={sidebarOpen}>
