@@ -115,6 +115,22 @@ const FEATURE_DEFINITIONS = {
     label: "Memories Feature",
     tier: "L2",
   },
+  vectorDB: {
+    label: "Vector Database Integrations",
+    tier: "L2",
+  },
+  embedder: {
+    label: "Embedder Integrations",
+    tier: "L2",
+  },
+  textSplitter: {
+    label: "Text Splitter Integrations",
+    tier: "L2",
+  },
+  transcription: {
+    label: "Audio Transcription",
+    tier: "L2",
+  },
 };
 
 /**
@@ -140,6 +156,10 @@ const PROFILES = {
     mobile: false,
     agentMode: false,
     memories: false,
+    vectorDB: false,
+    embedder: false,
+    textSplitter: false,
+    transcription: false,
   },
 
   /** Future L1-tier build — includes all features for testing and iteration before wider release */
@@ -157,6 +177,10 @@ const PROFILES = {
     mobile: false,
     agentMode: false,
     memories: false,
+    vectorDB: false,
+    embedder: false,
+    textSplitter: false,
+    transcription: false,
   },
 
   /** Future L2-tier build — includes all features for testing and iteration before wider release */
@@ -175,6 +199,10 @@ const PROFILES = {
     mobile: false,
     agentMode: false,
     memories: false,
+    vectorDB: false,
+    embedder: false,
+    textSplitter: false,
+    transcription: false,
   },
 
   /** Full source build — mirrors upstream AnythingLLM capabilities */
@@ -192,7 +220,11 @@ const PROFILES = {
     developerApi: true,
     mobile: false,
     agentMode: false,
-    memories: false
+    memories: false,
+    vectorDB: false,
+    embedder: false,
+    textSplitter: false,
+    transcription: false,
   },
 };
 

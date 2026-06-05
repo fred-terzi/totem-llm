@@ -77,17 +77,21 @@ const router = createBrowserRouter([
           return { element: <AdminRoute Component={GeneralLLMPreference} /> };
         },
       },
-      {
-        path: "/settings/transcription-preference",
-        lazy: async () => {
-          const { default: GeneralTranscriptionPreference } = await import(
-            "@/pages/GeneralSettings/TranscriptionPreference"
-          );
-          return {
-            element: <AdminRoute Component={GeneralTranscriptionPreference} />,
-          };
-        },
-      },
+      ...(featureEnabled("transcription")
+        ? [
+            {
+              path: "/settings/transcription-preference",
+              lazy: async () => {
+                const { default: GeneralTranscriptionPreference } = await import(
+                  "@/pages/GeneralSettings/TranscriptionPreference"
+                );
+                return {
+                  element: <AdminRoute Component={GeneralTranscriptionPreference} />,
+                };
+              },
+            },
+          ]
+        : []),
       {
         path: "/settings/audio-preference",
         lazy: async () => {
@@ -99,39 +103,51 @@ const router = createBrowserRouter([
           };
         },
       },
-      {
-        path: "/settings/embedding-preference",
-        lazy: async () => {
-          const { default: GeneralEmbeddingPreference } = await import(
-            "@/pages/GeneralSettings/EmbeddingPreference"
-          );
-          return {
-            element: <AdminRoute Component={GeneralEmbeddingPreference} />,
-          };
-        },
-      },
-      {
-        path: "/settings/text-splitter-preference",
-        lazy: async () => {
-          const { default: EmbeddingTextSplitterPreference } = await import(
-            "@/pages/GeneralSettings/EmbeddingTextSplitterPreference"
-          );
-          return {
-            element: <AdminRoute Component={EmbeddingTextSplitterPreference} />,
-          };
-        },
-      },
-      {
-        path: "/settings/vector-database",
-        lazy: async () => {
-          const { default: GeneralVectorDatabase } = await import(
-            "@/pages/GeneralSettings/VectorDatabase"
-          );
-          return {
-            element: <AdminRoute Component={GeneralVectorDatabase} />,
-          };
-        },
-      },
+      ...(featureEnabled("embedder")
+        ? [
+            {
+              path: "/settings/embedding-preference",
+              lazy: async () => {
+                const { default: GeneralEmbeddingPreference } = await import(
+                  "@/pages/GeneralSettings/EmbeddingPreference"
+                );
+                return {
+                  element: <AdminRoute Component={GeneralEmbeddingPreference} />,
+                };
+              },
+            },
+          ]
+        : []),
+      ...(featureEnabled("textSplitter")
+        ? [
+            {
+              path: "/settings/text-splitter-preference",
+              lazy: async () => {
+                const { default: EmbeddingTextSplitterPreference } = await import(
+                  "@/pages/GeneralSettings/EmbeddingTextSplitterPreference"
+                );
+                return {
+                  element: <AdminRoute Component={EmbeddingTextSplitterPreference} />,
+                };
+              },
+            },
+          ]
+        : []),
+      ...(featureEnabled("vectorDB")
+        ? [
+            {
+              path: "/settings/vector-database",
+              lazy: async () => {
+                const { default: GeneralVectorDatabase } = await import(
+                  "@/pages/GeneralSettings/VectorDatabase"
+                );
+                return {
+                  element: <AdminRoute Component={GeneralVectorDatabase} />,
+                };
+              },
+            },
+          ]
+        : []),
       {
         path: "/settings/agents",
         lazy: async () => {

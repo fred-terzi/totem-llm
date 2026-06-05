@@ -200,6 +200,10 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: developerApiEnabled } = useFeatureFlag("developerApi");
   const { enabled: mobileEnabled } = useFeatureFlag("mobile");
   const agentModeEnabled = useFeatureFlag("agentMode");
+  const { enabled: vectorDBEnabled } = useFeatureFlag("vectorDB");
+  const { enabled: embedderEnabled } = useFeatureFlag("embedder");
+  const { enabled: textSplitterEnabled } = useFeatureFlag("textSplitter");
+  const { enabled: transcriptionEnabled } = useFeatureFlag("transcription");
   return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
@@ -215,36 +219,52 @@ const SidebarOptions = ({ user = null, t }) => {
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.vector-database"),
-              href: paths.settings.vectorDatabase(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.embedder"),
-              href: paths.settings.embedder.modelPreference(),
-              flex: true,
-              roles: ["admin"],
-            },
-            {
-              btnText: t("settings.text-splitting"),
-              href: paths.settings.embedder.chunkingPreference(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(vectorDBEnabled
+              ? [
+                  {
+                    btnText: t("settings.vector-database"),
+                    href: paths.settings.vectorDatabase(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
+            ...(embedderEnabled
+              ? [
+                  {
+                    btnText: t("settings.embedder"),
+                    href: paths.settings.embedder.modelPreference(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
+            ...(textSplitterEnabled
+              ? [
+                  {
+                    btnText: t("settings.text-splitting"),
+                    href: paths.settings.embedder.chunkingPreference(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             {
               btnText: t("settings.voice-speech"),
               href: paths.settings.audioPreference(),
               flex: true,
               roles: ["admin"],
             },
-            {
-              btnText: t("settings.transcription"),
-              href: paths.settings.transcriptionPreference(),
-              flex: true,
-              roles: ["admin"],
-            },
+            ...(transcriptionEnabled
+              ? [
+                  {
+                    btnText: t("settings.transcription"),
+                    href: paths.settings.transcriptionPreference(),
+                    flex: true,
+                    roles: ["admin"],
+                  },
+                ]
+              : []),
             ...(modelRouterEnabled
               ? [
                   {
