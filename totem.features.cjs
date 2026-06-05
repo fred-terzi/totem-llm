@@ -19,7 +19,27 @@
  */
 
 const path = require('path');
-const { FEATURE_DEFINITIONS, PROFILES } = require('./config/totem.features.json');
+const fs = require('fs');
+const os = require('os');
+
+// User-editable config lives in the storage dir (~/totem-llm by default).
+// Falls back to the bundled default shipped with the package.
+const storageDir = process.env.TOTEM_STORAGE_DIR ?? path.join(os.homedir(), 'totem-llm');
+const USER_CONFIG_PATH = path.join(storageDir, 'totem.features.json');
+const DEFAULT_CONFIG_PATH = path.resolve(__dirname, 'config', 'totem.features.json');
+const CONFIG_PATH = fs.existsSync(USER_CONFIG_PATH) ? USER_CONFIG_PATH : DEFAULT_CONFIG_PATH;
+
+let FEATURE_DEFINITIONS, PROFILES;
+try {
+  const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+  FEATURE_DEFINITIONS = config.FEATURE_DEFINITIONS;
+  PROFILES = config.PROFILES;
+} catch (e) {
+  throw new Error(
+    `[totem.features] Could not load config file at ${CONFIG_PATH}.\n` +
+    `Original error: ${e.message}`
+  );
+}
 
 /**
  * Resolves the active feature map for the current TOTEM_BUILD_PROFILE.
