@@ -75,7 +75,7 @@ Commands:
 
 Options:
   --no-collector   Start without the document collector (skips Puppeteer/ffmpeg)
-  --port=<port>    Override the server port (default: 3001)
+  --port=<port>    Override the server port (default: 8686)
   --version, -v    Print Totem LLM version and exit
   --force          (setup only) Regenerate configuration even if it already exists
 

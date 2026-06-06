@@ -100,7 +100,7 @@ const MobileDevice = {
     let baseUrl = "/api/mobile";
     if (process.env.NODE_ENV === "production") baseUrl = "/api/mobile";
     else
-      baseUrl = `http://${ip.address()}:${process.env.SERVER_PORT || 3001}/api/mobile`;
+      baseUrl = `http://${ip.address()}:${process.env.SERVER_PORT || 8686}/api/mobile`;
 
     const tempToken = this.registerTempToken(user);
     baseUrl = `${baseUrl}?t=${tempToken}`;
