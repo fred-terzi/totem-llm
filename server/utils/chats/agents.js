@@ -4,7 +4,7 @@ const {
 } = require("../../models/workspaceAgentInvocation");
 const { writeResponseChunk } = require("../helpers/chat/responses");
 const { Workspace } = require("../../models/workspace");
-const { SystemSettings } = require("../../models/systemSettings");
+const { resolveFeatures } = require("../../../totem.features.cjs");
 
 
 
@@ -48,9 +48,7 @@ async function grepAgents({
   attachments = [],
 }) {
   // When agent mode is disabled, ensure agent mode is never initiated
-  const agentModeEnabled = (
-    await SystemSettings.get({ label: "agentMode" })
-  )?.value === "enabled";
+  const agentModeEnabled = resolveFeatures()?.agentMode?.enabled === true;
 
   let nativeToolingEnabled = false;
 

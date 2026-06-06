@@ -27,7 +27,7 @@ This downloads Totem LLM and installs all server and collector dependencies auto
 totem-llm start
 ```
 
-On first run this performs one-time setup (creates `~/totem-llm/`, migrates the database) then launches the server and document collector. Open [http://localhost:3001](http://localhost:3001) to access the UI.
+On first run this performs one-time setup (creates `~/totem-llm/`, migrates the database) then launches the server and document collector. Open [http://localhost:8686](http://localhost:8686) to access the UI.
 
 ### 3. Install to Desktop (optional)
 
@@ -37,7 +37,7 @@ In the browser, click the install icon in the address bar (or use the browser me
 
 ```
 totem-llm --no-collector    Start without the document collector
-totem-llm --port=8080       Override the server port (default: 3001)
+totem-llm --port=8080       Override the server port (default: 8686)
 totem-llm setup             Run first-time setup without starting
 totem-llm --help            Show all options
 ```
@@ -102,7 +102,7 @@ All other settings (LLM provider, embedding model, etc.) can be changed later th
 yarn dev:all
 ```
 
-This starts the server (port `3001`), collector (port `8888`), and frontend dev server (port `5173`) concurrently. Open [http://localhost:5173](http://localhost:5173) to access the UI.
+This starts the server (port `8686`), collector (port `8888`), and frontend dev server (port `5173`) concurrently. Open [http://localhost:5173](http://localhost:5173) to access the UI.
 
 > Alternatively, run each service in its own terminal: `yarn dev:server`, `yarn dev:collector`, `yarn dev:frontend`.
 

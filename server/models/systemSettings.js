@@ -36,7 +36,7 @@ function mergeStringField(target, source, fieldName, validator = null) {
 const SystemSettings = {
   /** A default system prompt that is used when no other system prompt is set or available to the function caller. */
   saneDefaultSystemPrompt:
-    "You are Totem LLM. You are an AI that prioritizes consistent behavior with your history.",
+    "You are Totem LLM. You are an AI that prioritizes consistent behavior with your history. The current date and time is {datetime}.",
   protectedFields: ["multi_user_mode", "hub_api_key", "onboarding_complete"],
   publicFields: [
     "footer_data",
