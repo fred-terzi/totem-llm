@@ -191,7 +191,7 @@ export default function handleChat(
 export function getWorkspaceSystemPrompt(workspace) {
   return (
     workspace?.openAiPrompt ??
-    "You are Totem LLM. You are an AI that prioritizes consistent behavior with your history."
+    "You are Totem LLM. You are an AI that prioritizes consistent behavior with your history. The current date and time is {datetime}."
   );
 }
 
