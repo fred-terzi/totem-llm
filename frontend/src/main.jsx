@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import SimpleSSOPassthrough from "@/pages/Login/SSO/simple";
 import OnboardingFlow from "@/pages/OnboardingFlow";
 import { FeatureFlagProvider } from "@/context/FeatureFlagContext";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 import "@/index.css";
 
 const isDev = import.meta.env.DEV;
@@ -77,21 +78,21 @@ const router = createBrowserRouter([
           return { element: <AdminRoute Component={GeneralLLMPreference} /> };
         },
       },
-      ...(featureEnabled("transcription")
-        ? [
-            {
-              path: "/settings/transcription-preference",
-              lazy: async () => {
-                const { default: GeneralTranscriptionPreference } = await import(
-                  "@/pages/GeneralSettings/TranscriptionPreference"
-                );
-                return {
-                  element: <AdminRoute Component={GeneralTranscriptionPreference} />,
-                };
-              },
-            },
-          ]
-        : []),
+      {
+        path: "/settings/transcription-preference",
+        lazy: async () => {
+          const [{ default: GeneralTranscriptionPreference }, { default: NotFound }] = await Promise.all([
+            import("@/pages/GeneralSettings/TranscriptionPreference"),
+            import("@/pages/404"),
+          ]);
+          const Guard = () => {
+            const { enabled } = useFeatureFlag("transcription");
+            if (!enabled) return <NotFound />;
+            return <AdminRoute Component={GeneralTranscriptionPreference} />;
+          };
+          return { element: <Guard /> };
+        },
+      },
       {
         path: "/settings/audio-preference",
         lazy: async () => {
@@ -103,51 +104,51 @@ const router = createBrowserRouter([
           };
         },
       },
-      ...(featureEnabled("embedder")
-        ? [
-            {
-              path: "/settings/embedding-preference",
-              lazy: async () => {
-                const { default: GeneralEmbeddingPreference } = await import(
-                  "@/pages/GeneralSettings/EmbeddingPreference"
-                );
-                return {
-                  element: <AdminRoute Component={GeneralEmbeddingPreference} />,
-                };
-              },
-            },
-          ]
-        : []),
-      ...(featureEnabled("textSplitter")
-        ? [
-            {
-              path: "/settings/text-splitter-preference",
-              lazy: async () => {
-                const { default: EmbeddingTextSplitterPreference } = await import(
-                  "@/pages/GeneralSettings/EmbeddingTextSplitterPreference"
-                );
-                return {
-                  element: <AdminRoute Component={EmbeddingTextSplitterPreference} />,
-                };
-              },
-            },
-          ]
-        : []),
-      ...(featureEnabled("vectorDB")
-        ? [
-            {
-              path: "/settings/vector-database",
-              lazy: async () => {
-                const { default: GeneralVectorDatabase } = await import(
-                  "@/pages/GeneralSettings/VectorDatabase"
-                );
-                return {
-                  element: <AdminRoute Component={GeneralVectorDatabase} />,
-                };
-              },
-            },
-          ]
-        : []),
+      {
+        path: "/settings/embedding-preference",
+        lazy: async () => {
+          const [{ default: GeneralEmbeddingPreference }, { default: NotFound }] = await Promise.all([
+            import("@/pages/GeneralSettings/EmbeddingPreference"),
+            import("@/pages/404"),
+          ]);
+          const Guard = () => {
+            const { enabled } = useFeatureFlag("embedder");
+            if (!enabled) return <NotFound />;
+            return <AdminRoute Component={GeneralEmbeddingPreference} />;
+          };
+          return { element: <Guard /> };
+        },
+      },
+      {
+        path: "/settings/text-splitter-preference",
+        lazy: async () => {
+          const [{ default: EmbeddingTextSplitterPreference }, { default: NotFound }] = await Promise.all([
+            import("@/pages/GeneralSettings/EmbeddingTextSplitterPreference"),
+            import("@/pages/404"),
+          ]);
+          const Guard = () => {
+            const { enabled } = useFeatureFlag("textSplitter");
+            if (!enabled) return <NotFound />;
+            return <AdminRoute Component={EmbeddingTextSplitterPreference} />;
+          };
+          return { element: <Guard /> };
+        },
+      },
+      {
+        path: "/settings/vector-database",
+        lazy: async () => {
+          const [{ default: GeneralVectorDatabase }, { default: NotFound }] = await Promise.all([
+            import("@/pages/GeneralSettings/VectorDatabase"),
+            import("@/pages/404"),
+          ]);
+          const Guard = () => {
+            const { enabled } = useFeatureFlag("vectorDB");
+            if (!enabled) return <NotFound />;
+            return <AdminRoute Component={GeneralVectorDatabase} />;
+          };
+          return { element: <Guard /> };
+        },
+      },
       {
         path: "/settings/agents",
         lazy: async () => {
