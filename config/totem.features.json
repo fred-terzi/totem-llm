@@ -71,6 +71,10 @@
     "transcription": {
       "label": "Audio Transcription",
       "tier": "L2"
+    },
+    "appIntegrations": {
+      "label": "3rd Party App Integrations",
+      "tier": "L2"
     }
   },
   "PROFILES": {
@@ -92,7 +96,8 @@
       "vectorDB": false,
       "embedder": false,
       "textSplitter": false,
-      "transcription": false
+      "transcription": false,
+      "appIntegrations": false
     },
     "L1": {
       "communityHub": false,
@@ -112,7 +117,8 @@
       "vectorDB": false,
       "embedder": false,
       "textSplitter": false,
-      "transcription": false
+      "transcription": false,
+      "appIntegrations": false
     },
     "L2": {
       "communityHub": false,
@@ -132,7 +138,8 @@
       "vectorDB": false,
       "embedder": false,
       "textSplitter": false,
-      "transcription": false
+      "transcription": false,
+      "appIntegrations": false
     },
     "source": {
       "communityHub": true,
@@ -152,7 +159,8 @@
       "vectorDB": false,
       "embedder": false,
       "textSplitter": false,
-      "transcription": false
+      "transcription": false,
+      "appIntegrations": false
     }
   }
 }
