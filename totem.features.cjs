@@ -25,7 +25,7 @@ const os = require('os');
 // User-editable config lives in the storage dir (~/totem-llm by default).
 // Falls back to the bundled default shipped with the package.
 const storageDir = process.env.TOTEM_STORAGE_DIR ?? path.join(os.homedir(), 'totem-llm');
-const USER_CONFIG_PATH = path.join(storageDir, 'totem.features.json');
+const USER_CONFIG_PATH = path.join(storageDir, '.totem.features.json');
 const DEFAULT_CONFIG_PATH = path.resolve(__dirname, 'config', 'totem.features.json');
 const CONFIG_PATH = fs.existsSync(USER_CONFIG_PATH) ? USER_CONFIG_PATH : DEFAULT_CONFIG_PATH;
 

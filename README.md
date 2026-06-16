@@ -1,113 +1,124 @@
-# Totem LLM - Your Private AI
+<div align="center">
+
+# Totem LLM
+
+<p align="center">
+  <img src="images/totem_logo.png" alt="Description of image" width="100">
+</p>
+
+
+### Your Mind Leads
+
+[![Node.js](https://img.shields.io/badge/Node.js-v18+-green?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)](https://github.com/fred-terzi/totem-llm)
+
+
+**A sovereign AI solution for consumer hardware. Keep your data private, run locally, stay in control.**
+
+</div>
+
+---
+
+## 🚀 Key Features
+
+| Feature | Description |
+|---------|-------------|
+| **Privacy First** | All data stays on your machine. |
+| **Consumer Hardware** | Optimized for consumer-grade devices. |
+| **Local & Cloud** | Choose local models via Ollama or use cloud providers (OpenRouter). |
+| **Easy Setup** | One-line install with automatic dependency resolution. |
+
+---
+
+## 📋 About
 
 Totem LLM is a sovereign AI solution, aimed at optimizing for consumer hardware and ensuring data privacy. It is designed to run efficiently on consumer-grade hardware, such as laptops and desktops, without the need for cloud-based processing. This allows users to have full control over their data and AI interactions, without relying on third-party services.
 
 While local AI is the core focus, Totem LLM supports both local and cloud-based LLM providers, giving users the flexibility to choose based on their needs and preferences. The system is built with a modular architecture, allowing for easy integration of new features and providers over time.
 
-## Install Quick Start Package
+## ⚙️ Requirements
 
-### Prerequisites
+Before installing Totem LLM, first install the below prerequisites:
 
-- [Node.js](https://nodejs.org/) v18 or later
-- [Ollama](https://ollama.com/) (recommended) or an [OpenRouter](https://openrouter.ai/) API key
+- **[Node.js](https://nodejs.org/)** v18 or later
+- **[Ollama](https://ollama.com/)** (recommended for local models) *OR*
+- **[OpenRouter](https://openrouter.ai/)** API key (for cloud models)
 
-### 1. Install the package
+---
 
-Search for `terminal` in your applications and open it. Then run:
+## 🎯 Quick Start
+
+### 1️⃣ Install the Package
+
+Open your terminal and run:
 
 ```bash
 npm install -g totem-llm
 ```
 
-This downloads Totem LLM and installs all server and collector dependencies automatically.
+This automatically downloads Totem LLM and installs all dependencies (server, collector, frontend).
 
-### 2. Start Totem LLM
+### 2️⃣ Start Totem LLM
 
 ```bash
 totem-llm start
 ```
 
-On first run this performs one-time setup (creates `~/totem-llm/`, migrates the database) then launches the server and document collector. Open [http://localhost:8686](http://localhost:8686) to access the UI.
+**First run:** Creates `~/totem-llm/` directory, migrates database, then launches services.
 
-### 3. Install to Desktop (optional)
+**Access:** Open [http://localhost:8686](http://localhost:8686) in your browser.
 
-In the browser, click the install icon in the address bar (or use the browser menu) to install Totem LLM as a desktop application. This creates a standalone app with its own window and taskbar/dock icon.
+### 3️⃣ Optional: Install as Desktop App
 
-### Options
-
-```
-totem-llm --no-collector    Start without the document collector
-totem-llm --port=8080       Override the server port (default: 8686)
-totem-llm setup             Run first-time setup without starting
-totem-llm --help            Show all options
-```
-
-> **Storage**: All data is kept in `~/totem-llm/` by default. Override with `TOTEM_STORAGE_DIR=/your/path totem-llm start`.
-
-### Troubleshooting
-
-**npm not found after node.js install**: 
-
-Common on windows, you may need to run `npm.cmd` instead of just `npm`
-
-**totem-llm command not found after install**:
-
-Run `npx.cmd totem-llm start` instead of `totem-llm start`, or add the npm global bin directory to your PATH.
-
-> **Windows (PowerShell)**: If you see `cannot be loaded because running scripts is disabled`, run this once in PowerShell then retry:
-> ```powershell
-> Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-> ```
-> Alternatively, use **Command Prompt** (`cmd.exe`) where `totem-llm.cmd` runs without any policy change.
+In the browser UI, click the **install icon** in the address bar (or use your browser menu) to add Totem LLM to your desktop. This is a link to the web GUI, but with its own window and taskbar/dock icon for easy access.
 
 ---
 
-## Quick Start (Build from Source)
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) v18 or later
-- [Yarn](https://yarnpkg.com/) v1.x (`npm install -g yarn`)
-- [Ollama](https://ollama.com/) (recommended local LLM provider) or an [OpenRouter](https://openrouter.ai/) API key
-- Linux build machine - current build relies on `cp` command with `--reflink` option for efficient file copying. Building on non-Linux platforms may require additional setup (e.g. WSL on Windows).
-
-### 1. Clone the repository
+## 📚 Command Reference
 
 ```bash
-git clone https://github.com/fred-terzi/totem-llm.git
-cd totem-llm
+totem-llm start                 # Start server and collector
+totem-llm --no-collector       # Start server only (skip document ingestion)
+totem-llm --port=8080          # Use custom server port
+totem-llm setup                # Run first-time setup without starting
+totem-llm --help               # Show all available commands
 ```
 
-### 2. Install dependencies and initialise the database
+### Environment Variables
 
 ```bash
-yarn setup
+# Override default storage location (default: ~/totem-llm)
+export TOTEM_STORAGE_DIR=/your/custom/path
+totem-llm start
 ```
 
-This installs dependencies for all three packages (`server`, `collector`, `frontend`), copies the example `.env` files, generates the Prisma client, and runs database migrations.
+---
 
-### 3. Configure environment variables
+## 🛠️ Troubleshooting
 
-Open `server/.env.development` and set at minimum:
+| Issue | Solution |
+|-------|----------|
+| **npm not found** (Windows) | Run `npm.cmd` instead of `npm` |
+| **totem-llm command not found** | Run `npx.cmd totem-llm start` or add npm global bin to PATH |
+| **PowerShell script execution error** | Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser` once, then retry |
+| **Alternative on Windows** | Use **Command Prompt** (`cmd.exe`) instead of PowerShell |
 
-```env
-STORAGE_DIR="/absolute/path/to/your/storage"
-```
 
-All other settings (LLM provider, embedding model, etc.) can be changed later through the UI.
+## 🙏 Acknowledgments
 
-### 4. Start in development mode
+Totem LLM is built on the foundation of **[AnythingLLM](https://github.com/Mintplex-Labs/anything-llm)** by Mintplex Labs. We are deeply grateful for their excellent work.
 
-```bash
-yarn dev:all
-```
+---
 
-This starts the server (port `8686`), collector (port `8888`), and frontend dev server (port `5173`) concurrently. Open [http://localhost:5173](http://localhost:5173) to access the UI.
+## 📄 License
 
-> Alternatively, run each service in its own terminal: `yarn dev:server`, `yarn dev:collector`, `yarn dev:frontend`.
+Totem LLM is released under the **MIT License** — see [LICENSE](LICENSE) for details.
 
-## Thanks
+## 📞 Support
 
-Massive thank you and appreciation to AnythingLLM. Totem LLM is a fork of AnythingLLM, and we are grateful for the foundation they have provided. We will continue to build on their work and contribute back to the community.
+- 🐛 **Report Issues** → [GitHub Issues](https://github.com/fred-terzi/totem-llm/issues)
+- 💬 **Discussions** → [GitHub Discussions](https://github.com/fred-terzi/totem-llm/discussions)
 
-https://github.com/Mintplex-Labs/anything-llm
+---
+
