@@ -5,7 +5,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
  *
  * Provides feature flags to all React components.
  * Fetches live flags from the server at runtime (GET /api/features) so that
- * changes to ~/totem-llm/totem.features.json are reflected without rebuilding
+ * changes to ~/totem-llm/.totem.features.json are reflected without rebuilding
  * the frontend. Falls back to build-time baked-in values if the fetch fails.
  *
  * Usage:
