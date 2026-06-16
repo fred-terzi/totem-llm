@@ -1,13 +1,18 @@
 <div align="center">
 
-# 🌲 Totem LLM
+# Totem LLM
+
+<p align="center">
+  <img src="images/totem_logo.png" alt="Description of image" width="100">
+</p>
+
 
 ### Your Private AI
 
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-green?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)](https://github.com/fred-terzi/totem-llm)
-[![GitHub Stars](https://img.shields.io/github/stars/fred-terzi/totem-llm?style=social)](https://github.com/fred-terzi/totem-llm)
+
 
 **A sovereign AI solution for consumer hardware. Keep your data private, run locally, stay in control.**
 
@@ -19,11 +24,10 @@
 
 | Feature | Description |
 |---------|-------------|
-| 🔒 **Privacy First** | All data stays on your machine. No cloud calls. Full control. |
-| ⚡ **Consumer Hardware** | Optimized for laptops and desktops. No GPU required for basic use. |
-| 🧠 **Local & Cloud** | Choose local models via Ollama or use cloud providers (OpenRouter, etc.). |
-| 📦 **Easy Setup** | One-line install with automatic dependency resolution. |
-| 🔌 **Modular Design** | Extensible architecture for custom integrations and providers. |
+| **Privacy First** | All data stays on your machine. |
+| **Consumer Hardware** | Optimized for consumer-grade devices. |
+| **Local & Cloud** | Choose local models via Ollama or use cloud providers (OpenRouter). |
+| **Easy Setup** | One-line install with automatic dependency resolution. |
 
 ---
 
@@ -35,7 +39,7 @@ While local AI is the core focus, Totem LLM supports both local and cloud-based 
 
 ## ⚙️ Requirements
 
-Before installing, ensure you have:
+Before installing Totem LLM, first install the below prerequisites:
 
 - **[Node.js](https://nodejs.org/)** v18 or later
 - **[Ollama](https://ollama.com/)** (recommended for local models) *OR*
@@ -67,7 +71,7 @@ totem-llm start
 
 ### 3️⃣ Optional: Install as Desktop App
 
-In the browser UI, click the **install icon** in the address bar (or use your browser menu) to add Totem LLM as a standalone desktop application.
+In the browser UI, click the **install icon** in the address bar (or use your browser menu) to add Totem LLM to your desktop. This is a link to the web GUI, but with its own window and taskbar/dock icon for easy access.
 
 ---
 
