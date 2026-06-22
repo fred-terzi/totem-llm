@@ -35,6 +35,7 @@ import { Link } from "react-router-dom";
 import paths from "@/utils/paths";
 import AgentFlows from "@/models/agentFlows";
 import AgentSkillSettings from "./AgentSkillSettings";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 const IGNORE_CHANGE_SETTINGS = [
   "agentSkillRerankerEnabled",
@@ -45,6 +46,16 @@ const IGNORE_CHANGE_SETTINGS = [
 ];
 
 export default function AdminAgents() {
+  const { enabled: agentModeEnabled } = useFeatureFlag("agentMode");
+  const { enabled: agentFlowsEnabled } = useFeatureFlag("agentFlows");
+  const { enabled: mcpServersEnabled } = useFeatureFlag("mcpServers");
+  const { enabled: appIntegrationsEnabled } = useFeatureFlag("appIntegrations");
+
+  // When agentMode is active, App Integrations, Agent Flows, and MCP Servers are hidden
+  const showAppIntegrations = !agentModeEnabled && appIntegrationsEnabled;
+  const showAgentFlows = !agentModeEnabled && agentFlowsEnabled;
+  const showMcpServers = !agentModeEnabled && mcpServersEnabled;
+
   const { t } = useTranslation();
   const formEl = useRef(null);
   const [hasChanges, setHasChanges] = useState(false);
@@ -396,16 +407,20 @@ export default function AdminAgents() {
               activeSkills={agentSkills}
             />
 
-            <div className="text-theme-text-primary flex items-center gap-x-2 mt-6">
-              <Package size={24} />
-              <p className="text-lg font-medium">App Integrations</p>
-            </div>
-            <SkillList
-              skills={appIntegrationSkills}
-              selectedSkill={selectedSkill}
-              handleClick={handleSkillClick}
-              activeSkills={agentSkills}
-            />
+            {showAppIntegrations && (
+              <>
+                <div className="text-theme-text-primary flex items-center gap-x-2 mt-6">
+                  <Package size={24} />
+                  <p className="text-lg font-medium">App Integrations</p>
+                </div>
+                <SkillList
+                  skills={appIntegrationSkills}
+                  selectedSkill={selectedSkill}
+                  handleClick={handleSkillClick}
+                  activeSkills={agentSkills}
+                />
+              </>
+            )}
 
             <div className="text-theme-text-primary flex items-center gap-x-2">
               <Plug size={24} />
@@ -417,37 +432,43 @@ export default function AdminAgents() {
               handleClick={handleSkillClick}
             />
 
-            <div className="text-theme-text-primary flex items-center gap-x-2 mt-6">
-              <FlowArrow size={24} />
-              <p className="text-lg font-medium">Agent Flows</p>
-            </div>
-            <AgentFlowsList
-              flows={agentFlows}
-              selectedFlow={selectedFlow}
-              handleClick={handleFlowClick}
-              activeFlowIds={activeFlowIds}
-            />
-            <input
-              type="hidden"
-              name="system::active_agent_flows"
-              id="active_agent_flows"
-              value={activeFlowIds.join(",")}
-            />
-            <MCPServerHeader
-              setMcpServers={setMcpServers}
-              setSelectedMcpServer={setSelectedMcpServer}
-            >
-              {({ loadingMcpServers }) => {
-                return (
-                  <MCPServersList
-                    isLoading={loadingMcpServers}
-                    servers={mcpServers}
-                    selectedServer={selectedMcpServer}
-                    handleClick={handleMCPClick}
-                  />
-                );
-              }}
-            </MCPServerHeader>
+            {showAgentFlows && (
+              <>
+                <div className="text-theme-text-primary flex items-center gap-x-2 mt-6">
+                  <FlowArrow size={24} />
+                  <p className="text-lg font-medium">Agent Flows</p>
+                </div>
+                <AgentFlowsList
+                  flows={agentFlows}
+                  selectedFlow={selectedFlow}
+                  handleClick={handleFlowClick}
+                  activeFlowIds={activeFlowIds}
+                />
+                <input
+                  type="hidden"
+                  name="system::active_agent_flows"
+                  id="active_agent_flows"
+                  value={activeFlowIds.join(",")}
+                />
+              </>
+            )}
+            {showMcpServers && (
+              <MCPServerHeader
+                setMcpServers={setMcpServers}
+                setSelectedMcpServer={setSelectedMcpServer}
+              >
+                {({ loadingMcpServers }) => {
+                  return (
+                    <MCPServersList
+                      isLoading={loadingMcpServers}
+                      servers={mcpServers}
+                      selectedServer={selectedMcpServer}
+                      handleClick={handleMCPClick}
+                    />
+                  );
+                }}
+              </MCPServerHeader>
+            )}
           </div>
 
           {/* Selected agent skill modal */}
@@ -620,16 +641,20 @@ export default function AdminAgents() {
                 activeSkills={agentSkills}
               />
 
-              <div className="text-theme-text-primary flex items-center gap-x-2 mt-6">
-                <Package size={24} />
-                <p className="text-lg font-medium">App Integrations</p>
-              </div>
-              <SkillList
-                skills={appIntegrationSkills}
-                selectedSkill={selectedSkill}
-                handleClick={handleSkillClick}
-                activeSkills={agentSkills}
-              />
+              {showAppIntegrations && (
+                <>
+                  <div className="text-theme-text-primary flex items-center gap-x-2 mt-6">
+                    <Package size={24} />
+                    <p className="text-lg font-medium">App Integrations</p>
+                  </div>
+                  <SkillList
+                    skills={appIntegrationSkills}
+                    selectedSkill={selectedSkill}
+                    handleClick={handleSkillClick}
+                    activeSkills={agentSkills}
+                  />
+                </>
+              )}
 
               <div className="text-theme-text-primary flex items-center gap-x-2 mt-4">
                 <Plug size={24} />
@@ -641,51 +666,57 @@ export default function AdminAgents() {
                 handleClick={handleSkillClick}
               />
 
-              <div className="text-theme-text-primary flex items-center justify-between gap-x-2 mt-4">
-                <div className="flex items-center gap-x-2">
-                  <FlowArrow size={24} />
-                  <p className="text-lg font-medium">Agent Flows</p>
-                </div>
-                {agentFlows.length === 0 ? (
-                  <Link
-                    to={paths.agents.builder()}
-                    className="text-cta-button flex items-center gap-x-1 hover:underline"
-                  >
-                    <Hammer size={16} />
-                    <p className="text-sm">Create Flow</p>
-                  </Link>
-                ) : (
-                  <Link
-                    to={paths.agents.builder()}
-                    className="text-theme-text-secondary hover:text-cta-button flex items-center gap-x-1"
-                  >
-                    <Hammer size={16} />
-                    <p className="text-sm">Open Builder</p>
-                  </Link>
-                )}
-              </div>
-              <AgentFlowsList
-                flows={agentFlows}
-                selectedFlow={selectedFlow}
-                handleClick={handleFlowClick}
-                activeFlowIds={activeFlowIds}
-              />
+              {showAgentFlows && (
+                <>
+                  <div className="text-theme-text-primary flex items-center justify-between gap-x-2 mt-4">
+                    <div className="flex items-center gap-x-2">
+                      <FlowArrow size={24} />
+                      <p className="text-lg font-medium">Agent Flows</p>
+                    </div>
+                    {agentFlows.length === 0 ? (
+                      <Link
+                        to={paths.agents.builder()}
+                        className="text-cta-button flex items-center gap-x-1 hover:underline"
+                      >
+                        <Hammer size={16} />
+                        <p className="text-sm">Create Flow</p>
+                      </Link>
+                    ) : (
+                      <Link
+                        to={paths.agents.builder()}
+                        className="text-theme-text-secondary hover:text-cta-button flex items-center gap-x-1"
+                      >
+                        <Hammer size={16} />
+                        <p className="text-sm">Open Builder</p>
+                      </Link>
+                    )}
+                  </div>
+                  <AgentFlowsList
+                    flows={agentFlows}
+                    selectedFlow={selectedFlow}
+                    handleClick={handleFlowClick}
+                    activeFlowIds={activeFlowIds}
+                  />
+                </>
+              )}
 
-              <MCPServerHeader
-                setMcpServers={setMcpServers}
-                setSelectedMcpServer={setSelectedMcpServer}
-              >
-                {({ loadingMcpServers }) => {
-                  return (
-                    <MCPServersList
-                      isLoading={loadingMcpServers}
-                      servers={mcpServers}
-                      selectedServer={selectedMcpServer}
-                      handleClick={handleMCPClick}
-                    />
-                  );
-                }}
-              </MCPServerHeader>
+              {showMcpServers && (
+                <MCPServerHeader
+                  setMcpServers={setMcpServers}
+                  setSelectedMcpServer={setSelectedMcpServer}
+                >
+                  {({ loadingMcpServers }) => {
+                    return (
+                      <MCPServersList
+                        isLoading={loadingMcpServers}
+                        servers={mcpServers}
+                        selectedServer={selectedMcpServer}
+                        handleClick={handleMCPClick}
+                      />
+                    );
+                  }}
+                </MCPServerHeader>
+              )}
             </div>
           </div>
         </div>

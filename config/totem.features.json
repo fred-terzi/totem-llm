@@ -75,6 +75,14 @@
     "appIntegrations": {
       "label": "3rd Party App Integrations",
       "tier": "L2"
+    },
+    "agentFlows": {
+      "label": "Agent Flows",
+      "tier": "L2"
+    },
+    "mcpServers": {
+      "label": "MCP Servers",
+      "tier": "L2"
     }
   },
   "PROFILES": {
@@ -97,7 +105,9 @@
       "embedder": false,
       "textSplitter": false,
       "transcription": false,
-      "appIntegrations": false
+      "appIntegrations": false,
+      "agentFlows": false,
+      "mcpServers": false
     },
     "L1": {
       "communityHub": false,
@@ -118,7 +128,9 @@
       "embedder": false,
       "textSplitter": false,
       "transcription": false,
-      "appIntegrations": false
+      "appIntegrations": false,
+      "agentFlows": false,
+      "mcpServers": false
     },
     "L2": {
       "communityHub": false,
@@ -139,7 +151,9 @@
       "embedder": false,
       "textSplitter": false,
       "transcription": false,
-      "appIntegrations": false
+      "appIntegrations": false,
+      "agentFlows": false,
+      "mcpServers": false
     },
     "source": {
       "communityHub": true,
@@ -160,7 +174,9 @@
       "embedder": false,
       "textSplitter": false,
       "transcription": false,
-      "appIntegrations": false
+      "appIntegrations": false,
+      "agentFlows": false,
+      "mcpServers": false
     }
   }
 }
