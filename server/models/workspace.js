@@ -214,7 +214,7 @@ const Workspace = {
       const workspace = await prisma.workspaces.create({
         data: {
           name: this.validations.name(name),
-          chatMode: "agent",
+          chatMode: "automatic",
           ...this.validateFields(additionalFields),
           slug,
         },
