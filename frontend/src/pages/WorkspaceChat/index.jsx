@@ -7,6 +7,7 @@ import PasswordModal, { usePasswordModal } from "@/components/Modals/Password";
 import { isMobile } from "react-device-detect";
 import { FullScreenLoader } from "@/components/Preloader";
 import { LAST_VISITED_WORKSPACE } from "@/utils/constants";
+import ScheduledJobs from "@/models/scheduledJobs";
 
 export default function WorkspaceChat() {
   const { loading, requiresAuth, mode } = usePasswordModal();
@@ -59,6 +60,13 @@ function ShowWorkspaceChat() {
           name: _workspace.name,
         })
       );
+
+      // If this is a scheduled-job workspace, mark all its unread runs as read
+      // so the sidebar badge and workspace dot clear automatically.
+      const jobSlugMatch = _workspace.slug?.match(/^scheduled-job-(\d+)$/);
+      if (jobSlugMatch) {
+        ScheduledJobs.markAllReadForJob(Number(jobSlugMatch[1]));
+      }
     }
     getWorkspace();
   }, [slug]);

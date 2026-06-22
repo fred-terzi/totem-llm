@@ -15,6 +15,7 @@ import showToast from "@/utils/toast";
 import { LAST_VISITED_WORKSPACE } from "@/utils/constants";
 import { safeJsonParse } from "@/utils/request";
 import useFeatureFlag from "@/hooks/useFeatureFlag";
+import ScheduledJobs from "@/models/scheduledJobs";
 
 export default function ActiveWorkspaces() {
   const navigate = useNavigate();
@@ -27,7 +28,24 @@ export default function ActiveWorkspaces() {
   const isInWorkspaceSettings = !!useMatch("/workspace/:slug/settings/:tab");
   const isHomePage = !!useMatch("/");
   const agentModeEnabled = useFeatureFlag("agentMode");
+  const { enabled: scheduledJobsEnabled } = useFeatureFlag("scheduledJobs");
 
+  // Map of workspace slug → unread run count, e.g. { "scheduled-job-3": 2 }
+  const [unreadWorkspaces, setUnreadWorkspaces] = useState({});
+  useEffect(() => {
+    if (!scheduledJobsEnabled) return;
+    let cancelled = false;
+    const poll = async () => {
+      const map = await ScheduledJobs.unreadWorkspaces();
+      if (!cancelled) setUnreadWorkspaces(map);
+    };
+    poll();
+    const id = setInterval(poll, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [scheduledJobsEnabled]);
 
   useEffect(() => {
     async function getWorkspaces() {
@@ -146,17 +164,21 @@ export default function ActiveWorkspaces() {
                               data-tooltip-content={workspace.name}
                               className="flex items-center space-x-2 overflow-hidden flex-grow"
                             >
-                              <div className="w-[130px] overflow-hidden">
+                              <div className="w-[130px] overflow-hidden flex items-center gap-1.5">
                                 <p
                                   className={`
                                   text-[14px] leading-loose whitespace-nowrap overflow-hidden
                                   ${isActive ? "font-bold text-white light:text-blue-900" : "font-medium "} truncate
-                                  w-full group-hover:w-[130px] group-hover:duration-200
+                                  group-hover:duration-200
                                 `}
                                 >
                                   {workspace.name}
                                 </p>
-                              </div>
+                                {(unreadWorkspaces[workspace.slug] ?? 0) > 0 && (
+                                  <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold leading-[18px] text-center">
+                                    {unreadWorkspaces[workspace.slug] > 99 ? "99+" : unreadWorkspaces[workspace.slug]}
+                                  </span>
+                                )}                              </div>
                             </div>
                             {user?.role !== "default" && (
                               <div

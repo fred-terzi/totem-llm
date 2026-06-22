@@ -251,6 +251,29 @@ const ScheduledJobRun = {
     }
   },
 
+  /**
+   * Mark all unread terminal runs for a given job as read.
+   * Called when the user opens the job's auto-created workspace chat.
+   * @param {number} jobId
+   * @returns {Promise<number>} Number of rows updated
+   */
+  markAllReadForJob: async function (jobId) {
+    try {
+      const result = await prisma.scheduled_job_runs.updateMany({
+        where: {
+          jobId: Number(jobId),
+          readAt: null,
+          status: { in: ["completed", "failed", "timed_out"] },
+        },
+        data: { readAt: new Date() },
+      });
+      return result.count;
+    } catch (error) {
+      console.error("Failed to mark all runs as read for job:", error.message);
+      return 0;
+    }
+  },
+
   markRead: async function (id) {
     try {
       await prisma.scheduled_job_runs.update({
@@ -280,6 +303,35 @@ const ScheduledJobRun = {
     } catch (error) {
       console.error("Failed to count unread scheduled job runs:", error.message);
       return 0;
+    }
+  },
+
+  /**
+   * Return a map of workspace slug → unread run count for every scheduled job
+   * that has at least one unread terminal run. The workspace slug for a job is
+   * the deterministic `scheduled-job-<jobId>` value used by autoSaveToJobWorkspace.
+   *
+   * @returns {Promise<Record<string, number>>} e.g. { "scheduled-job-3": 2 }
+   */
+  unreadByJobWorkspace: async function () {
+    try {
+      const rows = await prisma.scheduled_job_runs.groupBy({
+        by: ["jobId"],
+        where: {
+          readAt: null,
+          status: { in: ["completed", "failed", "timed_out"] },
+        },
+        _count: { id: true },
+      });
+
+      const result = {};
+      for (const row of rows) {
+        result[`scheduled-job-${row.jobId}`] = row._count.id;
+      }
+      return result;
+    } catch (error) {
+      console.error("Failed to get unread runs by workspace:", error.message);
+      return {};
     }
   },
 
