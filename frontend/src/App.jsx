@@ -1,4 +1,4 @@
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { I18nextProvider } from "react-i18next";
 import { AuthProvider } from "@/AuthContext";
@@ -16,10 +16,19 @@ import ImageLightbox from "@/components/ImageLightbox";
 import { ErrorBoundary } from "react-error-boundary";
 import ErrorBoundaryFallback from "./components/ErrorBoundaryFallback";
 import useBackendOfflineNotifications from "@/hooks/useBackendOfflineNotifications";
+import { closeAllPersistedAgentSockets } from "@/utils/chat/agent";
 
 export default function App() {
   const location = useLocation();
   useBackendOfflineNotifications();
+
+  // Close all parked agent WebSocket sessions when the tab is closed so the
+  // server-side invocations are properly cleaned up.
+  useEffect(() => {
+    const handleUnload = () => closeAllPersistedAgentSockets();
+    window.addEventListener("beforeunload", handleUnload);
+    return () => window.removeEventListener("beforeunload", handleUnload);
+  }, []);
 
   return (
     <ErrorBoundary

@@ -2,6 +2,24 @@ import { THREAD_RENAME_EVENT } from "@/components/Sidebar/ActiveWorkspaces/Threa
 import { emitAssistantMessageCompleteEvent } from "@/components/contexts/TTSProvider";
 export const ABORT_STREAM_EVENT = "abort-chat-stream";
 
+// Tracks whether the user has seen the "Swapping over to agent chat" banner
+// at least once in this browser session. After the first time, the banner is
+// suppressed so that switching threads/workspaces in automatic mode doesn't
+// repeatedly show the startup message.
+const AGENT_INTRO_SEEN_KEY = "totem_agent_intro_seen";
+function markAgentIntroSeen() {
+  try {
+    sessionStorage.setItem(AGENT_INTRO_SEEN_KEY, "1");
+  } catch {}
+}
+function hasSeenAgentIntro() {
+  try {
+    return sessionStorage.getItem(AGENT_INTRO_SEEN_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 // For handling of chat responses in the frontend by their various types.
 export default function handleChat(
   chatResult,
@@ -37,6 +55,17 @@ export default function handleChat(
   }
 
   if (type === "abort" || type === "statusResponse") {
+    // Suppress the "Swapping over to agent chat" banner after the first time it
+    // has been shown in this browser session. This prevents the startup message
+    // from appearing on every new thread or workspace switch in automatic mode.
+    if (
+      type === "statusResponse" &&
+      textResponse?.includes("Swapping over to agent chat")
+    ) {
+      if (hasSeenAgentIntro()) return;
+      markAgentIntroSeen();
+    }
+
     setLoadingResponse(false);
     setChatHistory([
       ...remHistory,
