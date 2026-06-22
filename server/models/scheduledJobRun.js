@@ -357,6 +357,60 @@ const ScheduledJobRun = {
       };
     }
   },
+
+  /**
+   * Automatically save the prompt and response from a completed run to the
+   * job's dedicated workspace (creating it on first run) using the workspace's
+   * default thread (threadId = null) so every run appends to the same view.
+   *
+   * Workspace slug is deterministic: `scheduled-job-<jobId>` so the same
+   * workspace is reused across all runs of a job.
+   *
+   * @param {object} job - scheduled_jobs DB record (must have id, name, prompt)
+   * @param {object} result - run result object (text, sources, outputs, etc.)
+   * @returns {Promise<void>}
+   */
+  autoSaveToJobWorkspace: async function (job, result = {}) {
+    try {
+      const { Workspace } = require("./workspace");
+      const { WorkspaceChats } = require("./workspaceChats");
+
+      const slug = `scheduled-job-${job.id}`;
+
+      // Get or create the per-job workspace. Workspace.upsert goes directly
+      // to Prisma so we can set `slug` without it being filtered by writable[].
+      const { workspace, error: workspaceError } = await Workspace.upsert(
+        { slug },
+        { name: job.name, slug, chatMode: "automatic" },
+        {} // no updates on subsequent runs
+      );
+      if (workspaceError || !workspace) {
+        console.error(
+          `[ScheduledJobRun] Failed to upsert workspace for job ${job.id}: ${workspaceError}`
+        );
+        return;
+      }
+
+      // Write the prompt + response to the default thread (threadId = null)
+      await WorkspaceChats.new({
+        workspaceId: workspace.id,
+        prompt: job.prompt,
+        response: {
+          text: result.text || "No response was generated.",
+          sources: result.sources || [],
+          outputs: result.outputs || [],
+          type: "chat",
+        },
+        threadId: null,
+        include: true,
+      });
+    } catch (error) {
+      // Non-fatal: log but do not surface to the caller
+      console.error(
+        `[ScheduledJobRun] autoSaveToJobWorkspace failed for job ${job.id}: ${error.message}`
+      );
+    }
+  },
 };
 
 module.exports = { ScheduledJobRun };
