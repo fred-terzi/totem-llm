@@ -14,6 +14,7 @@ import SkillRow from "./SkillRow";
 import SkillSection from "./SkillSection";
 import { Wrench, MagnifyingGlass, CircleNotch } from "@phosphor-icons/react";
 import { useIsAgentSessionActive } from "@/utils/chat/agent";
+import useFeatureFlag from "@/hooks/useFeatureFlag";
 
 const MIN_ITEMS_TO_SHOW_SEARCH = 10;
 
@@ -28,7 +29,10 @@ export default function AgentSkillsTab({
 
   // Get skill definitions
   const defaultSkills = getDefaultSkills(t);
-  const appIntegrationSkills = getAppIntegrationSkills(t);
+  const { enabled: appIntegrationsEnabled } = useFeatureFlag("appIntegrations");
+  const appIntegrationSkills = appIntegrationsEnabled
+    ? getAppIntegrationSkills(t)
+    : {};
 
   // All skill state management
   const {
