@@ -264,6 +264,25 @@ const ScheduledJobRun = {
     }
   },
 
+  /**
+   * Count terminal runs (completed, failed, timed_out) that have not been
+   * read yet. Used by the sidebar badge and push notification badge count.
+   * @returns {Promise<number>}
+   */
+  countUnread: async function () {
+    try {
+      return await prisma.scheduled_job_runs.count({
+        where: {
+          readAt: null,
+          status: { in: ["completed", "failed", "timed_out"] },
+        },
+      });
+    } catch (error) {
+      console.error("Failed to count unread scheduled job runs:", error.message);
+      return 0;
+    }
+  },
+
   delete: async function (clause = {}) {
     try {
       await prisma.scheduled_job_runs.deleteMany({ where: clause });

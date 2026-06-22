@@ -15,6 +15,7 @@ export default function MenuOption({
   roles = [],
   hidden = false,
   isChild = false,
+  badge = 0,
 }) {
   const storageKey = generateStorageKey({ key: btnText });
   const location = useLocation();
@@ -102,6 +103,11 @@ export default function MenuOption({
           >
             {btnText}
           </p>
+          {badge > 0 && (
+            <span className="ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold leading-[18px] text-center shrink-0">
+              {badge > 99 ? "99+" : badge}
+            </span>
+          )}
         </Link>
         {hasChildren && (
           <button onClick={handleClick} className="p-2 text-white">

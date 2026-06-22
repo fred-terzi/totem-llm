@@ -122,6 +122,15 @@ const ScheduledJobs = {
       .then((res) => res.json())
       .catch((e) => ({ success: false, error: e.message }));
   },
+
+  unreadCount: async function () {
+    return await fetch(`${API_BASE}/scheduled-jobs/unread-count`, {
+      headers: baseHeaders(),
+    })
+      .then((res) => res.json())
+      .then(({ count }) => count ?? 0)
+      .catch(() => 0);
+  },
 };
 
 export default ScheduledJobs;

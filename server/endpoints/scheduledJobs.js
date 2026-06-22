@@ -13,6 +13,21 @@ const backgroundService = new BackgroundService();
 function scheduledJobEndpoints(app) {
   if (!app) return;
 
+  // Count unread (terminal, not-yet-opened) runs — used by the sidebar badge
+  app.get(
+    "/scheduled-jobs/unread-count",
+    [validatedRequest, isSingleUserMode],
+    async (_request, response) => {
+      try {
+        const count = await ScheduledJobRun.countUnread();
+        return response.status(200).json({ count });
+      } catch (e) {
+        console.error(e.message, e);
+        return response.status(200).json({ count: 0 });
+      }
+    }
+  );
+
   // List available tools for job configuration
   app.get(
     "/scheduled-jobs/available-tools",

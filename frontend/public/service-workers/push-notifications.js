@@ -10,9 +10,20 @@ function parseEventData(event) {
   self.addEventListener('push', function (event) {
     const payload = parseEventData(event);
     if (!payload) return;
+
+    // Update the app-icon badge (PWA homescreen / desktop installs).
+    // badge === 0 clears it; badge > 0 shows the count.
+    // Gracefully ignored in browsers that don't support the Badging API.
+    if (typeof payload.badge === 'number') {
+      if (payload.badge > 0) {
+        self.navigator?.setAppBadge?.(payload.badge).catch(() => {});
+      } else {
+        self.navigator?.clearAppBadge?.().catch(() => {});
+      }
+    }
   
     // options: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerRegistration/showNotification#options
-    self.registration.showNotification(payload.title || 'AnythingLLM', {
+    self.registration.showNotification(payload.title || 'Totem LLM', {
       ...payload,
       icon: '/favicon.png',
     });
