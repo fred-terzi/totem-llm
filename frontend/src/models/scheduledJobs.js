@@ -122,6 +122,43 @@ const ScheduledJobs = {
       .then((res) => res.json())
       .catch((e) => ({ success: false, error: e.message }));
   },
+
+  /**
+   * Mark all unread runs for a job as read.
+   * Called when the user opens the job's dedicated workspace.
+   * @param {number} jobId
+   */
+  markAllReadForJob: async function (jobId) {
+    return await fetch(
+      `${API_BASE}/scheduled-jobs/jobs/${jobId}/mark-read-all`,
+      { method: "POST", headers: baseHeaders() }
+    )
+      .then((res) => res.json())
+      .catch(() => ({ success: false }));
+  },
+
+  unreadCount: async function () {
+    return await fetch(`${API_BASE}/scheduled-jobs/unread-count`, {
+      headers: baseHeaders(),
+    })
+      .then((res) => res.json())
+      .then(({ count }) => count ?? 0)
+      .catch(() => 0);
+  },
+
+  /**
+   * Returns a map of workspace slug → unread count.
+   * e.g. { "scheduled-job-3": 2 }
+   * Used by the workspace sidebar to show per-workspace notification dots.
+   */
+  unreadWorkspaces: async function () {
+    return await fetch(`${API_BASE}/scheduled-jobs/unread-workspaces`, {
+      headers: baseHeaders(),
+    })
+      .then((res) => res.json())
+      .then(({ unread }) => unread ?? {})
+      .catch(() => ({}));
+  },
 };
 
 export default ScheduledJobs;

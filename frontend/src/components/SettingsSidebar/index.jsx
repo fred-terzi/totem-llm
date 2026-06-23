@@ -25,6 +25,7 @@ import System from "@/models/system";
 import Option from "./MenuOption";
 import { CanViewChatHistoryProvider } from "../CanViewChatHistory";
 import useAppVersion from "@/hooks/useAppVersion";
+import ScheduledJobs from "@/models/scheduledJobs";
 
 export default function SettingsSidebar() {
   const { t } = useTranslation();
@@ -204,6 +205,23 @@ const SidebarOptions = ({ user = null, t }) => {
   const { enabled: embedderEnabled } = useFeatureFlag("embedder");
   const { enabled: textSplitterEnabled } = useFeatureFlag("textSplitter");
   const { enabled: transcriptionEnabled } = useFeatureFlag("transcription");
+
+  // Unread scheduled-job-run badge — poll every 30 s while the sidebar is mounted
+  const [scheduledJobsBadge, setScheduledJobsBadge] = React.useState(0);
+  React.useEffect(() => {
+    if (!scheduledJobsEnabled) return;
+    let cancelled = false;
+    const fetch = async () => {
+      const count = await ScheduledJobs.unreadCount();
+      if (!cancelled) setScheduledJobsBadge(count);
+    };
+    fetch();
+    const id = setInterval(fetch, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [scheduledJobsEnabled]);
   return (
   <CanViewChatHistoryProvider>
     {({ viewable: canViewChatHistory }) => (
@@ -440,6 +458,7 @@ const SidebarOptions = ({ user = null, t }) => {
                     href: paths.settings.scheduledJobs(),
                     flex: true,
                     hidden: !!user,
+                    badge: scheduledJobsBadge,
                   },
                 ]
               : []),

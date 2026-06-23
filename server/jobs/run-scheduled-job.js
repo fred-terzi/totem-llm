@@ -126,6 +126,14 @@ process.on("message", async (payload) => {
       },
     });
     log(`Scheduled job "${job.name}" completed in ${duration}ms)`);
+
+    // Auto-save the prompt + response to the job's dedicated workspace
+    await ScheduledJobRun.autoSaveToJobWorkspace(job, {
+      text: state.textResponse,
+      sources: [],
+      outputs,
+    });
+
     await sendWebPushNotification(job, runId, state.textResponse, log);
   } catch (error) {
     if (error.message === "SCHEDULED_JOB_TIMEOUT") {

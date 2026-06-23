@@ -16,6 +16,9 @@ import handleSocketResponse, {
   AGENT_SESSION_END,
   AGENT_SESSION_START,
   setAgentSessionActive,
+  persistAgentSocket,
+  getPersistedAgentSocket,
+  closePersistedAgentSocket,
 } from "@/utils/chat/agent";
 import DnDFileUploaderWrapper from "./DnDWrapper";
 import SpeechRecognition, {
@@ -307,96 +310,153 @@ export default function ChatContainer({
   }, [loadingResponse, chatHistory, workspace]);
 
   // TODO: Simplify this WSS stuff
-  useEffect(() => {
-    let socket = null;
 
-    function handleWSS() {
+  /**
+   * Helper: attach message/close listeners to a WebSocket.
+   * Returns a detach function that removes those listeners without closing
+   * the socket, so the session can survive component unmount/remount.
+   */
+  function attachSocketListeners(ws, sessionKey) {
+    const onMessage = (event) => {
+      setLoadingResponse(true);
       try {
-        if (!socketId || !!websocket) return;
-        socket = new WebSocket(
-          `${websocketURI()}/api/agent-invocation/${socketId}`
-        );
-        socket.supportsAgentStreaming = false;
+        handleSocketResponse(ws, event, setChatHistory);
+      } catch {
+        console.error("Failed to parse data");
+        setAgentSessionActive(false);
+        window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
+        closePersistedAgentSocket(sessionKey);
+        ws.close();
+      }
+      setLoadingResponse(false);
+    };
 
-        window.addEventListener(ABORT_STREAM_EVENT, () => {
-          setAgentSessionActive(false);
-          window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
-          socket?.close();
-        });
-
-        socket.addEventListener("message", (event) => {
-          setLoadingResponse(true);
-          try {
-            handleSocketResponse(socket, event, setChatHistory);
-          } catch {
-            console.error("Failed to parse data");
-            setAgentSessionActive(false);
-            window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
-            socket.close();
-          }
-          setLoadingResponse(false);
-        });
-
-        socket.addEventListener("close", (_event) => {
-          setAgentSessionActive(false);
-          window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
-          // When the close was triggered by /reset, skip the "Agent session
-          // complete." status - the pending /reset flow will clear history.
-          if (pendingResetRef.current) {
-            pendingResetRef.current = false;
-          } else {
-            setChatHistory((prev) => [
-              ...prev.filter((msg) => !!msg.content),
-              {
-                uuid: v4(),
-                type: "statusResponse",
-                content: "Agent session complete.",
-                role: "assistant",
-                sources: [],
-                closed: true,
-                error: null,
-                animate: false,
-                pending: false,
-              },
-            ]);
-          }
-          setLoadingResponse(false);
-          setWebsocket(null);
-          setSocketId(null);
-        });
-        setWebsocket(socket);
-        setAgentSessionActive(true);
-        window.dispatchEvent(new CustomEvent(AGENT_SESSION_START));
-        window.dispatchEvent(new CustomEvent(CLEAR_ATTACHMENTS_EVENT));
-      } catch (e) {
+    const onClose = (_event) => {
+      setAgentSessionActive(false);
+      window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
+      if (pendingResetRef.current) {
+        pendingResetRef.current = false;
+      } else {
         setChatHistory((prev) => [
           ...prev.filter((msg) => !!msg.content),
           {
             uuid: v4(),
-            type: "abort",
-            content: e.message,
+            type: "statusResponse",
+            content: "Agent session complete.",
             role: "assistant",
             sources: [],
             closed: true,
-            error: e.message,
+            error: null,
             animate: false,
             pending: false,
           },
         ]);
-        setLoadingResponse(false);
-        setWebsocket(null);
-        setSocketId(null);
       }
-    }
-    handleWSS();
+      setLoadingResponse(false);
+      setWebsocket(null);
+      setSocketId(null);
+    };
+
+    ws.addEventListener("message", onMessage);
+    ws.addEventListener("close", onClose);
 
     return () => {
-      if (socket) {
+      ws.removeEventListener("message", onMessage);
+      ws.removeEventListener("close", onClose);
+    };
+  }
+
+  /**
+   * On mount: reconnect to any persisted agent socket for this
+   * workspace+thread so the session resumes instantly without the
+   * @agent setup/planning overhead.
+   */
+  useEffect(() => {
+    const sessionKey = `${workspace?.slug ?? ""}:${threadSlug ?? "default"}`;
+    const persisted = getPersistedAgentSocket(sessionKey);
+    if (!persisted) return;
+
+    const { socket, socketId: persistedSocketId } = persisted;
+    setWebsocket(socket);
+    setSocketId(persistedSocketId);
+    setAgentSessionActive(true);
+    window.dispatchEvent(new CustomEvent(AGENT_SESSION_START));
+
+    const detach = attachSocketListeners(socket, sessionKey);
+
+    const abortListener = () => {
+      setAgentSessionActive(false);
+      window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
+      closePersistedAgentSocket(sessionKey);
+    };
+    window.addEventListener(ABORT_STREAM_EVENT, abortListener);
+
+    return () => {
+      detach();
+      window.removeEventListener(ABORT_STREAM_EVENT, abortListener);
+      // Leave the socket parked for the next mount of this workspace/thread.
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * When a new socketId arrives from the server (agentInitWebsocketConnection),
+   * open a fresh WebSocket for it and persist it so it outlives navigation.
+   */
+  useEffect(() => {
+    if (!socketId || !!websocket) return;
+
+    const sessionKey = `${workspace?.slug ?? ""}:${threadSlug ?? "default"}`;
+    let socket = null;
+
+    try {
+      socket = new WebSocket(
+        `${websocketURI()}/api/agent-invocation/${socketId}`
+      );
+      socket.supportsAgentStreaming = false;
+
+      const detach = attachSocketListeners(socket, sessionKey);
+
+      // Persist the socket so it survives navigation to other pages.
+      persistAgentSocket(sessionKey, socket, socketId);
+
+      const abortListener = () => {
         setAgentSessionActive(false);
         window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
-        socket.close();
-      }
-    };
+        closePersistedAgentSocket(sessionKey);
+        socket?.close();
+      };
+      window.addEventListener(ABORT_STREAM_EVENT, abortListener);
+
+      setWebsocket(socket);
+      setAgentSessionActive(true);
+      window.dispatchEvent(new CustomEvent(AGENT_SESSION_START));
+      window.dispatchEvent(new CustomEvent(CLEAR_ATTACHMENTS_EVENT));
+
+      return () => {
+        detach();
+        window.removeEventListener(ABORT_STREAM_EVENT, abortListener);
+        // Leave the socket parked — do NOT close it on unmount.
+      };
+    } catch (e) {
+      setChatHistory((prev) => [
+        ...prev.filter((msg) => !!msg.content),
+        {
+          uuid: v4(),
+          type: "abort",
+          content: e.message,
+          role: "assistant",
+          sources: [],
+          closed: true,
+          error: e.message,
+          animate: false,
+          pending: false,
+        },
+      ]);
+      setLoadingResponse(false);
+      setWebsocket(null);
+      setSocketId(null);
+    }
   }, [socketId]);
 
   if (isEmpty) {

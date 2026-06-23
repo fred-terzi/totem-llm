@@ -251,6 +251,29 @@ const ScheduledJobRun = {
     }
   },
 
+  /**
+   * Mark all unread terminal runs for a given job as read.
+   * Called when the user opens the job's auto-created workspace chat.
+   * @param {number} jobId
+   * @returns {Promise<number>} Number of rows updated
+   */
+  markAllReadForJob: async function (jobId) {
+    try {
+      const result = await prisma.scheduled_job_runs.updateMany({
+        where: {
+          jobId: Number(jobId),
+          readAt: null,
+          status: { in: ["completed", "failed", "timed_out"] },
+        },
+        data: { readAt: new Date() },
+      });
+      return result.count;
+    } catch (error) {
+      console.error("Failed to mark all runs as read for job:", error.message);
+      return 0;
+    }
+  },
+
   markRead: async function (id) {
     try {
       await prisma.scheduled_job_runs.update({
@@ -261,6 +284,54 @@ const ScheduledJobRun = {
     } catch (error) {
       console.error("Failed to mark run as read:", error.message);
       return false;
+    }
+  },
+
+  /**
+   * Count terminal runs (completed, failed, timed_out) that have not been
+   * read yet. Used by the sidebar badge and push notification badge count.
+   * @returns {Promise<number>}
+   */
+  countUnread: async function () {
+    try {
+      return await prisma.scheduled_job_runs.count({
+        where: {
+          readAt: null,
+          status: { in: ["completed", "failed", "timed_out"] },
+        },
+      });
+    } catch (error) {
+      console.error("Failed to count unread scheduled job runs:", error.message);
+      return 0;
+    }
+  },
+
+  /**
+   * Return a map of workspace slug → unread run count for every scheduled job
+   * that has at least one unread terminal run. The workspace slug for a job is
+   * the deterministic `scheduled-job-<jobId>` value used by autoSaveToJobWorkspace.
+   *
+   * @returns {Promise<Record<string, number>>} e.g. { "scheduled-job-3": 2 }
+   */
+  unreadByJobWorkspace: async function () {
+    try {
+      const rows = await prisma.scheduled_job_runs.groupBy({
+        by: ["jobId"],
+        where: {
+          readAt: null,
+          status: { in: ["completed", "failed", "timed_out"] },
+        },
+        _count: { id: true },
+      });
+
+      const result = {};
+      for (const row of rows) {
+        result[`scheduled-job-${row.jobId}`] = row._count.id;
+      }
+      return result;
+    } catch (error) {
+      console.error("Failed to get unread runs by workspace:", error.message);
+      return {};
     }
   },
 
@@ -355,6 +426,60 @@ const ScheduledJobRun = {
         thread: null,
         error: error.message ?? "Unknown error",
       };
+    }
+  },
+
+  /**
+   * Automatically save the prompt and response from a completed run to the
+   * job's dedicated workspace (creating it on first run) using the workspace's
+   * default thread (threadId = null) so every run appends to the same view.
+   *
+   * Workspace slug is deterministic: `scheduled-job-<jobId>` so the same
+   * workspace is reused across all runs of a job.
+   *
+   * @param {object} job - scheduled_jobs DB record (must have id, name, prompt)
+   * @param {object} result - run result object (text, sources, outputs, etc.)
+   * @returns {Promise<void>}
+   */
+  autoSaveToJobWorkspace: async function (job, result = {}) {
+    try {
+      const { Workspace } = require("./workspace");
+      const { WorkspaceChats } = require("./workspaceChats");
+
+      const slug = `scheduled-job-${job.id}`;
+
+      // Get or create the per-job workspace. Workspace.upsert goes directly
+      // to Prisma so we can set `slug` without it being filtered by writable[].
+      const { workspace, error: workspaceError } = await Workspace.upsert(
+        { slug },
+        { name: job.name, slug, chatMode: "automatic" },
+        {} // no updates on subsequent runs
+      );
+      if (workspaceError || !workspace) {
+        console.error(
+          `[ScheduledJobRun] Failed to upsert workspace for job ${job.id}: ${workspaceError}`
+        );
+        return;
+      }
+
+      // Write the prompt + response to the default thread (threadId = null)
+      await WorkspaceChats.new({
+        workspaceId: workspace.id,
+        prompt: job.prompt,
+        response: {
+          text: result.text || "No response was generated.",
+          sources: result.sources || [],
+          outputs: result.outputs || [],
+          type: "chat",
+        },
+        threadId: null,
+        include: true,
+      });
+    } catch (error) {
+      // Non-fatal: log but do not surface to the caller
+      console.error(
+        `[ScheduledJobRun] autoSaveToJobWorkspace failed for job ${job.id}: ${error.message}`
+      );
     }
   },
 };

@@ -13,6 +13,56 @@ const backgroundService = new BackgroundService();
 function scheduledJobEndpoints(app) {
   if (!app) return;
 
+  // Count unread (terminal, not-yet-opened) runs — used by the sidebar badge
+  app.get(
+    "/scheduled-jobs/unread-count",
+    [validatedRequest, isSingleUserMode],
+    async (_request, response) => {
+      try {
+        const count = await ScheduledJobRun.countUnread();
+        return response.status(200).json({ count });
+      } catch (e) {
+        console.error(e.message, e);
+        return response.status(200).json({ count: 0 });
+      }
+    }
+  );
+
+  // Map of workspace-slug → unread count for each job workspace — used by the
+  // workspace list sidebar to show per-workspace notification dots.
+  app.get(
+    "/scheduled-jobs/unread-workspaces",
+    [validatedRequest, isSingleUserMode],
+    async (_request, response) => {
+      try {
+        const unread = await ScheduledJobRun.unreadByJobWorkspace();
+        return response.status(200).json({ unread });
+      } catch (e) {
+        console.error(e.message, e);
+        return response.status(200).json({ unread: {} });
+      }
+    }
+  );
+
+  // Mark all unread runs for a job as read — called when the user opens the
+  // job's dedicated workspace chat (the default thread view).
+  app.post(
+    "/scheduled-jobs/jobs/:jobId/mark-read-all",
+    [validatedRequest, isSingleUserMode],
+    async (request, response) => {
+      try {
+        const jobId = Number(request.params.jobId);
+        if (!jobId || isNaN(jobId))
+          return response.status(400).json({ error: "Invalid jobId" });
+        await ScheduledJobRun.markAllReadForJob(jobId);
+        return response.status(200).json({ success: true });
+      } catch (e) {
+        console.error(e.message, e);
+        return response.status(200).json({ success: false });
+      }
+    }
+  );
+
   // List available tools for job configuration
   app.get(
     "/scheduled-jobs/available-tools",

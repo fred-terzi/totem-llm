@@ -30,6 +30,9 @@ export default function ScheduledJobsPage() {
 
   useEffect(() => {
     fetchJobs();
+    // Clear the PWA app-icon badge when the user opens this page, since
+    // they are now aware of the pending runs.
+    navigator?.clearAppBadge?.().catch(() => {});
   }, []);
 
   // Poll every 5s while tab is visible so status badges and run timestamps stay in sync.

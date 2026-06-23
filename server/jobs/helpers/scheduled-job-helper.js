@@ -83,17 +83,24 @@ async function sendWebPushNotification(job, runId, textResponse, logFn) {
     const {
       pushNotificationService,
     } = require("../../utils/PushNotifications/index.js");
+    const { ScheduledJobRun } = require("../../models/scheduledJobRun.js");
+
     await pushNotificationService.loadSubscriptions();
 
     // Strip thinking tags from the text response and then truncate to 100 characters
     // if the response is longer than 100 characters.
     let notificationBody = stripThinkingFromText(textResponse);
     notificationBody = truncateNotificationBody(notificationBody);
+
+    // Total unread count drives the app-icon badge on PWA/desktop installs.
+    const unreadCount = await ScheduledJobRun.countUnread();
+
     await pushNotificationService.sendNotification({
       to: "primary",
       payload: {
         title: `${job.name} completed`,
         body: notificationBody,
+        badge: unreadCount,
         data: {
           onClickUrl: `/settings/scheduled-jobs/${job.id}/runs/${runId}`,
         },
