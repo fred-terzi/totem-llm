@@ -73,6 +73,24 @@ totem-llm start
 
 In the browser UI, click the **install icon** in the address bar (or use your browser menu) to add Totem LLM to your desktop. This is a link to the web GUI, but with its own window and taskbar/dock icon for easy access.
 
+## Model Selection
+
+Once first installed, we recommend using qwen3.5:2b as a base model. This is a small model that is excellent to start with. It can help answer questions and provide guidance on if you can use a bigger model. 
+
+If qwen3.5:2b does not work well on your machine, it is recommened to move to OpenRouter. While a smaller model will work, there is a performance drop off.
+
+### Windows and Linux Model Download:
+
+```
+ollama pull qwen3.5:2b
+```
+
+### Mac Model Download:
+```
+ollama pull qwen3.5:2b-mlx
+```
+
+> Note: The `-mlx` suffix indicates the version optimized for Apple Silicon (M1/M2) Macs. If you are on an Intel-based Mac, use the standard `qwen3.5:2b` model.
 ---
 
 ## 📚 Command Reference
