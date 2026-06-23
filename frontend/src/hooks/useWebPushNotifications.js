@@ -9,7 +9,7 @@ const PUSH_USER_SUBSCRIBE_URL = `${API_BASE}/web-push/subscribe`;
 // the service worker will not be updated with new changes -
 // Its version ID is independent of the app version to prevent reloading
 // or cache busting when not needed.
-const SW_VERSION = "1.0.1";
+const SW_VERSION = "1.0.2";
 
 function log(message, ...args) {
   if (typeof message === "object") message = JSON.stringify(message, null, 2);

@@ -22,6 +22,31 @@ const { safeJsonParse } = require("../http");
 class PushNotifications {
   static mailTo = "anythingllm@localhost";
   /**
+   * Build the VAPID contact string.
+   * Apple's APNs (used by iOS Web Push) rejects subscriptions whose VAPID
+   * subject is a non-resolvable domain such as "localhost".  We prefer an
+   * https:// origin first, then a mailto: with whatever is configured, but we
+   * always replace "localhost" / "127.0.0.1" with "totem.local" so the string
+   * is syntactically valid for APNs.
+   * @returns {string}
+   */
+  get vapidSubject() {
+    // Prefer an https origin if the server is reachable over https
+    const origin = process.env.VAPID_ORIGIN || process.env.APP_ORIGIN || null;
+    if (origin) {
+      try {
+        new URL(origin); // validate
+        return origin;
+      } catch {}
+    }
+    // Fall back to mailto — replace localhost variants with a valid domain
+    const email = PushNotifications.mailTo.replace(
+      /@(localhost|127\.0\.0\.1)(:\d+)?$/,
+      "@totem.local"
+    );
+    return `mailto:${email}`;
+  }
+  /**
    * @type {PushNotifications}
    */
   static instance = null;
@@ -58,7 +83,7 @@ class PushNotifications {
           "VAPID keys not found. Make sure they are generated in the main process first."
         );
       webpush.setVapidDetails(
-        `mailto:${this.mailTo}`,
+        this.vapidSubject,
         vapidKeys.publicKey,
         vapidKeys.privateKey
       );
