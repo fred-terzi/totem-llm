@@ -131,8 +131,17 @@ async function agentSkillsFromSystemSettings() {
     []
   );
   DEFAULT_SKILLS.forEach((skill) => {
-    if (!_disabledDefaultSkills.includes(skill))
-      systemFunctions.push(AgentPlugins[skill].name);
+    if (_disabledDefaultSkills.includes(skill)) return;
+    const pluginDef = AgentPlugins[skill];
+    if (!pluginDef) return;
+    // If the plugin exports an array of sub-tools, expand them into parent#child entries
+    // so that #attachPlugins can load each sub-tool individually.
+    if (Array.isArray(pluginDef.plugin)) {
+      for (const subPlugin of pluginDef.plugin)
+        systemFunctions.push(`${pluginDef.name}#${subPlugin.name}`);
+    } else {
+      systemFunctions.push(pluginDef.name);
+    }
   });
 
   // Load non-imported built-in skills that are configurable.
