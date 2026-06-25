@@ -152,9 +152,13 @@ class EphemeralAgentHandler extends AgentHandler {
     }
 
     // First, fallback to the workspace chat provider and model if they exist
-    if (this.#workspace?.chatProvider && this.#workspace?.chatModel) {
+    // Use the system LLM_PROVIDER if the workspace has no explicit chatProvider,
+    // but still honour an explicitly set chatModel over the system default.
+    const effectiveProvider =
+      this.#workspace?.chatProvider ?? process.env.LLM_PROVIDER;
+    if (effectiveProvider && this.#workspace?.chatModel) {
       return {
-        provider: this.#workspace.chatProvider,
+        provider: effectiveProvider,
         model: this.#workspace.chatModel,
       };
     }

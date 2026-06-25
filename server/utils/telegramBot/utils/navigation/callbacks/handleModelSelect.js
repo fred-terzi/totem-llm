@@ -39,7 +39,11 @@ async function handleModelSelect({ ctx, chatId, query, messageId, data } = {}) {
   }
 
   const modelId = selectedModel.id || selectedModel.name;
-  await Workspace.update(workspace.id, { chatModel: modelId });
+  // Save to the correct model field based on which provider is active.
+  // resolveWorkspaceProvider uses agentProvider ?? chatProvider, and reads
+  // agentModel ?? chatModel — so we must update the matching field.
+  const modelField = workspace.agentProvider ? "agentModel" : "chatModel";
+  await Workspace.update(workspace.id, { [modelField]: modelId });
 
   await ctx.bot.answerCallbackQuery(query.id, { text: "Model updated!" });
   await ctx.bot.deleteMessage(chatId, messageId);
