@@ -2,6 +2,11 @@
 process.env.STORAGE_DIR = __dirname;
 process.env.NODE_ENV = "test";
 
+jest.mock("@aws-sdk/client-bedrock-runtime", () => ({
+  BedrockRuntimeClient: jest.fn(),
+  InvokeModelCommand: jest.fn(),
+}));
+
 const { SystemPromptVariables } = require("../../../models/systemPromptVariables");
 const Provider = require("../../../utils/agents/aibitat/providers/ai-provider");
 
