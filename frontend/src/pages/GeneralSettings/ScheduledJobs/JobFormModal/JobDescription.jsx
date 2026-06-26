@@ -1,7 +1,18 @@
+import { useState, useEffect, Fragment } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import SystemPromptVariable from "@/models/systemPromptVariable";
+import paths from "@/utils/paths";
 
 export default function JobDescription({ form, errors, onChange }) {
   const { t } = useTranslation();
+  const [availableVariables, setAvailableVariables] = useState([]);
+
+  useEffect(() => {
+    SystemPromptVariable.getAll().then(({ variables }) => {
+      setAvailableVariables(variables || []);
+    });
+  }, []);
 
   return (
     <>
@@ -41,6 +52,34 @@ export default function JobDescription({ form, errors, onChange }) {
             </span>
           )}
         </label>
+        {availableVariables.length > 0 && (
+          <p className="text-theme-text-secondary text-xs font-medium mb-2">
+            You can insert{" "}
+            <Link
+              to={paths.settings.systemPromptVariables()}
+              className="text-primary-button"
+            >
+              prompt variables
+            </Link>{" "}
+            like:{" "}
+            {availableVariables.slice(0, 3).map((v, i) => (
+              <Fragment key={v.key}>
+                <span className="bg-theme-settings-input-bg px-1 py-0.5 rounded">
+                  {`{${v.key}}`}
+                </span>
+                {i < availableVariables.length - 1 && ", "}
+              </Fragment>
+            ))}
+            {availableVariables.length > 3 && (
+              <Link
+                to={paths.settings.systemPromptVariables()}
+                className="text-primary-button"
+              >
+                +{availableVariables.length - 3} more...
+              </Link>
+            )}
+          </p>
+        )}
         <textarea
           name="prompt"
           value={form.prompt}

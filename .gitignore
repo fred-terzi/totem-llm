@@ -14,3 +14,7 @@ yarn.lock
 *.tgz
 
 *.log
+
+coverage
+
+server/__tests__/utils/agents/models
