@@ -18,3 +18,5 @@ yarn.lock
 coverage
 
 server/__tests__/utils/agents/models
+
+AGENTS.md
