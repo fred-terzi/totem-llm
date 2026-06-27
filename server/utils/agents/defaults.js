@@ -7,9 +7,11 @@ const { AgentFlows } = require("../agentFlows");
 const MCPCompatibilityLayer = require("../MCP");
 
 // This is a list of skills that are built-in and default enabled.
+// These must match the frontend's getDefaultSkills() definitions to keep automatic mode consistent.
 const DEFAULT_SKILLS = [
-  AgentPlugins.filesystemAgent.name,
-  AgentPlugins.webBrowsing.name
+  AgentPlugins.memory.name,           // rag-memory
+  AgentPlugins.docSummarizer.name,    // document-summarizer
+  AgentPlugins.webScraping.name       // web-scraping
 ];
 
 /**
@@ -131,17 +133,8 @@ async function agentSkillsFromSystemSettings() {
     []
   );
   DEFAULT_SKILLS.forEach((skill) => {
-    if (_disabledDefaultSkills.includes(skill)) return;
-    const pluginDef = AgentPlugins[skill];
-    if (!pluginDef) return;
-    // If the plugin exports an array of sub-tools, expand them into parent#child entries
-    // so that #attachPlugins can load each sub-tool individually.
-    if (Array.isArray(pluginDef.plugin)) {
-      for (const subPlugin of pluginDef.plugin)
-        systemFunctions.push(`${pluginDef.name}#${subPlugin.name}`);
-    } else {
-      systemFunctions.push(pluginDef.name);
-    }
+    if (!_disabledDefaultSkills.includes(skill))
+      systemFunctions.push(AgentPlugins[skill].name);
   });
 
   // Load non-imported built-in skills that are configurable.
