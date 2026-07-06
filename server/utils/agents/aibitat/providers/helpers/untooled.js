@@ -191,6 +191,7 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
 
     const msgUUID = v4();
     let textResponse = "";
+    let reasoningText = "";
     const historyMessages = this.buildToolCallMessages(history, functions);
     const stream = await chatCb({ messages: historyMessages });
 
@@ -204,7 +205,41 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
       if (!chunk?.choices?.[0]) continue; // Skip if no choices
       const choice = chunk.choices[0];
 
+      // Handle reasoning tokens (from Ollama thinking models, etc.)
+      const reasoningToken =
+        choice.delta?.reasoning_content ||
+        choice.delta?.thinking ||
+        choice.delta?.reasoning;
+
+      if (reasoningToken) {
+        if (reasoningText.length === 0) {
+          eventHandler?.("reportStreamEvent", {
+            type: "textResponseChunk",
+            uuid: msgUUID,
+            content: `\u003cthought\u003e${reasoningToken}`,
+          });
+          reasoningText += `\u003cthought\u003e${reasoningToken}`;
+        } else {
+          eventHandler?.("reportStreamEvent", {
+            type: "textResponseChunk",
+            uuid: msgUUID,
+            content: reasoningToken,
+          });
+          reasoningText += reasoningToken;
+        }
+      }
+
       if (choice.delta?.content) {
+        // When we first see content after reasoning, close the thought tag
+        if (!!reasoningText && !reasoningToken) {
+          eventHandler?.("reportStreamEvent", {
+            type: "textResponseChunk",
+            uuid: msgUUID,
+            content: "\u003c/thought\u003e",
+          });
+          reasoningText += "\u003c/thought\u003e";
+        }
+
         textResponse += choice.delta.content;
         eventHandler?.("reportStreamEvent", {
           type: "statusResponse",
@@ -335,6 +370,7 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
         );
         const msgUUID = v4();
         completion = { content: "" };
+        let reasoningText = "";
         const stream = await chatCallback({
           messages: this.cleanMsgs(messages),
         });
@@ -342,6 +378,42 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
         for await (const chunk of stream) {
           if (!chunk?.choices?.[0]) continue; // Skip if no choices
           const choice = chunk.choices[0];
+
+          // Handle reasoning tokens (from Ollama thinking models, etc.)
+          const reasoningToken =
+            choice.delta?.reasoning_content ||
+            choice.delta?.thinking ||
+            choice.delta?.reasoning;
+
+          if (reasoningToken) {
+            if (reasoningText.length === 0) {
+              eventHandler?.("reportStreamEvent", {
+                type: "textResponseChunk",
+                uuid: msgUUID,
+                content: `\u003cthought\u003e${reasoningToken}`,
+              });
+              reasoningText += `\u003cthought\u003e${reasoningToken}`;
+            } else {
+              eventHandler?.("reportStreamEvent", {
+                type: "textResponseChunk",
+                uuid: msgUUID,
+                content: reasoningToken,
+              });
+              reasoningText += reasoningToken;
+            }
+          }
+
+          // When we first see content after reasoning, close the thought tag
+          if (!!reasoningText && !reasoningToken && choice.delta?.content) {
+            eventHandler?.("reportStreamEvent", {
+              type: "textResponseChunk",
+              uuid: msgUUID,
+              content: "\u003c/thought\u003e",
+            });
+            reasoningText += "\u003c/thought\u003e";
+            reasoningText = ""; // Reset to prevent double-closing
+          }
+
           if (choice.delta?.content) {
             completion.content += choice.delta.content;
             eventHandler?.("reportStreamEvent", {

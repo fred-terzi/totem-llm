@@ -220,7 +220,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       const reasoningToken = chunk.message?.thinking;
       if (reasoningToken) {
         if (reasoningText.length === 0) {
-          reasoningText = `Thinking:\n\n${reasoningToken}`;
+          reasoningText = `\u003cthought\u003e${reasoningToken}`;
           token = reasoningText;
         } else {
           reasoningText += reasoningToken;
@@ -228,19 +228,23 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         }
       } else if (content.length > 0) {
         if (reasoningText.length > 0) {
-          token = `\n\nDone thinking.\n\n${content}`;
-          reasoningText = "";
+          // Close thought tag and append content
+          reasoningText += "\u003c/thought\u003e";
+          token = `\u003c/thought\u003e${content}`;
+          reasoningText = ""; // Reset after closing
         } else {
           token = content;
         }
         textResponse += content;
       }
 
-      eventHandler?.("reportStreamEvent", {
-        type: "statusResponse",
-        uuid: msgUUID,
-        content: token,
-      });
+      if (reasoningToken || content) {
+        eventHandler?.("reportStreamEvent", {
+          type: "textResponseChunk",
+          uuid: msgUUID,
+          content: token,
+        });
+      }
     }
 
     const call = safeJsonParse(textResponse, null);
@@ -316,6 +320,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
 
       let textResponse = "";
       let toolCalls = null;
+      let reasoningText = "";
 
       for await (const chunk of stream) {
         // Capture usage from final chunk (Ollama sends usage when done=true)
@@ -327,6 +332,39 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         }
 
         if (!chunk?.message) continue;
+
+        // Handle Ollama thinking/reasoning tokens
+        const reasoningToken = chunk.message?.thinking;
+        if (reasoningToken) {
+          if (reasoningText.length === 0) {
+            textResponse += `\u003cthought\u003e${reasoningToken}`;
+            eventHandler?.("reportStreamEvent", {
+              type: "textResponseChunk",
+              uuid: msgUUID,
+              content: `\u003cthought\u003e${reasoningToken}`,
+            });
+          } else {
+            textResponse += reasoningToken;
+            eventHandler?.("reportStreamEvent", {
+              type: "textResponseChunk",
+              uuid: msgUUID,
+              content: reasoningToken,
+            });
+          }
+          reasoningText += reasoningToken;
+          continue; // Don't process content/tool_calls in same chunk as thinking
+        }
+
+        // Close thought tag when we see regular content after thinking
+        if (!!reasoningText && !reasoningToken && chunk.message.content) {
+          textResponse += "\u003c/thought\u003e";
+          eventHandler?.("reportStreamEvent", {
+            type: "textResponseChunk",
+            uuid: msgUUID,
+            content: "\u003c/thought\u003e",
+          });
+          reasoningText = ""; // Reset to prevent double-closing
+        }
 
         if (chunk.message.content) {
           textResponse += chunk.message.content;

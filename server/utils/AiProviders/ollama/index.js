@@ -285,7 +285,6 @@ class OllamaAILLM {
           stream: false,
           messages,
           keep_alive: this.keepAlive,
-          think: false,
           options: {
             temperature,
             num_ctx: this.promptWindowLimit(),
@@ -338,7 +337,6 @@ class OllamaAILLM {
         stream: true,
         messages,
         keep_alive: this.keepAlive,
-        think: false,
         options: {
           temperature,
           num_ctx: this.promptWindowLimit(),
