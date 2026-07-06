@@ -41,3 +41,6 @@ embed/**
 **/*.map
 .DS_Store
 *.log
+
+# Keep yarn.lock files for reproducible installs in sub-packages
+!**/yarn.lock
