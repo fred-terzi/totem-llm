@@ -137,6 +137,10 @@ const KEY_MAPPING = {
     envKey: "OLLAMA_KEEP_ALIVE_TIMEOUT",
     checks: [isInteger],
   },
+  OllamaLLMThinkLevel: {
+    envKey: "OLLAMA_THINK_LEVEL",
+    checks: [],
+  },
   OllamaLLMAuthToken: {
     envKey: "OLLAMA_AUTH_TOKEN",
     checks: [],

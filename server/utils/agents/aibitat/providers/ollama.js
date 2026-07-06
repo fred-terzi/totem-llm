@@ -56,6 +56,16 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     return this._supportsToolCalling;
   }
 
+  #normalizeThinkLevel(value) {
+    if (value === undefined || value === null) return "";
+    const normalizedValue = String(value).trim().toLowerCase();
+    if (!normalizedValue) return "";
+    if (normalizedValue === "false" || normalizedValue === "off") return false;
+    if (["low", "medium", "high"].includes(normalizedValue))
+      return normalizedValue;
+    return normalizedValue;
+  }
+
   get queryOptions() {
     this.providerLog(
       `${this.model} is using a max context window of ${OllamaAILLM.promptWindowLimit(this.model)}/${OllamaAILLM.maxContextWindow(this.model)} tokens.`
@@ -63,6 +73,10 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     return {
       num_ctx: OllamaAILLM.promptWindowLimit(this.model),
     };
+  }
+
+  get thinkLevel() {
+    return this.#normalizeThinkLevel(process.env.OLLAMA_THINK_LEVEL);
   }
 
   /**
@@ -73,22 +87,26 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
    */
   async #handleFunctionCallChat({ messages = [] }) {
     await OllamaAILLM.cacheContextWindows();
-    const response = await this.client.chat({
+    const requestPayload = {
       model: this.model,
       messages,
       options: this.queryOptions,
-    });
+    };
+    if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+    const response = await this.client.chat(requestPayload);
     return response?.message?.content || null;
   }
 
   async #handleFunctionCallStream({ messages = [] }) {
     await OllamaAILLM.cacheContextWindows();
-    return await this.client.chat({
+    const requestPayload = {
       model: this.model,
       messages,
       stream: true,
       options: this.queryOptions,
-    });
+    };
+    if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+    return await this.client.chat(requestPayload);
   }
 
   /**
@@ -310,13 +328,15 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       const formattedMessages = this.#formatMessagesForOllamaTools(messages);
       const tools = formatFunctionsToTools(functions);
 
-      const stream = await this.client.chat({
+      const requestPayload = {
         model: this.model,
         messages: formattedMessages,
         tools,
         stream: true,
         options: this.queryOptions,
-      });
+      };
+      if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+      const stream = await this.client.chat(requestPayload);
 
       let textResponse = "";
       let toolCalls = null;
@@ -540,12 +560,14 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       const formattedMessages = this.#formatMessagesForOllamaTools(messages);
       const tools = formatFunctionsToTools(functions);
 
-      const response = await this.client.chat({
+      const requestPayload = {
         model: this.model,
         messages: formattedMessages,
         tools,
         options: this.queryOptions,
-      });
+      };
+      if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+      const response = await this.client.chat(requestPayload);
 
       // Record usage (Ollama uses prompt_eval_count/eval_count)
       this.recordUsage({

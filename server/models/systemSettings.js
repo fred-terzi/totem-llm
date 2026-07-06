@@ -857,6 +857,7 @@ const SystemSettings = {
       OllamaLLMModelPref: process.env.OLLAMA_MODEL_PREF,
       OllamaLLMTokenLimit: process.env.OLLAMA_MODEL_TOKEN_LIMIT || null,
       OllamaLLMKeepAliveSeconds: process.env.OLLAMA_KEEP_ALIVE_TIMEOUT ?? 300,
+      OllamaLLMThinkLevel: process.env.OLLAMA_THINK_LEVEL || "",
 
       // Novita LLM Keys
       NovitaLLMApiKey: !!process.env.NOVITA_LLM_API_KEY,
