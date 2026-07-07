@@ -205,6 +205,7 @@ async function tooledStream(
   const toolCallsByIndex = {};
   let usage = null;
   let time_info = null;
+  let reasoningText = "";
 
   for await (const chunk of stream) {
     // Capture usage from final chunk (some providers send usage after finish_reason)
@@ -213,6 +214,42 @@ async function tooledStream(
 
     if (!chunk?.choices?.[0]) continue;
     const choice = chunk.choices[0];
+
+    // Handle reasoning tokens - they always come before the main content
+    // Different providers use different property names for reasoning:
+    // OpenAI-compatible: reasoning_content, Cerebras: reasoning
+    const reasoningToken =
+      choice.delta?.reasoning_content || choice.delta?.reasoning;
+
+    if (reasoningToken) {
+      if (reasoningText.length === 0) {
+        // First reasoning chunk - wrap with opening tag
+        eventHandler?.("reportStreamEvent", {
+          type: "textResponseChunk",
+          uuid: msgUUID,
+          content: `<thought>${reasoningToken}`,
+        });
+        reasoningText += `<thought>${reasoningToken}`;
+      } else {
+        eventHandler?.("reportStreamEvent", {
+          type: "textResponseChunk",
+          uuid: msgUUID,
+          content: reasoningToken,
+        });
+        reasoningText += reasoningToken;
+      }
+    }
+
+    // When transition from reasoning to regular content, close the thought tag
+    if (!!reasoningText && !reasoningToken && choice.delta?.content) {
+      eventHandler?.("reportStreamEvent", {
+        type: "textResponseChunk",
+        uuid: msgUUID,
+        content: `</thought>`,
+      });
+      reasoningText += "</thought>";
+      reasoningText = ""; // Reset so we don't close again for subsequent content chunks
+    }
 
     if (choice.delta?.content) {
       result.textResponse += choice.delta.content;

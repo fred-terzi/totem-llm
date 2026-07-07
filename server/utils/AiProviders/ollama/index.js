@@ -26,6 +26,7 @@ class OllamaAILLM {
     this.keepAlive = process.env.OLLAMA_KEEP_ALIVE_TIMEOUT
       ? Number(process.env.OLLAMA_KEEP_ALIVE_TIMEOUT)
       : 3600; // Default 60-minute timeout for Ollama model loading.
+    this.thinkLevel = this.#normalizeThinkLevel(process.env.OLLAMA_THINK_LEVEL);
 
     const headers = this.authToken
       ? { Authorization: `Bearer ${this.authToken}` }
@@ -43,6 +44,15 @@ class OllamaAILLM {
 
     OllamaAILLM.cacheContextWindows(true);
     this.#log(`initialized with model: ${this.model}`);
+  }
+
+  #normalizeThinkLevel(value) {
+    if (value === undefined || value === null) return "";
+    const normalizedValue = String(value).trim().toLowerCase();
+    if (!normalizedValue) return "";
+    if (normalizedValue === "false" || normalizedValue === "off") return false;
+    if (["low", "medium", "high"].includes(normalizedValue)) return normalizedValue;
+    return normalizedValue;
   }
 
   #log(text, ...args) {
@@ -278,19 +288,22 @@ class OllamaAILLM {
   }
 
   async getChatCompletion(messages = null, { temperature = 0.7 }) {
+    const requestPayload = {
+      model: this.model,
+      stream: false,
+      messages,
+      keep_alive: this.keepAlive,
+      think: false,
+      options: {
+        temperature,
+        num_ctx: this.promptWindowLimit(),
+      },
+    };
+    if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+
     const result = await LLMPerformanceMonitor.measureAsyncFunction(
       this.client
-        .chat({
-          model: this.model,
-          stream: false,
-          messages,
-          keep_alive: this.keepAlive,
-          think: false,
-          options: {
-            temperature,
-            num_ctx: this.promptWindowLimit(),
-          },
-        })
+        .chat(requestPayload)
         .then((res) => {
           let content = res.message.content;
           if (res.message.thinking)
@@ -332,18 +345,20 @@ class OllamaAILLM {
   }
 
   async streamGetChatCompletion(messages = null, { temperature = 0.7 }) {
+    const requestPayload = {
+      model: this.model,
+      stream: true,
+      messages,
+      keep_alive: this.keepAlive,
+      options: {
+        temperature,
+        num_ctx: this.promptWindowLimit(),
+      },
+    };
+    if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+
     const measuredStreamRequest = await LLMPerformanceMonitor.measureStream({
-      func: this.client.chat({
-        model: this.model,
-        stream: true,
-        messages,
-        keep_alive: this.keepAlive,
-        think: false,
-        options: {
-          temperature,
-          num_ctx: this.promptWindowLimit(),
-        },
-      }),
+      func: this.client.chat(requestPayload),
       messages,
       runPromptTokenCalculation: false,
       modelTag: this.model,

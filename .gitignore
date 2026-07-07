@@ -7,7 +7,6 @@ __pycache__
 v-env
 .DS_Store
 aws_cf_deploy_anything_llm.json
-yarn.lock
 *.bak
 .idea
 
@@ -18,3 +17,5 @@ yarn.lock
 coverage
 
 server/__tests__/utils/agents/models
+
+AGENTS.md

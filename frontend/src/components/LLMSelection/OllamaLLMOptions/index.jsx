@@ -224,6 +224,48 @@ export default function OllamaLLMOptions({ settings }) {
             <div className="flex flex-col w-60">
               <div className="flex items-center mb-2 gap-x-1">
                 <label className="text-white text-sm font-semibold">
+                  Think level
+                </label>
+                <Info
+                  size={18}
+                  className="text-theme-text-secondary cursor-pointer"
+                  data-tooltip-id="ollama-think-level"
+                />
+                <Tooltip
+                  id="ollama-think-level"
+                  place="top"
+                  delayShow={300}
+                  delayHide={400}
+                  clickable={true}
+                  className="tooltip !text-xs !opacity-100"
+                  style={{
+                    maxWidth: "250px",
+                    whiteSpace: "normal",
+                    wordWrap: "break-word",
+                  }}
+                >
+                  <p className="text-xs leading-[18px] font-base">
+                    Set the Ollama think level for supported models. Leave
+                    blank to use the model default.
+                  </p>
+                </Tooltip>
+              </div>
+              <select
+                name="OllamaLLMThinkLevel"
+                className="border-none bg-theme-settings-input-bg border-gray-500 text-white text-sm rounded-lg block w-full p-2.5"
+                defaultValue={settings?.OllamaLLMThinkLevel ?? ""}
+              >
+                <option value="">Model default</option>
+                <option value="false">Off</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col w-60">
+              <div className="flex items-center mb-2 gap-x-1">
+                <label className="text-white text-sm font-semibold">
                   Authentication Token
                 </label>
                 <Info

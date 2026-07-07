@@ -56,6 +56,16 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     return this._supportsToolCalling;
   }
 
+  #normalizeThinkLevel(value) {
+    if (value === undefined || value === null) return "";
+    const normalizedValue = String(value).trim().toLowerCase();
+    if (!normalizedValue) return "";
+    if (normalizedValue === "false" || normalizedValue === "off") return false;
+    if (["low", "medium", "high"].includes(normalizedValue))
+      return normalizedValue;
+    return normalizedValue;
+  }
+
   get queryOptions() {
     this.providerLog(
       `${this.model} is using a max context window of ${OllamaAILLM.promptWindowLimit(this.model)}/${OllamaAILLM.maxContextWindow(this.model)} tokens.`
@@ -63,6 +73,10 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     return {
       num_ctx: OllamaAILLM.promptWindowLimit(this.model),
     };
+  }
+
+  get thinkLevel() {
+    return this.#normalizeThinkLevel(process.env.OLLAMA_THINK_LEVEL);
   }
 
   /**
@@ -73,22 +87,26 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
    */
   async #handleFunctionCallChat({ messages = [] }) {
     await OllamaAILLM.cacheContextWindows();
-    const response = await this.client.chat({
+    const requestPayload = {
       model: this.model,
       messages,
       options: this.queryOptions,
-    });
+    };
+    if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+    const response = await this.client.chat(requestPayload);
     return response?.message?.content || null;
   }
 
   async #handleFunctionCallStream({ messages = [] }) {
     await OllamaAILLM.cacheContextWindows();
-    return await this.client.chat({
+    const requestPayload = {
       model: this.model,
       messages,
       stream: true,
       options: this.queryOptions,
-    });
+    };
+    if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+    return await this.client.chat(requestPayload);
   }
 
   /**
@@ -220,7 +238,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       const reasoningToken = chunk.message?.thinking;
       if (reasoningToken) {
         if (reasoningText.length === 0) {
-          reasoningText = `Thinking:\n\n${reasoningToken}`;
+          reasoningText = `\u003cthought\u003e${reasoningToken}`;
           token = reasoningText;
         } else {
           reasoningText += reasoningToken;
@@ -228,19 +246,23 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         }
       } else if (content.length > 0) {
         if (reasoningText.length > 0) {
-          token = `\n\nDone thinking.\n\n${content}`;
-          reasoningText = "";
+          // Close thought tag and append content
+          reasoningText += "\u003c/thought\u003e";
+          token = `\u003c/thought\u003e${content}`;
+          reasoningText = ""; // Reset after closing
         } else {
           token = content;
         }
         textResponse += content;
       }
 
-      eventHandler?.("reportStreamEvent", {
-        type: "statusResponse",
-        uuid: msgUUID,
-        content: token,
-      });
+      if (reasoningToken || content) {
+        eventHandler?.("reportStreamEvent", {
+          type: "textResponseChunk",
+          uuid: msgUUID,
+          content: token,
+        });
+      }
     }
 
     const call = safeJsonParse(textResponse, null);
@@ -306,16 +328,19 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       const formattedMessages = this.#formatMessagesForOllamaTools(messages);
       const tools = formatFunctionsToTools(functions);
 
-      const stream = await this.client.chat({
+      const requestPayload = {
         model: this.model,
         messages: formattedMessages,
         tools,
         stream: true,
         options: this.queryOptions,
-      });
+      };
+      if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+      const stream = await this.client.chat(requestPayload);
 
       let textResponse = "";
       let toolCalls = null;
+      let reasoningText = "";
 
       for await (const chunk of stream) {
         // Capture usage from final chunk (Ollama sends usage when done=true)
@@ -327,6 +352,39 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         }
 
         if (!chunk?.message) continue;
+
+        // Handle Ollama thinking/reasoning tokens
+        const reasoningToken = chunk.message?.thinking;
+        if (reasoningToken) {
+          if (reasoningText.length === 0) {
+            textResponse += `\u003cthought\u003e${reasoningToken}`;
+            eventHandler?.("reportStreamEvent", {
+              type: "textResponseChunk",
+              uuid: msgUUID,
+              content: `\u003cthought\u003e${reasoningToken}`,
+            });
+          } else {
+            textResponse += reasoningToken;
+            eventHandler?.("reportStreamEvent", {
+              type: "textResponseChunk",
+              uuid: msgUUID,
+              content: reasoningToken,
+            });
+          }
+          reasoningText += reasoningToken;
+          continue; // Don't process content/tool_calls in same chunk as thinking
+        }
+
+        // Close thought tag when we see regular content after thinking
+        if (!!reasoningText && !reasoningToken && chunk.message.content) {
+          textResponse += "\u003c/thought\u003e";
+          eventHandler?.("reportStreamEvent", {
+            type: "textResponseChunk",
+            uuid: msgUUID,
+            content: "\u003c/thought\u003e",
+          });
+          reasoningText = ""; // Reset to prevent double-closing
+        }
 
         if (chunk.message.content) {
           textResponse += chunk.message.content;
@@ -502,12 +560,14 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       const formattedMessages = this.#formatMessagesForOllamaTools(messages);
       const tools = formatFunctionsToTools(functions);
 
-      const response = await this.client.chat({
+      const requestPayload = {
         model: this.model,
         messages: formattedMessages,
         tools,
         options: this.queryOptions,
-      });
+      };
+      if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
+      const response = await this.client.chat(requestPayload);
 
       // Record usage (Ollama uses prompt_eval_count/eval_count)
       this.recordUsage({
