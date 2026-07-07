@@ -162,7 +162,7 @@ async function getPageContent({ link, captureAs = "text", headers = {} }) {
       launchOptions: {
         headless: launchConfig.headless,
         ignoreHTTPSErrors: true,
-        args: runtimeSettings.get("browserLaunchArgs"),
+        args: runtimeSettings.getBrowserLaunchArgs(),
       },
       gotoOptions: {
         waitUntil: "networkidle2",
