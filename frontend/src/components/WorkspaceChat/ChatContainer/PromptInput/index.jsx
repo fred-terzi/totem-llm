@@ -49,7 +49,6 @@ export default function PromptInput({
   const { isDisabled } = useIsDisabled();
   const { enabled: agentModeEnabled } = useFeatureFlag("agentMode");
   const agentSessionActive = useIsAgentSessionActive();
-  const shouldShowStopButton = isStreaming || agentSessionActive;
   const [promptInput, setPromptInput] = useState("");
   const [showTools, setShowTools] = useState(false);
   const autoOpenedToolsRef = useRef(false);
