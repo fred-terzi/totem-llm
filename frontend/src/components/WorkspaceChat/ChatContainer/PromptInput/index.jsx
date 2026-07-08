@@ -378,7 +378,11 @@ export default function PromptInput({
                       sendCommand={sendCommand}
                       promptInput={promptInput}
                       textareaRef={textareaRef}
-                      visible={agentModeEnabled && !agentSessionActive && showAgentCommand}
+                      visible={
+                        agentModeEnabled &&
+                        !agentSessionActive &&
+                        showAgentCommand
+                      }
                     />
                   </div>
                   <ToolsButton
@@ -391,7 +395,7 @@ export default function PromptInput({
                 </div>
                 <div className="flex gap-x-2 items-center">
                   <SpeechToText sendCommand={sendCommand} />
-                  {shouldShowStopButton ? (
+                  {isStreaming ? (
                     <StopGenerationButton />
                   ) : (
                     <SendPromptButton

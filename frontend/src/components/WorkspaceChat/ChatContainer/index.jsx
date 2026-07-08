@@ -15,6 +15,7 @@ import handleSocketResponse, {
   websocketURI,
   AGENT_SESSION_END,
   AGENT_SESSION_START,
+  agentEventLoadingState,
   setAgentSessionActive,
   persistAgentSocket,
   getPersistedAgentSocket,
@@ -318,17 +319,23 @@ export default function ChatContainer({
    */
   function attachSocketListeners(ws, sessionKey) {
     const onMessage = (event) => {
-      setLoadingResponse(true);
       try {
+        // Keep the stop generation button visible for the entire
+        // execution loop - only swap back to the send button when the
+        // agent pauses to wait on the user. Passive bookkeeping events
+        // (null) leave the loading state as-is.
+        const data = safeJsonParse(event.data, null);
+        const loadingState = agentEventLoadingState(data);
+        if (loadingState !== null) setLoadingResponse(loadingState);
         handleSocketResponse(ws, event, setChatHistory);
       } catch {
         console.error("Failed to parse data");
         setAgentSessionActive(false);
         window.dispatchEvent(new CustomEvent(AGENT_SESSION_END));
         closePersistedAgentSocket(sessionKey);
+        setLoadingResponse(false);
         ws.close();
       }
-      setLoadingResponse(false);
     };
 
     const onClose = (_event) => {
@@ -381,6 +388,10 @@ export default function ChatContainer({
     setSocketId(persistedSocketId);
     setAgentSessionActive(true);
     window.dispatchEvent(new CustomEvent(AGENT_SESSION_START));
+    // The agent immediately begins working on the prompt that opened
+    // this session, so restore the loading state that the closing
+    // "Swapping over to agent chat" statusResponse cleared.
+    setLoadingResponse(true);
 
     const detach = attachSocketListeners(socket, sessionKey);
 
@@ -396,7 +407,7 @@ export default function ChatContainer({
       window.removeEventListener(ABORT_STREAM_EVENT, abortListener);
       // Leave the socket parked for the next mount of this workspace/thread.
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -431,6 +442,10 @@ export default function ChatContainer({
       setWebsocket(socket);
       setAgentSessionActive(true);
       window.dispatchEvent(new CustomEvent(AGENT_SESSION_START));
+      // The agent immediately begins working on the prompt that opened
+      // this session, so restore the loading state that the closing
+      // "Swapping over to agent chat" statusResponse cleared.
+      setLoadingResponse(true);
       window.dispatchEvent(new CustomEvent(CLEAR_ATTACHMENTS_EVENT));
 
       return () => {
