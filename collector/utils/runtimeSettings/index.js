@@ -35,9 +35,15 @@ class RuntimeSettings {
       default: [],
       validate: (value) => {
         let args = [];
-        if (Array.isArray(value)) args = value.map((arg) => String(arg.trim()));
-        if (typeof value === "string")
-          args = value.split(",").map((arg) => arg.trim());
+        if (Array.isArray(value)) {
+          args = value.map((arg) => String(arg).trim()).filter(Boolean);
+        }
+        if (typeof value === "string") {
+          args = value
+            .split(",")
+            .map((arg) => arg.trim())
+            .filter(Boolean);
+        }
         return args;
       },
     },
@@ -77,6 +83,19 @@ class RuntimeSettings {
     return this.settings.hasOwnProperty(key)
       ? this.settings[key]
       : this.settingConfigs[key].default;
+  }
+
+  /**
+   * Returns browser launch args, with Linux sandbox fallback when none are provided.
+   * @returns {string[]}
+   */
+  getBrowserLaunchArgs() {
+    const args = this.get("browserLaunchArgs");
+    if (Array.isArray(args) && args.length > 0) return args;
+    if (process.platform === "linux") {
+      return ["--no-sandbox", "--disable-setuid-sandbox"];
+    }
+    return [];
   }
 
   /**

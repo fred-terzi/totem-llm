@@ -1,5 +1,6 @@
 import { THREAD_RENAME_EVENT } from "@/components/Sidebar/ActiveWorkspaces/ThreadContainer";
 import { emitAssistantMessageCompleteEvent } from "@/components/contexts/TTSProvider";
+import { getAgentSessionActive } from "@/utils/chat/agent";
 export const ABORT_STREAM_EVENT = "abort-chat-stream";
 
 // Tracks whether the user has seen the "Swapping over to agent chat" banner
@@ -66,7 +67,10 @@ export default function handleChat(
       markAgentIntroSeen();
     }
 
-    setLoadingResponse(false);
+    // Once an agent session is live, the websocket handlers in ChatContainer
+    // own the loading state - the statusResponse that closes the HTTP stream
+    // ("Swapping over to agent chat") must not hide the stop button.
+    if (type === "abort" || !getAgentSessionActive()) setLoadingResponse(false);
     setChatHistory([
       ...remHistory,
       {

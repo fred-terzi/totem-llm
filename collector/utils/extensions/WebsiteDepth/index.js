@@ -72,7 +72,7 @@ async function getPageLinks(url, baseUrl) {
       launchOptions: {
         headless: launchConfig.headless,
         ignoreHTTPSErrors: true,
-        args: runtimeSettings.get("browserLaunchArgs"),
+        args: runtimeSettings.getBrowserLaunchArgs(),
       },
       gotoOptions: { waitUntil: "networkidle2" },
     });
@@ -138,7 +138,7 @@ async function bulkScrapePages(links, outFolderPath) {
         launchOptions: {
           headless: launchConfig.headless,
           ignoreHTTPSErrors: true,
-          args: runtimeSettings.get("browserLaunchArgs"),
+          args: runtimeSettings.getBrowserLaunchArgs(),
         },
         gotoOptions: { waitUntil: "networkidle2" },
         async evaluate(page, browser) {
