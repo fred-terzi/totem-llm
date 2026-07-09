@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.12.1](https://github.com/fred-terzi//compare/v0.12.0...v0.12.1) (2026-07-09)
+
+
+### Miscellaneous Chores
+
+* bump version to 0.12.1 ([181c5eb](https://github.com/fred-terzi//commit/181c5eb7aa77cc8c5de77fc2f863b604338dd701))
+* **github:** rebrand bug template to TotemLLM, remove upstream CI workflows ([c7179bc](https://github.com/fred-terzi//commit/c7179bca3e6910930b3575a9872f75cbe61d1ab5))
+* **github:** rebrand feature template to TotemLLM ([d832cb6](https://github.com/fred-terzi//commit/d832cb6629dfd5864db9e599385367090807a981))
+
 ## 0.12.0 (2026-07-08)
 
 

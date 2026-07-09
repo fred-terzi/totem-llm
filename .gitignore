@@ -17,3 +17,5 @@ aws_cf_deploy_anything_llm.json
 coverage
 
 server/__tests__/utils/agents/models
+
+.anythingLLM_archive
