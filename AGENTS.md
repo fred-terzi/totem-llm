@@ -257,6 +257,19 @@ Frontend entry point alias: `@` → `frontend/src/`. Build output goes to `serve
 
 Auto-generated on server start/restart by nodemon event hook in `server/nodemon.json`. Init script: `server/swagger/init.js`. Access at `/api/docs`.
 
+## Branching Strategy
+
+- **`dev-totem`** — active development branch (working tree for features, fixes, chores)
+- **`main-totem`** — release branch; all releases merge into this
+- PRs are opened from `dev-totem` → `main-totem`
+- **ALWAYS `git fetch && git pull origin main-totem` before diffing branches or comparing** — stale remote tracking refs on `main-totem` will make merged commits appear "ahead" again (this caused PR #14 confusion).
+
+## Versioning & Release Process
+
+- Use the **npm-versioning skill** (`software-development/npm-versioning/SKILL.md`) for every release.
+- The workflow: `standard-version --dry-run` → confirm bump type → `npx standard-version` → push tags → open/merge PR.
+- Never skip the version bump when creating a PR that reaches main-totem.
+
 ## Node Version
 
 Pinned to **v18.18.0** via `.nvmrc`. Server and collector require `>=18.12.1`.
