@@ -409,25 +409,6 @@ class TelegramBotService {
   }
 
   /**
-   * Assert that the bot is running in single-user mode.
-   * If the instance is running in multi-user mode, it will stop the bot and delete the connector.
-   * - Returns true if the bot is running in single-user mode.
-   * - Returns false if the bot is running in multi-user mode.
-   * @returns {Promise<boolean>}
-   */
-  async #assertSingleUserMode() {
-    const isMultiUserMode = await this.checkMultiUserMode();
-    if (!isMultiUserMode) return true;
-
-    this.#log(
-      "Invalid state: Multi-user mode detected. Cleaning up and deleting connector."
-    );
-    await this.stop();
-    await ExternalCommunicationConnector.delete("telegram");
-    return false;
-  }
-
-  /**
    * Reset the polling retry state and clear the timer if it exists.
    */
   #resetPollingRetry() {
@@ -447,8 +428,6 @@ class TelegramBotService {
         return;
       }
 
-      const isSingleUserMode = await this.#assertSingleUserMode();
-      if (!isSingleUserMode) return;
       handler();
     };
 
@@ -812,25 +791,19 @@ class TelegramBotService {
   /**
    * Boot the bot from database config on server startup.
    * Decrypts the stored bot token before starting.
-   * If the instance is running in multi-user mode, it will skip boot and delete the connector if it exists.
    * @returns {Promise<void>}
    */
   static async bootIfActive() {
     const service = new TelegramBotService();
     try {
       const connector = await ExternalCommunicationConnector.get("telegram");
-      if (!connector || !connector.active || !connector.config?.bot_token)
+      if (!connector || !connector.active || !connector.config.bot_token)
         return;
-
-      // If there is a valid config, but the instance is running in multi-user mode - skip boot
-      // but also cleanup the config and approved users
-      const isSingleUserMode = await service.#assertSingleUserMode();
-      if (!isSingleUserMode) return;
 
       const config = { ...connector.config };
       config.bot_token = decryptToken(config.bot_token);
       if (!config.bot_token) {
-        service.#log("Failed to decrypt bot token. Re-connect to fix.");
+        this.#log("Failed to decrypt bot token. Re-connect to fix.");
         return;
       }
 

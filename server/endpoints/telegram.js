@@ -3,7 +3,10 @@ const {
 } = require("../models/externalCommunicationConnector");
 const { TelegramBotService } = require("../utils/telegramBot");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
-const { isSingleUserMode } = require("../utils/middleware/multiUserProtected");
+const {
+  flexUserRoleValid,
+  ROLES,
+} = require("../utils/middleware/multiUserProtected");
 const { reqBody } = require("../utils/http");
 const { EventLogs } = require("../models/eventLogs");
 const { Workspace } = require("../models/workspace");
@@ -15,7 +18,7 @@ function telegramEndpoints(app) {
 
   app.get(
     "/telegram/config",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (_request, response) => {
       try {
         const connector = await ExternalCommunicationConnector.get("telegram");
@@ -73,7 +76,7 @@ function telegramEndpoints(app) {
    */
   app.post(
     "/telegram/connect",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (request, response) => {
       try {
         const { bot_token, default_workspace = null } = reqBody(request);
@@ -158,7 +161,7 @@ function telegramEndpoints(app) {
 
   app.post(
     "/telegram/disconnect",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (_request, response) => {
       try {
         const service = new TelegramBotService();
@@ -175,7 +178,7 @@ function telegramEndpoints(app) {
 
   app.get(
     "/telegram/status",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (_request, response) => {
       try {
         const connector = await ExternalCommunicationConnector.get("telegram");
@@ -193,7 +196,7 @@ function telegramEndpoints(app) {
 
   app.get(
     "/telegram/pending-users",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (_request, response) => {
       try {
         const service = new TelegramBotService();
@@ -209,7 +212,7 @@ function telegramEndpoints(app) {
 
   app.get(
     "/telegram/approved-users",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (_request, response) => {
       try {
         const connector = await ExternalCommunicationConnector.get("telegram");
@@ -224,7 +227,7 @@ function telegramEndpoints(app) {
 
   app.post(
     "/telegram/approve-user",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (request, response) => {
       try {
         const { chatId } = reqBody(request);
@@ -246,7 +249,7 @@ function telegramEndpoints(app) {
 
   app.post(
     "/telegram/deny-user",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (request, response) => {
       try {
         const { chatId } = reqBody(request);
@@ -268,7 +271,7 @@ function telegramEndpoints(app) {
 
   app.post(
     "/telegram/revoke-user",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (request, response) => {
       try {
         const { chatId } = reqBody(request);
@@ -290,7 +293,7 @@ function telegramEndpoints(app) {
 
   app.post(
     "/telegram/update-config",
-    [validatedRequest, isSingleUserMode],
+    [validatedRequest, flexUserRoleValid([ROLES.admin])],
     async (request, response) => {
       try {
         const { voice_response_mode } = reqBody(request);
