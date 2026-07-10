@@ -79,6 +79,8 @@ class TelegramBotService {
   #activeWorkers = new Map();
   // Pending tool approval requests: requestId -> { worker, chatId, messageId }
   #pendingToolApprovals = new Map();
+  // Bot's own Telegram user ID (resolved once on startup)
+  #myUserId = null;
 
   constructor() {
     if (TelegramBotService._instance) return TelegramBotService._instance;
@@ -120,6 +122,20 @@ class TelegramBotService {
         });
       }
     }
+
+    // Restore linked group state from DB
+    for (const group of config.linked_groups || []) {
+      this.#chatState.set(Number(group.chatId), {
+        workspaceSlug: group.workspaceSlug,
+        threadSlug: group.threadSlug || null,
+      });
+      this.#log(
+        `Restored linked group ${group.chatId} → workspace "${group.workspaceSlug}"`
+      );
+    }
+
+    // Resolve bot's own user ID so we can detect self-removal from groups.
+    this.#myUserId = (await this.#bot.getMe()).id;
 
     this.#setupHandlers();
     await this.#registerCommands();
@@ -419,16 +435,88 @@ class TelegramBotService {
 
   #setupHandlers() {
     const ctx = this.#createContext();
+    // Track per-chat type ("private" | "group" | "supergroup" | "channel") so handlers don't need to re-read msg.chat.type
+    const chatTypes = new Map();
+    ctx._chatType = chatTypes;
+
     const guard = async (msg, handler) => {
-      if (!this.#config) return;
+      if (!this.#config) {
+        this.#log("[MSG][DROPPED] no config");
+        return;
+      }
       this.#resetPollingRetry(); // Reset the polling on successful message receipt
 
-      if (!isVerified(this.#config.approved_users, msg.chat.id)) {
+      const chatId = msg.chat.id;
+      const chatType = msg.chat.type;
+      const senderId = msg.from?.id ?? "null";
+      const senderName =
+        msg.sender_chat?.title ?? msg.from?.first_name ?? "unknown";
+      this.#log(
+        `[IN] chat=${chatId} type=${chatType} from=${senderName}(#${senderId}) text="${(msg.text || "").slice(0, 80)}"`
+      );
+
+      chatTypes.set(chatId, chatType);
+
+      // Groups: check if linked and whether message targets the bot
+      this.#log(`[MSG] group? ${["group", "supergroup"].includes(chatType)}`);
+      if (["group", "supergroup"].includes(chatType)) {
+        const { isGroupLinked } = require("./utils/verification");
+        const { linked, groupEntry: _groupEntry } = isGroupLinked(
+          this.#config.linked_groups,
+          chatId
+        );
+        this.#log(
+          `[MSG] group(${chatId}) linked=${linked} config_keys=[${(this.#config.linked_groups || []).map((g) => g.chatId)}]`
+        );
+
+        if (!linked) {
+          // Allow /link (with or without argument) to bypass the link check so a group can be linked in the first place
+          const rawText = msg.text || "";
+          if (rawText.startsWith("/link") || rawText.startsWith("/Link")) {
+            this.#log(
+              "[MSG] COMMAND detected -> running handler (link cmd on ungroup)"
+            );
+            handler.call(this, chatId);
+            return;
+          }
+          this.#log("[MSG][DROPPED] not linked");
+          return;
+        }
+
+        // Commands always run in linked groups
+        if (msg.text?.startsWith("/")) {
+          this.#log(`[MSG] COMMAND detected -> running handler`);
+          handler.call(this, chatId);
+          return;
+        }
+
+        // Non-command messages require @mention or /totem prefix
+        const { isDirectingToBot } = require("./utils/verification");
+        const botUsername = this.#bot.username || "";
+        const isDirected = isDirectingToBot(msg, botUsername);
+        this.#log(`[MSG] text_mention=${isDirected} (botUser=@${botUsername})`);
+        if (!isDirected) {
+          this.#log("[MSG][DROPPED] not directed at bot");
+          return;
+        }
+
+        this.#log(`[MSG] running handler for @mention`);
+        handler.call(this, chatId);
+        return;
+      }
+
+      // Private chats: require approval
+      const verified = isVerified(this.#config.approved_users, msg.chat.id);
+      this.#log(
+        `[MSG] private chat(${chatId}) verified=${verified} approved=[${(this.#config.approved_users || []).map((u) => u.chatId)}]`
+      );
+      if (!verified) {
         sendPairingRequest(this.#bot, msg, this.#pendingPairings);
         return;
       }
 
-      handler();
+      this.#log(`[MSG] running handler for private chat`);
+      handler.call(this, chatId);
     };
 
     // Register all commands (history is registered separately below)
@@ -447,6 +535,63 @@ class TelegramBotService {
         (c) => c.command === "history"
       ).initHandler();
       guard(msg, () => handler(ctx, msg.chat.id, msg.text));
+    });
+
+    // Register /link and /unlink directly (group-only, skip auto-setup)
+    this.#bot.onText(/\/link(.*)/, (msg) => {
+      if (!["group", "supergroup"].includes(msg.chat.type)) return;
+      const handler = BOT_COMMANDS.find(
+        (c) => c.command === "link"
+      )?.initHandler();
+      // Strip the command prefix so only the workspace name is passed to the handler.
+      const arg = (msg.text || "").replace(/^\/link\s+/i, "");
+      if (!arg.trim()) {
+        guard(msg, () =>
+          ctx.bot.sendMessage(
+            msg.chat.id,
+            `<b>Usage:</b> <code>/link &lt;workspace name&gt;</code>\n\nThis links the current group to a workspace. Messages in this group (when @mentioning the bot) will be routed to that workspace.`
+          )
+        );
+        return;
+      }
+      if (handler) guard(msg, () => handler(ctx, msg.chat.id, arg.trim()));
+    });
+
+    this.#bot.onText(/\/unlink$/, (msg) => {
+      if (!["group", "supergroup"].includes(msg.chat.type)) return;
+      const handler = BOT_COMMANDS.find(
+        (c) => c.command === "unlink"
+      )?.initHandler();
+      if (handler) guard(msg, () => handler(ctx, msg.chat.id));
+    });
+
+    // When bot is removed from a group, clean up state
+    this.#bot.on("left_chat_member", (msg) => {
+      if (!this.#myUserId) return;
+      if (msg.left_chat_member?.id !== this.#myUserId) return;
+      const chatId = msg.chat.id;
+      this.#chatState.delete(chatId);
+      this.#log(`Bot removed from group ${chatId} - state cleared`);
+
+      // Also remove from linked_groups config
+      const groups = (this.#config.linked_groups || []).filter(
+        (g) => String(g.chatId) !== String(chatId)
+      );
+      if (groups.length < (this.#config.linked_groups || []).length) {
+        ExternalCommunicationConnector.updateConfig("telegram", {
+          linked_groups: groups,
+        })
+          .then(() => {
+            this.#config.linked_groups = groups;
+            this.#log(`Removed group ${chatId} from linked_groups config`);
+          })
+          .catch((err) => {
+            this.#log(
+              `Failed to update linked_groups for group removal:`,
+              err.message
+            );
+          });
+      }
     });
 
     // Register callback queries, used for workspace/thread selection, tool approval, etc.

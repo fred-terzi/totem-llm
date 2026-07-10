@@ -161,9 +161,59 @@ async function revokeUser(chatId, config) {
   });
 }
 
+/**
+ * Check if a group chatId has been linked to a workspace.
+ * @param {Array} linkedGroups - The linked_groups from connector config.
+ * @param {number|string} chatId
+ * @returns {{linked: boolean, groupEntry: object|null}}
+ */
+function isGroupLinked(linkedGroups, chatId) {
+  const groups = linkedGroups || [];
+  const entry = groups.find((g) => String(g.chatId) === String(chatId));
+  return { linked: !!entry, groupEntry: entry || null };
+}
+
+/**
+ * Check if a message is directed at the bot (via @mention).
+ * Used in group chats to ignore unrelated messages.
+ * Note: Commands are handled separately in the guard middleware;
+ * they are not auto-accepted here because multi-bot groups could
+ * have other bots with overlapping commands.
+ * @param {object} msg - Telegram message object.
+ * @param {string} botUsername - The bot's username from getMe().
+ * @returns {boolean}
+ */
+function isDirectingToBot(msg, botUsername) {
+  if (!msg || !msg.text) return false;
+
+  // @mention anywhere in the text (e.g. @totem_bot hello)
+  if (botUsername && msg.text.includes(`@${botUsername}`)) return true;
+
+  // Entity parsing: Telegram sends entities for mentions
+  // For bot commands sent via other bots, this catches @botname/command too.
+  if (msg.entities) {
+    for (const entity of msg.entities) {
+      // Direct text mention — verify it matches our bot's username
+      if (entity.type === "mention") {
+        const mentionedUsername = msg.text.substring(
+          entity.offset,
+          entity.offset + entity.length
+        );
+        if (mentionedUsername.includes(botUsername)) return true;
+      }
+      // text_mention means actual user reference — only relevant for bot
+      // matches via the text_above check already handled above
+    }
+  }
+
+  return false;
+}
+
 module.exports = {
   MAX_PENDING_PAIRINGS,
   isVerified,
+  isGroupLinked,
+  isDirectingToBot,
   sendPairingRequest,
   approveUser,
   denyUser,
