@@ -1270,7 +1270,7 @@ async function updateENV(newENVs = {}, force = false, userId = null) {
     await runAfterAllFunc(newValues, userId);
 
   await logChangesToEventLog(newValues, userId);
-  if (process.env.NODE_ENV === "production") dumpENV();
+  dumpENV();
   return { newValues, error: error?.length > 0 ? error : false };
 }
 
@@ -1327,6 +1327,8 @@ function dumpENV() {
     "HTTPS_KEY_PATH",
     // Other Configuration Keys
     "DISABLE_VIEW_CHAT_HISTORY",
+    // Database connection string — always preserved so prisma never crashes on restart
+    "DATABASE_URL",
     // Simple SSO
     "SIMPLE_SSO_ENABLED",
     "SIMPLE_SSO_NO_LOGIN",
@@ -1392,8 +1394,18 @@ function dumpENV() {
     .map(([key, value]) => `${key}='${sanitizeValue(value)}'`)
     .join("\n");
 
-  const envPath = path.join(__dirname, "../../.env");
+  const os = require("os");
+  // Write to storage dir for production bootstrap
+  const storageDir = process.env.TOTEM_STORAGE_DIR || path.join(os.homedir(), "totem-llm");
+  fs.mkdirSync(storageDir, { recursive: true });
+  const envPath = path.join(storageDir, ".env");
   fs.writeFileSync(envPath, envResult, { encoding: "utf8", flag: "w" });
+  // Also write to server/.env.development for hot-refresh during dev runs (yarn dev:all).
+  const projectEnvDev = path.join(__dirname, "..", "..", ".env.development");
+  fs.writeFileSync(projectEnvDev, envResult, { encoding: "utf8", flag: "w" });
+  // Also write to server/.env — the fallback dotenv loads when NODE_ENV !== development.
+  const projectEnvDefault = path.join(__dirname, "..", "..", ".env");
+  fs.writeFileSync(projectEnvDefault, envResult, { encoding: "utf8", flag: "w" });
   return true;
 }
 
