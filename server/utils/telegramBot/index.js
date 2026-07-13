@@ -631,10 +631,12 @@ class TelegramBotService {
       await bgService.bree.run(jobId);
       const worker = bgService.bree.workers.get(jobId);
 
+      const msg = ctx.message;
       if (worker && typeof worker.send === "function") {
         worker.send({
           botToken: this.#config.bot_token,
           chatId,
+          messageThreadId: msg?.topic_message_thread_id || null,
           workspaceSlug: state.workspaceSlug,
           threadSlug: state.threadSlug,
           ...payload,

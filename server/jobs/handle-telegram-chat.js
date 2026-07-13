@@ -14,6 +14,7 @@ process.on("message", async (payload) => {
   const {
     botToken,
     chatId,
+    messageThreadId,
     workspaceSlug,
     threadSlug,
     message,
@@ -46,6 +47,7 @@ process.on("message", async (payload) => {
     await streamResponse({
       ctx,
       chatId,
+      messageThreadId,
       workspace,
       thread,
       message,
