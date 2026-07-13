@@ -948,13 +948,18 @@ class TelegramBotService {
       const config = { ...connector.config };
       config.bot_token = decryptToken(config.bot_token);
       if (!config.bot_token) {
-        this.#log("Failed to decrypt bot token. Re-connect to fix.");
+        console.log(
+          "\x1b[35m[TelegramBot]\x1b[0m Failed to decrypt bot token. Re-connect to fix."
+        );
         return;
       }
 
       await service.start(config);
     } catch (error) {
-      service.#log("Failed to boot:", error.message);
+      console.log(
+        "\x1b[35m[TelegramBot]\x1b[0m Failed to boot:",
+        error.message
+      );
     }
   }
 }
