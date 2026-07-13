@@ -404,44 +404,57 @@ function createStreamHandler({ ctx, chatId, messageThreadId = null }) {
     lastDraftTime = Date.now();
   }
 
+  // Guard: prevent concurrent splitOnOverflow invocations while one is mid-await.
+  let overflowing = false;
+
   /**
    * Handle accumulated text overflowing Telegram's max length.
    * Finalizes the current segment as a persistent message and begins
    * a fresh draft for the remainder.
    */
   async function splitOnOverflow() {
-    const segmentText = completeText.slice(msgOffset, msgOffset + MAX_MSG_LEN);
-    if (!segmentText?.length) return;
+    // Re-entrancy guard — another split is mid-flight (e.g. awaiting finalizeDraft)
+    if (overflowing) return;
+    overflowing = true;
 
-    // Clear any pending draft timer
-    clearTimeout(draftTimer);
-    draftTimer = null;
+    try {
+      const segmentText = completeText.slice(
+        msgOffset,
+        msgOffset + MAX_MSG_LEN
+      );
+      if (!segmentText?.length) return;
 
-    // Finalize the completed segment as a real persistent message
-    await finalizeDraft(ctx.bot, chatId, segmentText, {
-      html: true,
-      messageThreadId,
-    }).catch(() => {
-      // Fallback: just send plain if formatting fails
-      ctx.bot
-        .sendMessage(chatId, segmentText, {
-          message_thread_id: messageThreadId || undefined,
-        })
-        .catch(() => {});
-    });
+      // Clear any pending draft timer
+      clearTimeout(draftTimer);
+      draftTimer = null;
 
-    msgOffset += MAX_MSG_LEN;
-    // New draft ID for the next segment (Telegram animates same-ID changes)
-    draftId = nextDraftId();
-    streamingPhase = "idle";
+      // Finalize the completed segment as a real persistent message
+      await finalizeDraft(ctx.bot, chatId, segmentText, {
+        html: true,
+        messageThreadId,
+      }).catch(() => {
+        // Fallback: just send plain if formatting fails
+        ctx.bot
+          .sendMessage(chatId, segmentText, {
+            message_thread_id: messageThreadId || undefined,
+          })
+          .catch(() => {});
+      });
 
-    // Handle remaining segments recursively if still overflowing
-    const remainderLength = currentText().length;
-    if (remainderLength > MAX_MSG_LEN) {
-      // Schedule after microtask to avoid Telegram rate limits
-      setImmediate(() => splitOnOverflow());
-    } else if (remainderLength > 0) {
-      sendDraftUpdate(currentText());
+      msgOffset += MAX_MSG_LEN;
+      // New draft ID for the next segment (Telegram animates same-ID changes)
+      draftId = nextDraftId();
+      streamingPhase = "idle";
+
+      // Handle remaining segments recursively if still overflowing
+      const remainderLength = currentText().length;
+      if (remainderLength > MAX_MSG_LEN) {
+        setImmediate(() => splitOnOverflow());
+      } else if (remainderLength > 0) {
+        sendDraftUpdate(currentText());
+      }
+    } finally {
+      overflowing = false;
     }
   }
 
