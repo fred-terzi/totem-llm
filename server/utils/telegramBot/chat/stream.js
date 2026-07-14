@@ -484,27 +484,74 @@ function createStreamHandler({ ctx, chatId, messageThreadId = null }) {
     clearTimeout(draftTimer);
     draftTimer = null;
 
+    // Wait for any in-flight splitOnOverflow to finish before we read msgOffset.
+    // Without this, streaming can end while splitOnOverflow is still awaiting
+    // finalizeDraft(), leaving msgOffset stale (0), which causes flushEdit to
+    // try sending the entire accumulator as one message — Telegram rejects it
+    // for exceeding 4096 chars and we deliver near-identical duplicates.
+    let waitAttempts = 0;
+    while (overflowing && waitAttempts < 20) {
+      await new Promise((r) => setTimeout(r, 10));
+      waitAttempts++;
+    }
+
     const text = currentText();
     if (!text?.length) {
       streamingPhase = "idle";
       return;
     }
 
+    // Handle the case where remaining accumulation grew beyond MAX_MSG_LEN
+    // during the final split cycle. We need to drain it into persistent
+    // segments ourselves rather than trying to blast past Telegram's limit.
     if (final) {
-      // Persist as a real message instead of an ephemeral draft
-      await finalizeDraft(ctx.bot, chatId, text, {
-        html: true,
-        messageThreadId,
-      }).catch(() => {
-        ctx.bot
-          .sendMessage(chatId, text, {
-            message_thread_id: messageThreadId || undefined,
-          })
-          .catch(() => {});
-      });
-    } else {
-      // One last draft push (e.g. cursor animation)
+      let remainingSegments = 0;
+      while (currentText().length > MAX_MSG_LEN && remainingSegments < 5) {
+        void splitOnOverflow();
+        remainingSegments++;
+        await new Promise((r) => setTimeout(r, 20));
+        // Loop until all content is flushed as persistent messages
+        let safe = 0;
+        while (overflowing && safe < 30) {
+          await new Promise((r) => setTimeout(r, 10));
+          safe++;
+        }
+      }
+
+      const lastPart = currentText();
+      if (lastPart.length > 0) {
+        await finalizeDraft(ctx.bot, chatId, lastPart, {
+          html: true,
+          messageThreadId,
+        }).catch(() => {
+          ctx.bot
+            .sendMessage(chatId, lastPart.slice(0, MAX_MSG_LEN), {
+              message_thread_id: messageThreadId || undefined,
+            })
+            .catch(() => {});
+        });
+      }
+    } else if (text.length <= MAX_MSG_LEN) {
+      // Non-final flush — only update draft if it fits in one Telegram message
       await sendDraftUpdate(text + CURSOR_CHAR);
+    } else {
+      // Non-final overflow: drain segments and leave remaining as draft
+      let drained = 0;
+      while (currentText().length > MAX_MSG_LEN && drained < 5) {
+        void splitOnOverflow();
+        drained++;
+        await new Promise((r) => setTimeout(r, 20));
+        // Wait for overflow to finish with a safety timeout
+        let waitC = 0;
+        while (overflowing && waitC < 30) {
+          await new Promise((r) => setTimeout(r, 10));
+          waitC++;
+        }
+      }
+      const draftText = currentText();
+      if (draftText.length > 0) {
+        await sendDraftUpdate(draftText + CURSOR_CHAR);
+      }
     }
     streamingPhase = "idle";
   };
