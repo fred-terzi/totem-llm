@@ -543,8 +543,11 @@ class TelegramBotService {
       const handler = BOT_COMMANDS.find(
         (c) => c.command === "link"
       )?.initHandler();
-      // Strip the command prefix so only the workspace name is passed to the handler.
-      const arg = (msg.text || "").replace(/^\/link\s+/i, "");
+      // Telegram may send the command in either of these forms:
+      //   /link <workspace>
+      //   /link@BotUsername <workspace>
+      // Strip the command prefix and optional mention suffix so only the workspace name is passed to the handler.
+      const arg = (msg.text || "").replace(/^\/link(?:@[\w_]+)?\s*/i, "");
       if (!arg.trim()) {
         guard(msg, () =>
           ctx.bot.sendMessage(

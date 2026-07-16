@@ -92,6 +92,9 @@ async function removeGroupMapping(chatId) {
 async function handleLink(ctx, chatId, wsArg) {
   const bot = ctx.bot;
   const chatType = ctx._chatType?.get(chatId);
+  const normalizedArg = String(wsArg || "")
+    .replace(/^\/link(?:@[\w_]+)?\s*/i, "")
+    .trim();
 
   if (!["group", "supergroup"].includes(chatType)) {
     await bot.sendMessage(
@@ -118,8 +121,8 @@ async function handleLink(ctx, chatId, wsArg) {
     return;
   }
 
-  // Workspace argument after /link stripped outside (guard already removes "/link ").
-  const args = wsArg;
+  // Workspace argument after /link stripped outside (guard already removes the command prefix).
+  const args = normalizedArg;
   if (!args || !args.trim()) {
     await bot.sendMessage(
       chatId,
@@ -160,13 +163,27 @@ async function handleLink(ctx, chatId, wsArg) {
     thread = threads[0] || null;
   }
 
-  // Persist mapping
+  // Persist mapping to DB and keep the live bot config in sync.
   await persistGroupMapping(chatId, {
     workspaceSlug: ws.slug,
     threadSlug: thread?.slug || null,
     chatType,
     linkedAt: new Date().toISOString(),
   });
+  ctx.config.linked_groups = ctx.config.linked_groups || [];
+  const liveGroups = ctx.config.linked_groups;
+  const liveIdx = liveGroups.findIndex(
+    (g) => String(g.chatId) === String(chatId)
+  );
+  const liveEntry = {
+    chatId: String(chatId),
+    workspaceSlug: ws.slug,
+    threadSlug: thread?.slug || null,
+    chatType,
+    linkedAt: new Date().toISOString(),
+  };
+  if (liveIdx >= 0) liveGroups[liveIdx] = liveEntry;
+  else liveGroups.push(liveEntry);
 
   // Update in-memory state immediately
   ctx.setState(chatId, {
@@ -215,8 +232,11 @@ async function handleUnlink(ctx, chatId) {
     return;
   }
 
-  // Remove from DB
+  // Remove from DB and keep the live bot config in sync.
   await removeGroupMapping(chatId);
+  ctx.config.linked_groups = (ctx.config.linked_groups || []).filter(
+    (g) => String(g.chatId) !== String(chatId)
+  );
 
   // Clear in-memory state
   ctx.setState(chatId, {

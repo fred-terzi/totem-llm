@@ -184,25 +184,29 @@ function isGroupLinked(linkedGroups, chatId) {
  * @returns {boolean}
  */
 function isDirectingToBot(msg, botUsername) {
-  if (!msg || !msg.text) return false;
+  if (!msg || !msg.text || !botUsername) return false;
 
-  // @mention anywhere in the text (e.g. @totem_bot hello)
-  if (botUsername && msg.text.includes(`@${botUsername}`)) return true;
+  const normalizedBotUsername = String(botUsername).replace(/^@/, "").trim();
+  if (!normalizedBotUsername) return false;
 
-  // Entity parsing: Telegram sends entities for mentions
-  // For bot commands sent via other bots, this catches @botname/command too.
+  // Direct text mention: @botusername hello
+  if (msg.text.includes(`@${normalizedBotUsername}`)) return true;
+
+  // Entity parsing: Telegram sends entities for mentions.
+  // Only accept a mention when it exactly matches the configured bot username.
   if (msg.entities) {
     for (const entity of msg.entities) {
-      // Direct text mention — verify it matches our bot's username
-      if (entity.type === "mention") {
-        const mentionedUsername = msg.text.substring(
-          entity.offset,
-          entity.offset + entity.length
-        );
-        if (mentionedUsername.includes(botUsername)) return true;
-      }
-      // text_mention means actual user reference — only relevant for bot
-      // matches via the text_above check already handled above
+      if (entity.type !== "mention") continue;
+
+      const mentionedUsername = msg.text.substring(
+        entity.offset,
+        entity.offset + entity.length
+      );
+      const normalizedMention = String(mentionedUsername)
+        .replace(/^@/, "")
+        .trim();
+
+      if (normalizedMention === normalizedBotUsername) return true;
     }
   }
 
