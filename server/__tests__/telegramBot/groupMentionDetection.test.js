@@ -15,4 +15,19 @@ describe("Telegram group mention detection", () => {
 
     expect(isDirectingToBot(msg, "")).toBe(false);
   });
+
+  test("matches the configured Telegram bot username exactly", () => {
+    const msg = {
+      text: "@Totem_Official_bot create a high level summary for a non-tech crowd of https://",
+      entities: [
+        {
+          type: "mention",
+          offset: 0,
+          length: 18,
+        },
+      ],
+    };
+
+    expect(isDirectingToBot(msg, "Totem_Official_bot")).toBe(true);
+  });
 });

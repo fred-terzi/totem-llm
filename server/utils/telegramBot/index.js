@@ -81,6 +81,7 @@ class TelegramBotService {
   #pendingToolApprovals = new Map();
   // Bot's own Telegram user ID (resolved once on startup)
   #myUserId = null;
+  #botUsername = null;
 
   constructor() {
     if (TelegramBotService._instance) return TelegramBotService._instance;
@@ -134,8 +135,11 @@ class TelegramBotService {
       );
     }
 
-    // Resolve bot's own user ID so we can detect self-removal from groups.
-    this.#myUserId = (await this.#bot.getMe()).id;
+    // Resolve the live bot account details so group mention routing uses the
+    // actual connected bot username, not an unreliable empty field on the SDK instance.
+    const me = await this.#bot.getMe();
+    this.#myUserId = me.id;
+    this.#botUsername = me.username || this.#config.bot_username || null;
 
     this.#setupHandlers();
     await this.#registerCommands();
@@ -490,9 +494,10 @@ class TelegramBotService {
           return;
         }
 
-        // Non-command messages require @mention or /totem prefix
+        // Non-command messages require @mention or /totem prefix.
+        // Use the resolved username from the live API/config, not the SDK instance field.
         const { isDirectingToBot } = require("./utils/verification");
-        const botUsername = this.#bot.username || "";
+        const botUsername = this.#botUsername || this.#config.bot_username || "";
         const isDirected = isDirectingToBot(msg, botUsername);
         this.#log(`[MSG] text_mention=${isDirected} (botUser=@${botUsername})`);
         if (!isDirected) {
