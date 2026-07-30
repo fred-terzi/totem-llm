@@ -516,7 +516,7 @@ class TelegramBotService {
                 workspaceId: workspace.id,
                 prompt: `${senderName}: ${(msg.text || "").trim()}`,
                 response: { text: "", sources: [], type: "group" },
-                threadId: null,
+                threadId: msg?.topic_message_thread_id || null,
               });
             } catch (err) {
               this.#log(`[MSG] Failed to archive message:`, err.message);
