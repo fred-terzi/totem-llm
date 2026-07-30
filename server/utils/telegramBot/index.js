@@ -11,6 +11,8 @@ const { decryptToken } = require("./utils");
 const {
   WorkspaceAgentInvocation,
 } = require("../../models/workspaceAgentInvocation");
+const { Workspace } = require("../../models/workspace");
+const { WorkspaceChats } = require("../../models/workspaceChats");
 const {
   isVerified,
   sendPairingRequest,
@@ -501,7 +503,25 @@ class TelegramBotService {
         const isDirected = isDirectingToBot(msg, botUsername);
         this.#log(`[MSG] text_mention=${isDirected} (botUser=@${botUsername})`);
         if (!isDirected) {
-          this.#log("[MSG][DROPPED] not directed at bot");
+          // Save the non-directed message to thread history without responding.
+          const senderName = msg.from?.first_name || msg.from?.username || "Unknown";
+          this.#log(`[MSG] Archiving: ${senderName} says "${(msg.text || "").slice(0, 60)}"`);
+
+          const workspace = await Workspace.get({
+            slug: _groupEntry.workspaceSlug,
+          });
+          if (workspace) {
+            try {
+              await WorkspaceChats.new({
+                workspaceId: workspace.id,
+                prompt: `${senderName}: ${(msg.text || "").trim()}`,
+                response: { text: "", sources: [], type: "group" },
+                threadId: null,
+              });
+            } catch (err) {
+              this.#log(`[MSG] Failed to archive message:`, err.message);
+            }
+          }
           return;
         }
 
