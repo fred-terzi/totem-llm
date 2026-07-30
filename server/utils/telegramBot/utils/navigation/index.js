@@ -1,4 +1,4 @@
-const { isVerified } = require("../verification");
+const { isVerified, isGroupLinked } = require("../verification");
 const { resolveCallbackHandler } = require("./callbacks");
 
 /**
@@ -12,7 +12,11 @@ async function handleKeyboardQueryCallback(ctx, query, options = {}) {
   const messageId = query.message.message_id;
   const data = query.data;
 
-  if (!isVerified(ctx.config.approved_users, chatId)) {
+  // Allow both verified users (private chats) and linked groups
+  const verified = isVerified(ctx.config.approved_users, chatId);
+  const groupLinked = isGroupLinked(ctx.config.linked_groups, chatId).linked;
+
+  if (!verified && !groupLinked) {
     await ctx.bot.answerCallbackQuery(query.id, {
       text: "You are not approved.",
     });
