@@ -509,8 +509,10 @@ class TelegramBotService {
         // Use the resolved username from the live API/config, not the SDK instance field.
         const { isDirectingToBot } = require("./utils/verification");
         const botUsername = this.#botUsername || this.#config.bot_username || "";
-        const isDirected = isDirectingToBot(msg, botUsername);
-        this.#log(`[MSG] text_mention=${isDirected} (botUser=@${botUsername})`);
+        const isDirected = isDirectingToBot(msg, botUsername, this.#myUserId);
+        this.#log(
+          `[MSG] text_mention=${isDirected} (botUser=@${botUsername}, myId=${this.#myUserId})`
+        );
         if (!isDirected) {
           // Save the non-directed message to thread history without responding.
           const senderName = msg.from?.first_name || msg.from?.username || "Unknown";

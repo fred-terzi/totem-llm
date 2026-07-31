@@ -183,8 +183,11 @@ function isGroupLinked(linkedGroups, chatId) {
  * @param {string} botUsername - The bot's username from getMe().
  * @returns {boolean}
  */
-function isDirectingToBot(msg, botUsername) {
+function isDirectingToBot(msg, botUsername, myUserId = null) {
   if (!msg || !msg.text || !botUsername) return false;
+
+  // Check if replying to the bot — always counts as directing to it.
+  if (myUserId && msg.reply_to_message?.from?.id === myUserId) return true;
 
   const normalizedBotUsername = String(botUsername).replace(/^@/, "").trim();
   if (!normalizedBotUsername) return false;
