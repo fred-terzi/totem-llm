@@ -489,8 +489,17 @@ class TelegramBotService {
           return;
         }
 
-        // Commands always run in linked groups
+        // Commands: restrict to approved users only in groups.
+        // Non-approver commands are ignored (archived silently).
         if (msg.text?.startsWith("/")) {
+          const isCommanderVerified = isVerified(
+            this.#config.approved_users,
+            msg.from?.id
+          );
+          if (!isCommanderVerified) {
+            this.#log("[MSG][DROPPED] unapproved command in linked group");
+            return;
+          }
           this.#log(`[MSG] COMMAND detected -> running handler`);
           handler.call(this, chatId);
           return;
