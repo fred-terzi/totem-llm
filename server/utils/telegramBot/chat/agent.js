@@ -12,7 +12,6 @@ const { sendVoiceResponse } = require("../utils/media");
 const {
   STREAM_EDIT_INTERVAL,
   MAX_MSG_LEN,
-  CURSOR_CHAR,
 } = require("../constants");
 
 const THOUGHT_FLUSH_INTERVAL_MS = 1500;
@@ -78,7 +77,7 @@ async function handleAgentResponse(
     // Send initial message if none exists yet
     if (responseMsgId === null && !responsePending) {
       responsePending = ctx.bot
-        .sendMessage(chatId, currentResponseText() + CURSOR_CHAR)
+        .sendMessage(chatId, currentResponseText())
         .then((sent) => {
           responseMsgId = sent.message_id;
           lastEditTime = Date.now();
@@ -100,7 +99,7 @@ async function handleAgentResponse(
         ctx.bot,
         chatId,
         responseMsgId,
-        currentResponseText() + CURSOR_CHAR,
+        currentResponseText(),
         ctx.log
       ).catch(() => {});
     } else if (!editTimer) {
@@ -110,7 +109,7 @@ async function handleAgentResponse(
           ctx.bot,
           chatId,
           responseMsgId,
-          currentResponseText() + CURSOR_CHAR,
+          currentResponseText(),
           ctx.log
         ).catch(() => {});
         editTimer = null;
