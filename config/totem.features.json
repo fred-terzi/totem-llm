@@ -89,7 +89,7 @@
     "npm": {
       "communityHub": false,
       "modelRouter": false,
-      "llmProviders": ["ollama", "openrouter"],
+      "llmProviders": ["ollama", "openrouter", "lmstudio"],
       "brandingWhitelabel": false,
       "filesystemAgent": true,
       "documentationLink": false,
@@ -107,7 +107,7 @@
       "transcription": true,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": false
+      "mcpServers": true
     },
     "L1": {
       "communityHub": false,
