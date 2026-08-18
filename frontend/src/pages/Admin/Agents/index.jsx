@@ -47,11 +47,14 @@ const IGNORE_CHANGE_SETTINGS = [
 
 export default function AdminAgents() {
   const { enabled: agentModeEnabled } = useFeatureFlag("agentMode");
+  const { enabled: mcpFeatureEnabled } = useFeatureFlag("mcpServers");
 
-  // When agentMode is active, App Integrations, Agent Flows, and MCP Servers are hidden
+  // When agentMode is active, App Integrations and Agent Flows are hidden.
+  // MCP Servers visibility is controlled by the `mcpServers` feature flag so
+  // enabling the feature will surface the UI regardless of agentMode state.
   const showAppIntegrations = !agentModeEnabled;
   const showAgentFlows = !agentModeEnabled;
-  const showMcpServers = !agentModeEnabled;
+  const showMcpServers = mcpFeatureEnabled;
 
   const { t } = useTranslation();
   const formEl = useRef(null);

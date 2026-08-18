@@ -130,7 +130,7 @@
       "transcription": false,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": false
+      "mcpServers": true
     },
     "L2": {
       "communityHub": false,
@@ -153,7 +153,7 @@
       "transcription": false,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": false
+      "mcpServers": true
     },
     "source": {
       "communityHub": true,
@@ -176,7 +176,7 @@
       "transcription": false,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": false
+      "mcpServers": true
     }
   }
 }
