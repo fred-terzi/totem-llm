@@ -483,6 +483,29 @@ class OpenRouterLLM {
         stream?.endMeasurement(usage);
         resolve(fullText);
       } catch (e) {
+        const prematureClose =
+          e?.code === "ERR_STREAM_PREMATURE_CLOSE" ||
+          /premature close/i.test(e?.message);
+
+        if (prematureClose && fullText.length > 0) {
+          console.log(
+            `\x1b[43m\x1b[34m[STREAMING WARNING]\x1b[0m OpenRouter stream closed prematurely but returned text. Completing gracefully.`
+          );
+          writeResponseChunk(response, {
+            uuid,
+            sources,
+            type: "textResponseChunk",
+            textResponse: "",
+            close: true,
+            error: false,
+          });
+          response.removeListener("close", handleAbort);
+          clearInterval(timeoutCheck);
+          stream?.endMeasurement(usage);
+          resolve(fullText);
+          return;
+        }
+
         writeResponseChunk(response, {
           uuid,
           sources,

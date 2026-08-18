@@ -161,9 +161,66 @@ async function revokeUser(chatId, config) {
   });
 }
 
+/**
+ * Check if a group chatId has been linked to a workspace.
+ * @param {Array} linkedGroups - The linked_groups from connector config.
+ * @param {number|string} chatId
+ * @returns {{linked: boolean, groupEntry: object|null}}
+ */
+function isGroupLinked(linkedGroups, chatId) {
+  const groups = linkedGroups || [];
+  const entry = groups.find((g) => String(g.chatId) === String(chatId));
+  return { linked: !!entry, groupEntry: entry || null };
+}
+
+/**
+ * Check if a message is directed at the bot (via @mention).
+ * Used in group chats to ignore unrelated messages.
+ * Note: Commands are handled separately in the guard middleware;
+ * they are not auto-accepted here because multi-bot groups could
+ * have other bots with overlapping commands.
+ * @param {object} msg - Telegram message object.
+ * @param {string} botUsername - The bot's username from getMe().
+ * @returns {boolean}
+ */
+function isDirectingToBot(msg, botUsername, myUserId = null) {
+  if (!msg || !msg.text || !botUsername) return false;
+
+  // Check if replying to the bot — always counts as directing to it.
+  if (myUserId && msg.reply_to_message?.from?.id === myUserId) return true;
+
+  const normalizedBotUsername = String(botUsername).replace(/^@/, "").trim();
+  if (!normalizedBotUsername) return false;
+
+  // Direct text mention: @botusername hello
+  if (msg.text.includes(`@${normalizedBotUsername}`)) return true;
+
+  // Entity parsing: Telegram sends entities for mentions.
+  // Only accept a mention when it exactly matches the configured bot username.
+  if (msg.entities) {
+    for (const entity of msg.entities) {
+      if (entity.type !== "mention") continue;
+
+      const mentionedUsername = msg.text.substring(
+        entity.offset,
+        entity.offset + entity.length
+      );
+      const normalizedMention = String(mentionedUsername)
+        .replace(/^@/, "")
+        .trim();
+
+      if (normalizedMention === normalizedBotUsername) return true;
+    }
+  }
+
+  return false;
+}
+
 module.exports = {
   MAX_PENDING_PAIRINGS,
   isVerified,
+  isGroupLinked,
+  isDirectingToBot,
   sendPairingRequest,
   approveUser,
   denyUser,

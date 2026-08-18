@@ -376,17 +376,22 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         }
 
         // Close thought tag when we see regular content after thinking
+        // Emit the closing tag combined with the first content chunk so we
+        // don't send an isolated closing tag that can render as '/thought'.
+        let _contentHandled = false;
         if (!!reasoningText && !reasoningToken && chunk.message.content) {
-          textResponse += "\u003c/thought\u003e";
+          const combined = `\u003c/thought\u003e${chunk.message.content}`;
+          textResponse += combined;
           eventHandler?.("reportStreamEvent", {
             type: "textResponseChunk",
             uuid: msgUUID,
-            content: "\u003c/thought\u003e",
+            content: combined,
           });
           reasoningText = ""; // Reset to prevent double-closing
+          _contentHandled = true;
         }
 
-        if (chunk.message.content) {
+        if (chunk.message.content && !_contentHandled) {
           textResponse += chunk.message.content;
           eventHandler?.("reportStreamEvent", {
             type: "textResponseChunk",

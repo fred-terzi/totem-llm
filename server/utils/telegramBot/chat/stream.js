@@ -9,11 +9,12 @@ const {
 const { fillSourceWindow } = require("../../helpers/chat");
 const { AgentHandler } = require("../../agents");
 const {
-  STREAM_EDIT_INTERVAL,
+  DRAFT_REFRESH_INTERVAL,
   MAX_MSG_LEN,
   CURSOR_CHAR,
+  nextDraftId,
 } = require("../constants");
-const { editMessage, sendFormattedMessage } = require("../utils");
+const { sendFormattedMessage, sendDraft, finalizeDraft } = require("../utils");
 const { sendVoiceResponse } = require("../utils/media");
 const { safeJsonParse } = require("../../http");
 const { handleAgentResponse } = require("./agent");
@@ -55,6 +56,7 @@ function historyIsAgentic(chatMode, chatHistory) {
 async function streamResponse({
   ctx = null,
   chatId = null,
+  messageThreadId = null,
   workspace = null,
   thread = null,
   message = "",
@@ -151,6 +153,7 @@ async function streamResponse({
       workspace,
       ctx,
       chatId,
+      messageThreadId,
     });
 
     await persistAndDeliver({
@@ -264,6 +267,7 @@ async function generateResponse({
   workspace,
   ctx,
   chatId,
+  messageThreadId = null,
 }) {
   let completeText = "";
   let metrics = {};
@@ -276,6 +280,7 @@ async function generateResponse({
     const { responseHandler, flushEdit } = createStreamHandler({
       ctx,
       chatId,
+      messageThreadId,
     });
 
     completeText = await LLMConnector.handleStream(responseHandler, stream, {
@@ -352,104 +357,203 @@ function parseSSEChunk(data) {
 }
 
 /**
- * Create a stream response handler for editing Telegram messages as tokens arrive.
- * Manages message splitting when content exceeds Telegram's length limit.
+ * Create a stream response handler that uses Telegram's ephemeral draft API
+ * (sendMessageDraft / sendRichMessageDraft) for real-time streaming.
+ * Drafts are ~30s preview windows, so we refresh periodically and handle expiry.
+ * When content exceeds MAX_MSG_LEN the draft is finalized as a persistent message
+ * and a new draft starts for the next segment.
  * @param {object} options
  * @param {import("./commands").BotContext} options.ctx - Bot context
  * @param {number} options.chatId - Telegram chat ID
+ * @param {number|null} [options.messageThreadId=null] - Forum topic thread ID (optional)
  * @returns {{ responseHandler: object, flushEdit: function }}
  */
-function createStreamHandler({ ctx, chatId }) {
+function createStreamHandler({ ctx, chatId, messageThreadId = null }) {
   let completeText = "";
-  let messageId = null;
-  let messagePending = null;
-  let lastEditTime = 0;
-  let editTimer = null;
+  // Phase tracking: "idle" → "drafting" → "finalized" (after overflow split)
+  let draftId = nextDraftId();
+  let streamingPhase = "idle";
+  let lastDraftTime = 0;
+  let draftTimer = null;
   let msgOffset = 0;
 
   const currentText = () => completeText.slice(msgOffset);
 
   /**
-   * Finalize the current message and reset state when accumulated text
-   * exceeds Telegram's max message length.
+   * Send or update the ephemeral draft message.
+   * Uses sendRichMessageDraft for formatted HTML, falls back to plain text.
    */
-  function splitMessageIfOverflow() {
-    if (messageId === null || currentText().length <= MAX_MSG_LEN) return;
-    clearTimeout(editTimer);
-    editTimer = null;
-    editMessage(
-      ctx.bot,
-      chatId,
-      messageId,
-      completeText.slice(msgOffset, msgOffset + MAX_MSG_LEN),
-      ctx.log,
-      { format: true }
-    ).catch(() => {});
-    msgOffset += MAX_MSG_LEN;
-    messageId = null;
-    messagePending = null;
+  async function sendDraftUpdate(text) {
+    if (!text?.length && streamingPhase === "idle") {
+      // Empty text = "Thinking..." placeholder (valid per API spec)
+      await sendDraft(ctx.bot, chatId, draftId, "", { messageThreadId });
+      streamingPhase = "drafting";
+      lastDraftTime = Date.now();
+      return;
+    }
+
+    if (!text?.length) return;
+
+    // Try rich-mode when we have enough text for stable HTML parsing
+    const useRich = text.length > 10;
+    await sendDraft(ctx.bot, chatId, draftId, text, {
+      rich: useRich,
+      messageThreadId,
+    });
+    streamingPhase = "drafting";
+    lastDraftTime = Date.now();
   }
 
+  // Guard: prevent concurrent splitOnOverflow invocations while one is mid-await.
+  let overflowing = false;
+
   /**
-   * Send a new Telegram message when none exists yet.
-   * @returns {boolean} true if a new message was initiated (caller should skip edit).
+   * Handle accumulated text overflowing Telegram's max length.
+   * Finalizes the current segment as a persistent message and begins
+   * a fresh draft for the remainder.
    */
-  function startNewMessageIfNeeded() {
-    if (messageId !== null || messagePending) return false;
-    messagePending = ctx.bot
-      .sendMessage(chatId, currentText() + CURSOR_CHAR)
-      .then((sent) => {
-        messageId = sent.message_id;
-        lastEditTime = Date.now();
-      })
-      .catch(() => {
-        messagePending = null;
+  async function splitOnOverflow() {
+    // Re-entrancy guard — another split is mid-flight (e.g. awaiting finalizeDraft)
+    if (overflowing) return;
+    overflowing = true;
+
+    try {
+      const segmentText = completeText.slice(
+        msgOffset,
+        msgOffset + MAX_MSG_LEN
+      );
+      if (!segmentText?.length) return;
+
+      // Clear any pending draft timer
+      clearTimeout(draftTimer);
+      draftTimer = null;
+
+      // Finalize the completed segment as a real persistent message
+      await finalizeDraft(ctx.bot, chatId, segmentText, {
+        html: true,
+        messageThreadId,
+      }).catch(() => {
+        // Fallback: just send plain if formatting fails
+        ctx.bot
+          .sendMessage(chatId, segmentText, {
+            message_thread_id: messageThreadId || undefined,
+          })
+          .catch(() => {});
       });
-    return true;
-  }
 
-  /**
-   * Throttle edits to the current message so we don't exceed Telegram rate limits.
-   */
-  function scheduleThrottledEdit() {
-    if (!messageId) return;
+      msgOffset += MAX_MSG_LEN;
+      // New draft ID for the next segment (Telegram animates same-ID changes)
+      draftId = nextDraftId();
+      streamingPhase = "idle";
 
-    const now = Date.now();
-    if (now - lastEditTime >= STREAM_EDIT_INTERVAL) {
-      clearTimeout(editTimer);
-      lastEditTime = now;
-      editMessage(
-        ctx.bot,
-        chatId,
-        messageId,
-        currentText() + CURSOR_CHAR,
-        ctx.log
-      ).catch(() => {});
-    } else if (!editTimer) {
-      editTimer = setTimeout(() => {
-        lastEditTime = Date.now();
-        editMessage(
-          ctx.bot,
-          chatId,
-          messageId,
-          currentText() + CURSOR_CHAR,
-          ctx.log
-        ).catch(() => {});
-        editTimer = null;
-      }, STREAM_EDIT_INTERVAL);
+      // Handle remaining segments recursively if still overflowing
+      const remainderLength = currentText().length;
+      if (remainderLength > MAX_MSG_LEN) {
+        setImmediate(() => splitOnOverflow());
+      } else if (remainderLength > 0) {
+        sendDraftUpdate(currentText());
+      }
+    } finally {
+      overflowing = false;
     }
   }
 
+  /** Throttle draft updates to beat ~30s expiry without spamming the API. */
+  function scheduleDraftRefresh() {
+    if (streamingPhase !== "drafting") return;
+
+    const now = Date.now();
+    clearTimeout(draftTimer);
+    if (now - lastDraftTime >= DRAFT_REFRESH_INTERVAL) {
+      // Enough time passed — fire immediately, then schedule next refresh
+      void sendDraftUpdate(currentText());
+    } else {
+      // Not enough time — schedule for the right moment
+    }
+    draftTimer = setTimeout(() => {
+      void sendDraftUpdate(currentText());
+      draftTimer = null;
+    }, DRAFT_REFRESH_INTERVAL);
+  }
+
+  /**
+   * Flush the current draft and optionally finalize as a persistent message.
+   * @param {boolean} final - If true, persist the remaining text instead of leaving as draft.
+   */
   const flushEdit = async (final = false) => {
-    if (messagePending) await messagePending;
-    if (!messageId) return;
-    clearTimeout(editTimer);
-    editTimer = null;
+    clearTimeout(draftTimer);
+    draftTimer = null;
+
+    // Wait for any in-flight splitOnOverflow to finish before we read msgOffset.
+    // Without this, streaming can end while splitOnOverflow is still awaiting
+    // finalizeDraft(), leaving msgOffset stale (0), which causes flushEdit to
+    // try sending the entire accumulator as one message — Telegram rejects it
+    // for exceeding 4096 chars and we deliver near-identical duplicates.
+    let waitAttempts = 0;
+    while (overflowing && waitAttempts < 20) {
+      await new Promise((r) => setTimeout(r, 10));
+      waitAttempts++;
+    }
+
     const text = currentText();
-    const display = final ? text : text + CURSOR_CHAR;
-    await editMessage(ctx.bot, chatId, messageId, display, ctx.log, {
-      format: final,
-    }).catch(() => {});
+    if (!text?.length) {
+      streamingPhase = "idle";
+      return;
+    }
+
+    // Handle the case where remaining accumulation grew beyond MAX_MSG_LEN
+    // during the final split cycle. We need to drain it into persistent
+    // segments ourselves rather than trying to blast past Telegram's limit.
+    if (final) {
+      let remainingSegments = 0;
+      while (currentText().length > MAX_MSG_LEN && remainingSegments < 5) {
+        void splitOnOverflow();
+        remainingSegments++;
+        await new Promise((r) => setTimeout(r, 20));
+        // Loop until all content is flushed as persistent messages
+        let safe = 0;
+        while (overflowing && safe < 30) {
+          await new Promise((r) => setTimeout(r, 10));
+          safe++;
+        }
+      }
+
+      const lastPart = currentText();
+      if (lastPart.length > 0) {
+        await finalizeDraft(ctx.bot, chatId, lastPart, {
+          html: true,
+          messageThreadId,
+        }).catch(() => {
+          ctx.bot
+            .sendMessage(chatId, lastPart.slice(0, MAX_MSG_LEN), {
+              message_thread_id: messageThreadId || undefined,
+            })
+            .catch(() => {});
+        });
+      }
+    } else if (text.length <= MAX_MSG_LEN) {
+      // Non-final flush — only update draft if it fits in one Telegram message
+      await sendDraftUpdate(text + CURSOR_CHAR);
+    } else {
+      // Non-final overflow: drain segments and leave remaining as draft
+      let drained = 0;
+      while (currentText().length > MAX_MSG_LEN && drained < 5) {
+        void splitOnOverflow();
+        drained++;
+        await new Promise((r) => setTimeout(r, 20));
+        // Wait for overflow to finish with a safety timeout
+        let waitC = 0;
+        while (overflowing && waitC < 30) {
+          await new Promise((r) => setTimeout(r, 10));
+          waitC++;
+        }
+      }
+      const draftText = currentText();
+      if (draftText.length > 0) {
+        await sendDraftUpdate(draftText + CURSOR_CHAR);
+      }
+    }
+    streamingPhase = "idle";
   };
 
   const responseHandler = {
@@ -460,8 +564,24 @@ function createStreamHandler({ ctx, chatId }) {
       if (!token) return;
 
       completeText += token;
-      splitMessageIfOverflow();
-      if (!startNewMessageIfNeeded()) scheduleThrottledEdit();
+
+      // Check for overflow — finalize current segment, start new draft
+      if (currentText().length > MAX_MSG_LEN) {
+        void splitOnOverflow();
+        return;
+      }
+
+      // First token: kick off "Thinking..." then immediately update with text
+      if (streamingPhase === "idle") {
+        void sendDraftUpdate("");
+        streamingPhase = "drafting";
+        lastDraftTime = Date.now(); // Beat the race: scheduleDraftRefresh won't fire immediately
+        void sendDraftUpdate(currentText());
+        return;
+      }
+
+      // Subsequent tokens: throttle to beat expiry + avoid spamming the API
+      scheduleDraftRefresh();
     },
   };
 

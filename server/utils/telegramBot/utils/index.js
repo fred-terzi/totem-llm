@@ -1,3 +1,4 @@
+const https = require("https");
 const { MAX_MSG_LEN } = require("../constants");
 const { markdownToTelegram } = require("../utils/format");
 const { EncryptionManager } = require("../../EncryptionManager");
@@ -192,6 +193,115 @@ async function upsertMessage(bot, chatId, msgId, text, log, opts = {}) {
   return msgId;
 }
 
+/**
+ * Internal: POST to Telegram Bot API using the bot's token + base URL.
+ * Used for methods not yet in node-telegram-bot-api (e.g. drafts).
+ */
+function tgApiRequest(bot, method, form) {
+  const baseUrl = bot.options?.baseApiUrl || "https://api.telegram.org";
+  const path = `${baseUrl}/bot${bot.token}/${method}`;
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(form);
+    const req = https.request(
+      path,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(data),
+        },
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => (body += chunk));
+        res.on("end", () => {
+          try {
+            resolve(JSON.parse(body));
+          } catch {
+            reject(new Error(`Telegram API non-JSON: ${body}`));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+/**
+ * Send a streaming draft via sendMessageDraft (Bot API 9.5+).
+ * Draft is ephemeral (~30s preview); finalize with sendRichMessage afterwards.
+ * @param {import("node-telegram-bot-api")} bot
+ * @param {number} chatId
+ * @param {number} draftId - Unique per-stream draft identifier (non-zero)
+ * @param {string} text - Draft text (empty string = "Thinking..." placeholder)
+ * @param {object} [opts]
+ * @param {boolean} [opts.rich=false] - Use sendRichMessageDraft for HTML formatting
+ * @param {number|null} [opts.messageThreadId=null] - Topic/group thread ID
+ * @returns {Promise<boolean>} true on success
+ */
+async function sendDraft(bot, chatId, draftId, text, opts = {}) {
+  const { rich = false, messageThreadId = null } = opts;
+  const form = { chat_id: Number(chatId), draft_id: Number(draftId) };
+
+  if (rich && text?.length > 0) {
+    try {
+      form.text = markdownToTelegram(text);
+      form.parse_mode = "HTML";
+      if (messageThreadId) form.message_thread_id = messageThreadId;
+      const res = await tgApiRequest(bot, "sendRichMessageDraft", form);
+      return !!res.ok;
+    } catch {
+      // Fall back to plain draft if HTML parse fails mid-stream
+      form.text = text;
+      delete form.parse_mode;
+      if (messageThreadId) form.message_thread_id = messageThreadId;
+      const res = await tgApiRequest(bot, "sendMessageDraft", form);
+      return !!res.ok;
+    }
+  }
+
+  // Plain-text version — always safe even with malformed markdown fragments
+  form.text = text || "";
+  if (messageThreadId) form.message_thread_id = messageThreadId;
+  const res = await tgApiRequest(bot, "sendMessageDraft", form);
+  return !!res.ok;
+}
+
+/**
+ * Finalize a streaming draft by sending the complete message.
+ * Replaces the ephemeral draft with a persistent message.
+ * @param {import("node-telegram-bot-api")} bot
+ * @param {number} chatId
+ * @param {string} text - Final response text
+ * @param {object} [opts]
+ * @param {boolean} [opts.html=true] - Whether to format as HTML
+ * @param {number|null} [opts.messageThreadId=null] - Topic/group thread ID
+ * @returns {Promise<object>} The sent message object
+ */
+async function finalizeDraft(bot, chatId, text, opts = {}) {
+  const { html = true, messageThreadId = null } = opts;
+  let finalText = text;
+  let parseMode = undefined;
+
+  if (html) {
+    try {
+      finalText = markdownToTelegram(text);
+      parseMode = "HTML";
+    } catch {
+      // Send raw on formatting failure
+      parseMode = undefined;
+    }
+  }
+
+  return bot.sendMessage(chatId, finalText, {
+    parse_mode: parseMode,
+    message_thread_id: messageThreadId || undefined,
+    disable_web_page_preview: true,
+  });
+}
+
 module.exports = {
   editMessage,
   upsertMessage,
@@ -200,4 +310,6 @@ module.exports = {
   encryptToken,
   decryptToken,
   resolveWorkspaceProvider,
+  sendDraft,
+  finalizeDraft,
 };

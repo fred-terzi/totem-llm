@@ -118,6 +118,26 @@ const BOT_COMMANDS = [
       return handleAbort;
     },
   },
+  {
+    ...BASE_COMMAND,
+    skipAutoSetup: true, // Registered in index.js with group guard
+    command: "link",
+    description: "Link this group to a workspace (group only)",
+    initHandler: () => {
+      const { handleLink } = require("./handlers/groupManagement");
+      return handleLink;
+    },
+  },
+  {
+    ...BASE_COMMAND,
+    skipAutoSetup: true, // Registered in index.js with group guard
+    command: "unlink",
+    description: "Remove this group's workspace link (group only)",
+    initHandler: () => {
+      const { handleUnlink } = require("./handlers/groupManagement");
+      return handleUnlink;
+    },
+  },
 ];
 
 module.exports = {

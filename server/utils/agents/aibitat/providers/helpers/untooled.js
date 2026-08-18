@@ -232,12 +232,16 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
       if (choice.delta?.content) {
         // When we first see content after reasoning, close the thought tag
         if (!!reasoningText && !reasoningToken) {
+          const combined = `\u003c/thought\u003e${choice.delta.content}`;
           eventHandler?.("reportStreamEvent", {
             type: "textResponseChunk",
             uuid: msgUUID,
-            content: "\u003c/thought\u003e",
+            content: combined,
           });
-          reasoningText += "\u003c/thought\u003e";
+          textResponse += combined;
+          reasoningText = "\u003c/thought\u003e"; // preserve for any downstream logic, but we'll reset to avoid duplicate closes
+          reasoningText = "";
+          continue; // handled this chunk's content
         }
 
         textResponse += choice.delta.content;
@@ -403,15 +407,19 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
             }
           }
 
-          // When we first see content after reasoning, close the thought tag
+          // When we first see content after reasoning, close the thought tag.
+          // Emit the closing tag combined with the first content chunk to avoid
+          // emitting an isolated closing tag which may render as stray '/thought'.
           if (!!reasoningText && !reasoningToken && choice.delta?.content) {
+            const combined = `\u003c/thought\u003e${choice.delta.content}`;
             eventHandler?.("reportStreamEvent", {
               type: "textResponseChunk",
               uuid: msgUUID,
-              content: "\u003c/thought\u003e",
+              content: combined,
             });
-            reasoningText += "\u003c/thought\u003e";
+            completion.content += combined;
             reasoningText = ""; // Reset to prevent double-closing
+            continue; // handled this chunk
           }
 
           if (choice.delta?.content) {

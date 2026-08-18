@@ -81,7 +81,18 @@ class MCPHypervisor {
       fs.mkdirSync(path.dirname(this.mcpServerJSONPath), { recursive: true });
       fs.writeFileSync(
         this.mcpServerJSONPath,
-        JSON.stringify({ mcpServers: {} }, null, 2),
+        JSON.stringify(
+          {
+            mcpServers: {
+              coingecko: {
+                command: "npx",
+                args: ["mcp-remote", "https://mcp.api.coingecko.com/mcp"],
+              },
+            },
+          },
+          null,
+          2
+        ),
         { encoding: "utf8" }
       );
     }
