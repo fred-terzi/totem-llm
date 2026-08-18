@@ -240,15 +240,19 @@ async function tooledStream(
       }
     }
 
-    // When transition from reasoning to regular content, close the thought tag
+    // When transition from reasoning to regular content, close the thought tag.
+    // Emit the closing tag combined with the first content chunk to avoid
+    // sending an isolated closing tag which can render as stray '/thought'.
     if (!!reasoningText && !reasoningToken && choice.delta?.content) {
+      const combined = `</thought>${choice.delta.content}`;
       eventHandler?.("reportStreamEvent", {
         type: "textResponseChunk",
         uuid: msgUUID,
-        content: `</thought>`,
+        content: combined,
       });
-      reasoningText += "</thought>";
+      result.textResponse += combined;
       reasoningText = ""; // Reset so we don't close again for subsequent content chunks
+      continue; // we've handled the content for this chunk
     }
 
     if (choice.delta?.content) {
