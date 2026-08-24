@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import AnythingLLMIcon from "@/media/logo/anything-llm-icon.png";
 import WorkspaceLLMItem from "./WorkspaceLLMItem";
 import { AVAILABLE_LLM_PROVIDERS } from "@/pages/GeneralSettings/LLMPreference";
+import { useFeatureFlags } from "@/context/FeatureFlagContext";
 import { CaretUpDown, MagnifyingGlass, X } from "@phosphor-icons/react";
 import ChatModelSelection from "./ChatModelSelection";
 import RouterSelection from "./RouterSelection";
@@ -30,15 +31,19 @@ const LLM_DEFAULT = {
   requiredConfig: [],
 };
 
-const LLMS = [LLM_DEFAULT, ...AVAILABLE_LLM_PROVIDERS].filter(
-  (llm) => !DISABLED_PROVIDERS.includes(llm.value)
-);
 
 export default function WorkspaceLLMSelection({
   settings,
   workspace,
   setHasChanges,
 }) {
+  const featureFlags = useFeatureFlags();
+  const providerAllowlist = featureFlags.llmProviders?.allowlist ?? null;
+  const LLMS = [LLM_DEFAULT, ...AVAILABLE_LLM_PROVIDERS].filter((llm) => {
+    if (DISABLED_PROVIDERS.includes(llm.value)) return false;
+    if (providerAllowlist && !providerAllowlist.includes(llm.value)) return false;
+    return true;
+  });
   const [filteredLLMs, setFilteredLLMs] = useState([]);
   const [selectedLLM, setSelectedLLM] = useState(
     workspace?.chatProvider ?? "default"
@@ -69,7 +74,7 @@ export default function WorkspaceLLMSelection({
     );
     setFilteredLLMs(filtered);
   }, [LLMS, searchQuery, selectedLLM]);
-  const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM);
+  const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM) ?? LLM_DEFAULT;
 
   return (
     <div className="border-b border-white/40 pb-8">
