@@ -55,6 +55,7 @@ const {
 } = require("./endpoints/utils/googleAgentSkillEndpoints");
 const { memoryEndpoints } = require("./endpoints/memory");
 const { featureEndpoints } = require("./endpoints/features");
+const { importChatgptEndpoints } = require("./endpoints/importChatgpt");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
 const apiRouter = express.Router();
@@ -115,6 +116,7 @@ outlookAgentEndpoints(apiRouter);
 googleAgentSkillEndpoints(apiRouter);
 memoryEndpoints(apiRouter);
 featureEndpoints(apiRouter);
+importChatgptEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);
 
