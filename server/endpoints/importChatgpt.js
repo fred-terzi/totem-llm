@@ -2,6 +2,11 @@ const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { flexUserRoleValid, ROLES } = require("../utils/middleware/multiUserProtected");
 const { userFromSession, reqBody } = require("../utils/http");
 const { importChatgptExport, getImportPreview } = require("../utils/chatgptImport");
+const path = require("path");
+
+function defaultImportDir() {
+  return path.join(process.env.STORAGE_DIR || path.join(require("os").homedir(), "totem-llm"), "chatgpt-import");
+}
 
 function importChatgptEndpoints(app) {
   if (!app) return;
@@ -15,17 +20,14 @@ function importChatgptEndpoints(app) {
     [validatedRequest, flexUserRoleValid([ROLES.all])],
     async (request, response) => {
       try {
-        const { dirPath } = request.query;
-        if (!dirPath || typeof dirPath !== "string") {
-          return response.status(400).json({ error: "Missing required query param: dirPath" });
-        }
+        const dirPath = request.query.dirPath || defaultImportDir();
 
         const result = await getImportPreview(dirPath);
         if (!result.success) {
-          return response.status(400).json(result);
+          return response.status(400).json({ ...result, dir: defaultImportDir() });
         }
 
-        response.status(200).json(result);
+        response.status(200).json({ ...result, dir: defaultImportDir() });
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();
@@ -46,11 +48,9 @@ function importChatgptEndpoints(app) {
         const user = await userFromSession(request, response);
         const body = reqBody(request);
 
-        if (!body.dirPath || typeof body.dirPath !== "string") {
-          return response.status(400).json({ error: "Missing required field: dirPath" });
-        }
+        const dirPath = body.dirPath || defaultImportDir();
 
-        const result = await importChatgptExport(body.dirPath, user?.id || null);
+        const result = await importChatgptExport(dirPath, user?.id || null);
 
         if (!result.success) {
           return response.status(400).json(result);
