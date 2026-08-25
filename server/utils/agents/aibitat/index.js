@@ -70,10 +70,10 @@ class AIbitat {
    * @returns {number}
    */
   static defaultMaxToolCalls() {
-    const envMaxToolCalls = parseInt(process.env.AGENT_MAX_TOOL_CALLS, 10);
+    const envMaxToolCalls = parseInt(process.env.AGENT_MAX_TOOL_CALLS, 100);
     return !isNaN(envMaxToolCalls) && envMaxToolCalls > 0
       ? envMaxToolCalls
-      : 10;
+      : 100;
   }
 
   /**

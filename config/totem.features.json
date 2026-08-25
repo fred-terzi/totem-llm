@@ -89,7 +89,7 @@
     "npm": {
       "communityHub": false,
       "modelRouter": false,
-      "llmProviders": ["ollama", "openrouter", "lmstudio"],
+      "llmProviders": ["ollama", "openrouter", "lmstudio", "generic-openai", "anthropic", "openai"],
       "brandingWhitelabel": false,
       "filesystemAgent": true,
       "documentationLink": false,
@@ -112,7 +112,7 @@
     "L1": {
       "communityHub": false,
       "modelRouter": true,
-      "llmProviders": ["ollama", "openrouter"],
+      "llmProviders": ["ollama", "openrouter", "lmstudio", "generic-openai", "anthropic", "openai"],
       "brandingWhitelabel": false,
       "filesystemAgent": true,
       "documentationLink": false,
@@ -135,7 +135,7 @@
     "L2": {
       "communityHub": false,
       "modelRouter": true,
-      "llmProviders": ["ollama", "openrouter"],
+      "llmProviders": ["ollama", "openrouter", "lmstudio", "generic-openai", "anthropic", "openai"],
       "brandingWhitelabel": true,
       "filesystemAgent": true,
       "documentationLink": true,
@@ -158,7 +158,7 @@
     "source": {
       "communityHub": true,
       "modelRouter": true,
-      "llmProviders": ["ollama", "openrouter"],
+      "llmProviders": ["ollama", "openrouter", "lmstudio", "generic-openai", "anthropic", "openai"],
       "brandingWhitelabel": true,
       "filesystemAgent": true,
       "documentationLink": true,

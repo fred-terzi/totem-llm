@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import AnythingLLMIcon from "@/media/logo/anything-llm-icon.png";
 import AgentLLMItem from "./AgentLLMItem";
 import { AVAILABLE_LLM_PROVIDERS } from "@/pages/GeneralSettings/LLMPreference";
+import { useFeatureFlags } from "@/context/FeatureFlagContext";
 import { CaretUpDown, Gauge, MagnifyingGlass, X } from "@phosphor-icons/react";
 import AgentModelSelection from "../AgentModelSelection";
 import { useTranslation } from "react-i18next";
@@ -65,18 +66,22 @@ const LLM_DEFAULT = {
   requiredConfig: [],
 };
 
-const LLMS = [
-  LLM_DEFAULT,
-  ...AVAILABLE_LLM_PROVIDERS.filter((llm) =>
-    ENABLED_PROVIDERS.includes(llm.value)
-  ),
-];
 
 export default function AgentLLMSelection({
   settings,
   workspace,
   setHasChanges,
 }) {
+  const featureFlags = useFeatureFlags();
+  const providerAllowlist = featureFlags.llmProviders?.allowlist ?? null;
+  const LLMS = [
+    LLM_DEFAULT,
+    ...AVAILABLE_LLM_PROVIDERS.filter((llm) => {
+      if (!ENABLED_PROVIDERS.includes(llm.value)) return false;
+      if (providerAllowlist && !providerAllowlist.includes(llm.value)) return false;
+      return true;
+    }),
+  ];
   const [filteredLLMs, setFilteredLLMs] = useState([]);
   const [selectedLLM, setSelectedLLM] = useState(
     workspace?.agentProvider ?? "none"
@@ -108,7 +113,7 @@ export default function AgentLLMSelection({
     setFilteredLLMs(filtered);
   }, [searchQuery, selectedLLM]);
 
-  const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM);
+  const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM) ?? LLM_DEFAULT;
   return (
     <div className="border-b border-white/40 pb-8">
       {WARN_PERFORMANCE.includes(selectedLLM) && (
