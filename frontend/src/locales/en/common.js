@@ -95,6 +95,7 @@ const TRANSLATIONS = {
     security: "Security",
     "event-logs": "Event Logs",
     "scheduled-jobs": "Scheduled Jobs",
+    "import-data": "Import Data",
     privacy: "Privacy & Data",
     "ai-providers": "AI Providers",
     "agent-skills": "Agent Skills",
@@ -869,6 +870,16 @@ const TRANSLATIONS = {
           "Render HTML responses in assistant responses.\nThis can result in a much higher fidelity of response quality, but can also lead to potential security risks.",
       },
     },
+  },
+  importData: {
+    title: "Import Data",
+    description:
+      "Bring your ChatGPT history into Totem LLM. Save an exported copy of your conversations, then import it below.",
+    howItWorksTitle: "How it works",
+    stepExport: "Export your data from ChatGPT (Settings → Data controls).",
+    stepSave:
+      "Save the export folder into your Totem LLM storage directory.",
+    stepImport: "Press Import to bring it into a new workspace.",
   },
   api: {
     title: "API Keys",
