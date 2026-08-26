@@ -78,7 +78,6 @@ export default function ImportData() {
 
   useEffect(() => {
     checkPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const dateRange =
@@ -109,14 +108,26 @@ export default function ImportData() {
           </div>
 
           <div className="flex flex-col gap-y-3 mt-6 max-w-xl">
-            {/* How it works */}
+            {/* Step-by-step guide */}
             <p className="text-sm leading-[20px] text-theme-text-primary font-medium">
-              {t("importData.howItWorksTitle", "How it works")}
+              {t(
+                "importData.howItWorksTitle",
+                "How to import your ChatGPT history"
+              )}
             </p>
-            <ol className="list-decimal list-inside text-xs leading-[18px] text-theme-text-secondary space-y-1">
+            <ol className="list-decimal list-inside text-xs leading-[18px] text-theme-text-secondary space-y-2">
               <li>{t("importData.stepExport")}</li>
-              <li>{t("importData.stepSave")}</li>
-              <li>{t("importData.stepImport")}</li>
+              <li>{t("importData.stepDownload")}</li>
+              <li>
+                {t("importData.stepUnzip")}
+                <ul className="list-disc list-inside mt-1 space-y-0.5 pl-4">
+                  <li>{t("importData.unzipMac")}</li>
+                  <li>{t("importData.unzipWin")}</li>
+                  <li>{t("importData.unzipLinux")}</li>
+                </ul>
+              </li>
+              <li>{t("importData.stepMove")}</li>
+              <li>{t("importData.stepPreviewImport")}</li>
             </ol>
 
             {/* Import directory */}
@@ -127,47 +138,96 @@ export default function ImportData() {
               <p className="text-xs leading-[18px] text-theme-text-secondary">
                 {t(
                   "importData.importDirHint",
-                  "Drop or extract your ChatGPT export into this folder, then click Preview:"
+                  "The folder must contain files like conversations-000.json and export_manifest.json. Drop or extract the unzipped export here, then click Preview:"
                 )}
               </p>
-              <code className="rounded-md bg-black/20 light:bg-slate-100 border border-white/10 light:border-slate-300 px-3 py-2 text-xs leading-[18px] break-all">
-                {dir || "…"}
-              </code>
+              <div className="flex items-center gap-2">
+                <code className="rounded-md bg-black/20 light:bg-slate-100 border border-white/10 light:border-slate-300 px-3 py-2 text-xs leading-[18px] break-all flex-1">
+                  {dir || "…"}
+                </code>
+                {dir && (
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard?.writeText(dir)}
+                    className={
+                      "shrink-0 border-none h-[34px] px-3 rounded-md bg-zinc-200 light:bg-slate-800 text-xs font-medium hover:bg-zinc-300 light:hover:bg-slate-700 transition-colors"
+                    }
+                  >
+                    {t("importData.copyPath", "Copy path")}
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Actions */}
             <div className="flex items-center gap-x-3 mt-2">
-              <button type="button" onClick={checkPreview} disabled={checking || importing} className={buttonClass}>
-                {checking ? t("importData.checking", "Checking for an export…") : preview ? t("importData.recheckButton", "Re-check") : t("importData.previewButton", "Preview")}
+              <button
+                type="button"
+                onClick={checkPreview}
+                disabled={checking || importing}
+                className={buttonClass}
+              >
+                {checking
+                  ? t("importData.checking", "Checking for an export…")
+                  : preview
+                    ? t("importData.recheckButton", "Re-check")
+                    : t("importData.previewButton", "Preview")}
               </button>
-              <button type="button" onClick={runImport} disabled={!preview || checking || importing} className={buttonClass}>
-                {importing ? t("importData.importing", "Importing…") : t("importData.importButton", "Import")}
+              <button
+                type="button"
+                onClick={runImport}
+                disabled={!preview || checking || importing}
+                className={buttonClass}
+              >
+                {importing
+                  ? t("importData.importing", "Importing…")
+                  : t("importData.importButton", "Import")}
               </button>
             </div>
 
             {/* Error state */}
             {error && (
-              <div className="mt-4 flex flex-col gap-y-1 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
-                <p className="text-sm font-semibold text-red-400">{t("importData.notFoundTitle", "No export found yet")}</p>
-                <p className="text-xs leading-[18px] text-theme-text-secondary break-all">{error}</p>
+              <div className="mt-4 flex flex-col gap-y-2 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                <p className="text-sm font-semibold text-red-400">
+                  {t("importData.notFoundTitle", "No export found yet")}
+                </p>
+                <p className="text-xs leading-[18px] text-theme-text-secondary break-all">
+                  {error}
+                </p>
+                <div className="mt-2 flex flex-col gap-y-1">
+                  <p className="text-xs font-semibold text-theme-text-primary">
+                    {t(
+                      "importData.troubleTitle",
+                      "Nothing showing up after clicking Preview?"
+                    )}
+                  </p>
+                  <ul className="list-disc list-inside text-xs leading-[18px] text-theme-text-secondary space-y-0.5 pl-2">
+                    <li>{t("importData.troubleHint1")}</li>
+                    <li>{t("importData.troubleHint2")}</li>
+                  </ul>
+                </div>
               </div>
             )}
 
             {/* Preview state */}
             {preview && !summary && (
               <div className="mt-4 flex flex-col gap-y-2 rounded-lg border border-white/10 light:border-slate-300 p-4">
-                <p className="text-sm font-semibold text-theme-text-primary">{t("importData.readyTitle", "Export detected")}</p>
+                <p className="text-sm font-semibold text-theme-text-primary">
+                  {t("importData.readyTitle", "Export detected")}
+                </p>
                 <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs leading-[18px] text-theme-text-secondary">
                   <span>
                     {t("importData.conversationsLabel", "Conversations")}:{" "}
                     <strong>{preview.totalConversations}</strong>
                   </span>
                   <span>
-                    {t("importData.messagesLabel", "Messages")}: <strong>{preview.totalMessages}</strong>
+                    {t("importData.messagesLabel", "Messages")}:{" "}
+                    <strong>{preview.totalMessages}</strong>
                   </span>
                   {dateRange && (
                     <span>
-                      {t("importData.dateRangeLabel", "Date range")}: <strong>{dateRange}</strong>
+                      {t("importData.dateRangeLabel", "Date range")}:{" "}
+                      <strong>{dateRange}</strong>
                     </span>
                   )}
                 </div>
@@ -177,21 +237,30 @@ export default function ImportData() {
             {/* Success state */}
             {summary && (
               <div className="mt-4 flex flex-col gap-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
-                <p className="text-sm font-semibold text-emerald-400">{t("importData.successTitle", "Import complete")}</p>
+                <p className="text-sm font-semibold text-emerald-400">
+                  {t("importData.successTitle", "Import complete")}
+                </p>
                 <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs leading-[18px] text-theme-text-secondary">
                   <span>
-                    {summary.threadsImported} {t("importData.summaryThreads", "threads imported")}
+                    {summary.threadsImported}{" "}
+                    {t("importData.summaryThreads", "threads imported")}
                   </span>
                   <span>
-                    {summary.chatsImported} {t("importData.summaryChats", "chats created")}
+                    {summary.chatsImported}{" "}
+                    {t("importData.summaryChats", "chats created")}
                   </span>
                   <span>
-                    {summary.skipped} {t("importData.summarySkipped", "already skipped")}
+                    {summary.skipped}{" "}
+                    {t("importData.summarySkipped", "already skipped")}
                   </span>
                 </div>
                 {Array.isArray(summary.errors) && summary.errors.length > 0 && (
                   <p className="text-xs text-amber-400">
-                    {t("importData.errorsLabel", "{{count}} conversation(s) failed to import", { count: summary.errors.length })}
+                    {t(
+                      "importData.errorsLabel",
+                      "{{count}} conversation(s) failed to import",
+                      { count: summary.errors.length }
+                    )}
                   </p>
                 )}
               </div>
