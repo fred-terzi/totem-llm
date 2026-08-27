@@ -864,6 +864,22 @@ const System = {
       .catch(() => false);
   },
 
+  /**
+   * Checks if the terminal-access skill is available.
+   * The terminal-access skill is only available in development mode, Docker,
+   * or when explicitly enabled via a feature flag.
+   * @returns {Promise<boolean>}
+   */
+  isTerminalAccessAvailable: async function () {
+    return fetch(`${API_BASE}/agent-skills/terminal-access/is-available`, {
+      method: "GET",
+      headers: baseHeaders(),
+    })
+      .then((res) => res.json())
+      .then((res) => res?.available ?? false)
+      .catch(() => false);
+  },
+
   experimentalFeatures: {
     liveSync: LiveDocumentSync,
     agentPlugins: AgentPlugins,

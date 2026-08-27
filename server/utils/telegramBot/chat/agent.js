@@ -9,10 +9,7 @@ const {
 } = require("../utils");
 const { escapeHTML } = require("../utils/format");
 const { sendVoiceResponse } = require("../utils/media");
-const {
-  STREAM_EDIT_INTERVAL,
-  MAX_MSG_LEN,
-} = require("../constants");
+const { STREAM_EDIT_INTERVAL, MAX_MSG_LEN } = require("../constants");
 
 const THOUGHT_FLUSH_INTERVAL_MS = 1500;
 

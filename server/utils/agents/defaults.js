@@ -9,9 +9,9 @@ const MCPCompatibilityLayer = require("../MCP");
 // This is a list of skills that are built-in and default enabled.
 // These must match the frontend's getDefaultSkills() definitions to keep automatic mode consistent.
 const DEFAULT_SKILLS = [
-  AgentPlugins.memory.name,           // rag-memory
-  AgentPlugins.docSummarizer.name,    // document-summarizer
-  AgentPlugins.webScraping.name       // web-scraping
+  AgentPlugins.memory.name, // rag-memory
+  AgentPlugins.docSummarizer.name, // document-summarizer
+  AgentPlugins.webScraping.name, // web-scraping
 ];
 
 /**
@@ -38,6 +38,11 @@ const SKILL_FILTER_CONFIG = {
     getAvailability: async () =>
       require("./aibitat/plugins/outlook/lib").OutlookBridge.isToolAvailable(),
     disabledSettingKey: "disabled_outlook_skills",
+  },
+  "terminal-access": {
+    getAvailability: () =>
+      require("./aibitat/plugins/terminal-access").terminalManager.isToolAvailable(),
+    disabledSettingKey: "disabled_terminal_access_skills",
   },
 };
 
@@ -185,6 +190,8 @@ async function agentSkillsFromSystemSettings() {
     }
 
     // This is normal single-stage plugin
+    const filterState = skillFilterState[skillName];
+    if (filterState && !filterState.available) continue;
     systemFunctions.push(AgentPlugins[skillName].name);
   }
   return systemFunctions;

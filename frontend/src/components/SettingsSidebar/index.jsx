@@ -462,6 +462,12 @@ const SidebarOptions = ({ user = null, t }) => {
                   },
                 ]
               : []),
+            {
+              btnText: t("settings.import-data", "Import Data"),
+              href: paths.settings.importData(),
+              flex: true,
+              roles: ["admin", "manager", "default"],
+            },
             ...(developerApiEnabled
               ? [
                   {

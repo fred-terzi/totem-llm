@@ -301,7 +301,10 @@ const ScheduledJobRun = {
         },
       });
     } catch (error) {
-      console.error("Failed to count unread scheduled job runs:", error.message);
+      console.error(
+        "Failed to count unread scheduled job runs:",
+        error.message
+      );
       return 0;
     }
   },

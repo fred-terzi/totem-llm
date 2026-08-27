@@ -37,6 +37,7 @@ export default function AgentSkillsTab({
   // All skill state management
   const {
     fileSystemAgentAvailable,
+    terminalAccessAvailable,
     importedSkills,
     flows,
     mcpServers,
@@ -55,6 +56,7 @@ export default function AgentSkillsTab({
 
   const configurableSkills = getConfigurableSkills(t, {
     fileSystemAgentAvailable,
+    terminalAccessAvailable,
   });
 
   // UI state

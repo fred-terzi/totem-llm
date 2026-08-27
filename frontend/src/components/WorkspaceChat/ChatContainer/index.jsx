@@ -6,7 +6,11 @@ import PromptInput, {
   PROMPT_INPUT_ID,
 } from "./PromptInput";
 import Workspace from "@/models/workspace";
-import handleChat, { ABORT_STREAM_EVENT } from "@/utils/chat";
+import handleChat, {
+  ABORT_STREAM_EVENT,
+  lastContextUsageFromHistory,
+} from "@/utils/chat";
+import useContextUsage from "@/hooks/useContextUsage";
 import { isMobile } from "react-device-detect";
 import { SidebarMobileHeader } from "../../Sidebar";
 import { useNavigate } from "react-router-dom";
@@ -50,6 +54,11 @@ export default function ChatContainer({
   const { t } = useTranslation();
   const [loadingResponse, setLoadingResponse] = useState(false);
   const [chatHistory, setChatHistory] = useState(knownHistory);
+  // Seed with the last turn's reported usage from loaded history so refreshing
+  // a thread doesn't show an empty context indicator until a new turn completes.
+  const contextUsage = useContextUsage(
+    lastContextUsageFromHistory(knownHistory)
+  );
   const [socketId, setSocketId] = useState(null);
   const [websocket, setWebsocket] = useState(null);
   const { files, parseAttachments } = useContext(DndUploaderContext);
@@ -407,7 +416,6 @@ export default function ChatContainer({
       window.removeEventListener(ABORT_STREAM_EVENT, abortListener);
       // Leave the socket parked for the next mount of this workspace/thread.
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -498,6 +506,7 @@ export default function ChatContainer({
                     sendCommand={sendCommand}
                     attachments={files}
                     centered={true}
+                    contextUsage={contextUsage}
                   />
                   <QuickActions
                     hasAvailableWorkspace={!!workspace}
@@ -559,6 +568,7 @@ export default function ChatContainer({
                   sendCommand={sendCommand}
                   attachments={files}
                   centered={false}
+                  contextUsage={contextUsage}
                 />
               </div>
             </div>

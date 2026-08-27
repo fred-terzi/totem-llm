@@ -95,6 +95,7 @@ const TRANSLATIONS = {
     security: "Security",
     "event-logs": "Event Logs",
     "scheduled-jobs": "Scheduled Jobs",
+    "import-data": "Import Data",
     privacy: "Privacy & Data",
     "ai-providers": "AI Providers",
     "agent-skills": "Agent Skills",
@@ -219,8 +220,7 @@ const TRANSLATIONS = {
       "desc-start":
         "The number of previous chats that will be included in the response's short-term memory.",
       recommend: "Recommend 20. ",
-      "desc-end":
-        "Set size based on model context length.",
+      "desc-end": "Set size based on model context length.",
     },
     prompt: {
       title: "System Prompt",
@@ -333,6 +333,11 @@ const TRANSLATIONS = {
         title: "SQL Connector",
         description:
           "Enable your agent to be able to leverage SQL to answer you questions by connecting to various SQL database providers.",
+      },
+      terminal: {
+        title: "Terminal Access",
+        description:
+          "Enable your agent to execute shell commands with working directory tracking and safety guards. Useful for running tests, builds, git operations, package installs, and other command-line tasks.",
       },
       filesystem: {
         title: "File System Access",
@@ -790,8 +795,7 @@ const TRANSLATIONS = {
     },
     branding: {
       title: "Branding & Whitelabeling",
-      description:
-        "White-label your Totem LLM instance with custom branding.",
+      description: "White-label your Totem LLM instance with custom branding.",
     },
     chat: {
       title: "Chat",
@@ -869,6 +873,52 @@ const TRANSLATIONS = {
           "Render HTML responses in assistant responses.\nThis can result in a much higher fidelity of response quality, but can also lead to potential security risks.",
       },
     },
+  },
+  importData: {
+    title: "Import Data",
+    description:
+      "Bring your ChatGPT history into Totem LLM. Export a copy of your conversations from chatgpt.com, then follow the steps below.",
+    howItWorksTitle: "How to import your ChatGPT history",
+    stepExport:
+      "In ChatGPT (chatgpt.com), go to Settings → Data controls and click \u201cExport data\u201d.",
+    stepDownload:
+      "ChatGPT will prepare the file and send you a download link. Download it — it's a .zip archive (it can take a few minutes for large accounts).",
+    stepUnzip: "Unzip the archive on the machine where Totem LLM is running:",
+    unzipMac: "macOS: double-click the .zip file.",
+    unzipWin:
+      "Windows: right-click it and choose \u201cExtract All\u2026\u201d",
+    unzipLinux:
+      "Linux: run `unzip ~/Downloads/chatgpt-data.zip` in a terminal.",
+    stepMove:
+      "Move the unzipped files into the folder shown below (the one that contains conversations-000.json, export_manifest.json and friends). You don't need to move the image/audio .dat assets — only the JSON files matter.",
+    stepPreviewImport:
+      "Click Preview to confirm your export was detected, then click Import. Your conversations will appear in a new \u201cChatGPT Import\u201d workspace.",
+    importDirTitle: "Where to put your export",
+    importDirHint:
+      "This folder must contain files like conversations-000.json and export_manifest.json. Move or extract the unzipped export here, then click Preview:",
+    copyPath: "Copy path",
+    previewButton: "Preview",
+    recheckButton: "Re-check",
+    importButton: "Import",
+    checking: "Checking for an export…",
+    importing: "Importing…",
+    notFoundTitle: "No export found yet",
+    notFoundHint:
+      "Nothing to import in the folder above. Move your unzipped ChatGPT export there and click Re-check.",
+    troubleTitle: "Nothing showing up after clicking Preview?",
+    troubleHint1:
+      "Make sure you extracted the .zip first — the folder needs conversations-*.json files directly inside it (a nested extra folder is fine too).",
+    troubleHint2:
+      "The export must be placed on this machine, in exactly the folder shown above. Use Copy path and paste it into your file manager.",
+    readyTitle: "Export detected",
+    conversationsLabel: "Conversations",
+    messagesLabel: "Messages",
+    dateRangeLabel: "Date range",
+    successTitle: "Import complete",
+    summaryThreads: "threads imported",
+    summaryChats: "chats created",
+    summarySkipped: "already skipped",
+    errorsLabel: "{{count}} conversation(s) failed to import",
   },
   api: {
     title: "API Keys",

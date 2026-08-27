@@ -80,11 +80,13 @@ export default function AdminAgents() {
     useState(false);
   const [createFilesAgentAvailable, setCreateFilesAgentAvailable] =
     useState(false);
+  const [terminalAccessAvailable, setTerminalAccessAvailable] = useState(false);
 
   const defaultSkills = getDefaultSkills(t);
   const allConfigurableSkills = getConfigurableSkills(t, {
     fileSystemAgentAvailable,
     createFilesAgentAvailable,
+    terminalAccessAvailable,
   });
   const allAppIntegrationSkills = getAppIntegrationSkills(t);
 
@@ -129,6 +131,7 @@ export default function AdminAgents() {
         flowsRes,
         fsAgentAvailable,
         createFilesAvailable,
+        terminalAccessAvail,
       ] = await Promise.all([
         System.keys(),
         Admin.systemPreferencesByFields([
@@ -140,6 +143,7 @@ export default function AdminAgents() {
         AgentFlows.listFlows(),
         System.isFileSystemAgentAvailable(),
         System.isCreateFilesAgentAvailable(),
+        System.isTerminalAccessAvailable(),
       ]);
 
       const { flows = [] } = flowsRes;
@@ -153,6 +157,7 @@ export default function AdminAgents() {
       setAgentFlows(flows);
       setFileSystemAgentAvailable(fsAgentAvailable);
       setCreateFilesAgentAvailable(createFilesAvailable);
+      setTerminalAccessAvailable(terminalAccessAvail);
       setLoading(false);
     }
     fetchSettings();

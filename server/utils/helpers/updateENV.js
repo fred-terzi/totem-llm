@@ -1396,7 +1396,8 @@ function dumpENV() {
 
   const os = require("os");
   // Write to storage dir for production bootstrap
-  const storageDir = process.env.TOTEM_STORAGE_DIR || path.join(os.homedir(), "totem-llm");
+  const storageDir =
+    process.env.TOTEM_STORAGE_DIR || path.join(os.homedir(), "totem-llm");
   fs.mkdirSync(storageDir, { recursive: true });
   const envPath = path.join(storageDir, ".env");
   fs.writeFileSync(envPath, envResult, { encoding: "utf8", flag: "w" });
@@ -1405,7 +1406,10 @@ function dumpENV() {
   fs.writeFileSync(projectEnvDev, envResult, { encoding: "utf8", flag: "w" });
   // Also write to server/.env — the fallback dotenv loads when NODE_ENV !== development.
   const projectEnvDefault = path.join(__dirname, "..", "..", ".env");
-  fs.writeFileSync(projectEnvDefault, envResult, { encoding: "utf8", flag: "w" });
+  fs.writeFileSync(projectEnvDefault, envResult, {
+    encoding: "utf8",
+    flag: "w",
+  });
   return true;
 }
 

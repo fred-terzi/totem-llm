@@ -119,6 +119,7 @@ model workspaces {
   name                         String
   slug                         String                         @unique
   vectorTag                    String?
+  importedFrom                 String? // Provenance marker: "chatgpt" | null
   createdAt                    DateTime                       @default(now())
   openAiTemp                   Float?
   openAiHistory                Int                            @default(20)
@@ -151,6 +152,7 @@ model workspace_threads {
   id                     Int                      @id @default(autoincrement())
   name                   String
   slug                   String                   @unique
+  externalId             String? // Original ID from import source (e.g. ChatGPT conversation_id) for dedup
   workspace_id           Int
   user_id                Int?
   createdAt              DateTime                 @default(now())

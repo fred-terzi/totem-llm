@@ -9,7 +9,17 @@ if (!process.env.STORAGE_DIR) {
   process.env.STORAGE_DIR = path.join(os.homedir(), "totem-llm");
 }
 // Ensure all required storage subdirectories exist
-for (const sub of ["documents", "vector-cache", "models", "direct-uploads", "generated-files", "comkey", "tmp", "assets"]) {
+for (const sub of [
+  "documents",
+  "vector-cache",
+  "models",
+  "direct-uploads",
+  "generated-files",
+  "comkey",
+  "tmp",
+  "assets",
+  "chatgpt-import",
+]) {
   mkdirSync(path.join(process.env.STORAGE_DIR, sub), { recursive: true });
 }
 
@@ -55,6 +65,7 @@ const {
 } = require("./endpoints/utils/googleAgentSkillEndpoints");
 const { memoryEndpoints } = require("./endpoints/memory");
 const { featureEndpoints } = require("./endpoints/features");
+const { importChatgptEndpoints } = require("./endpoints/importChatgpt");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
 const apiRouter = express.Router();
@@ -115,6 +126,7 @@ outlookAgentEndpoints(apiRouter);
 googleAgentSkillEndpoints(apiRouter);
 memoryEndpoints(apiRouter);
 featureEndpoints(apiRouter);
+importChatgptEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);
 

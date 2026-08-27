@@ -161,7 +161,6 @@ async function chatSync({
       chatMode,
     })
   ) {
-
     // Initialize the EphemeralAgentHandler to handle non-continuous
     // conversations with agents since this is over REST.
     const agentHandler = new EphemeralAgentHandler({
@@ -526,7 +525,6 @@ async function streamChat({
       chatMode,
     })
   ) {
-
     // Initialize the EphemeralAgentHandler to handle non-continuous
     // conversations with agents since this is over REST.
     const agentHandler = new EphemeralAgentHandler({

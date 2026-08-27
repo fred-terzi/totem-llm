@@ -254,7 +254,6 @@ function systemEndpoints(app) {
           return;
         }
 
-
         await EventLogs.logEvent(
           "login_event",
           {
