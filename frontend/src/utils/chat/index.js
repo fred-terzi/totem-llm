@@ -1,6 +1,7 @@
 import { THREAD_RENAME_EVENT } from "@/components/Sidebar/ActiveWorkspaces/ThreadContainer";
 import { emitAssistantMessageCompleteEvent } from "@/components/contexts/TTSProvider";
 import { getAgentSessionActive } from "@/utils/chat/agent";
+import { CONTEXT_USAGE_EVENT } from "@/utils/constants";
 export const ABORT_STREAM_EVENT = "abort-chat-stream";
 
 // Tracks whether the user has seen the "Swapping over to agent chat" banner
@@ -205,6 +206,10 @@ export default function handleChat(
   // Action Handling via special 'action' attribute on response.
   if (action === "reset_chat") setChatHistory([]);
 
+  // Notify the UI of this turn's context usage so displays like the context
+  // window indicator can stay in sync without re-deriving it from history.
+  emitContextUsage(metrics);
+
   // If thread was updated automatically based on chat prompt
   // then we can handle the updating of the thread here.
   if (action === "rename_thread") {
@@ -219,6 +224,46 @@ export default function handleChat(
       );
     }
   }
+}
+
+/**
+ * Emit the context usage of a chat turn (if any) as a DOM event so
+ * components that display context window usage can update without needing
+ * access to the chat history state.
+ * No-op when the provider did not report usable prompt token counts.
+ * @param {{prompt_tokens?: number, total_tokens?: number, model?: string}} metrics - the turn's LLM metrics
+ */
+export function emitContextUsage(metrics = {}) {
+  if (!window) return;
+  const promptTokens = Number(metrics?.prompt_tokens);
+  if (!Number.isFinite(promptTokens) || promptTokens <= 0) return;
+
+  window.dispatchEvent(
+    new CustomEvent(CONTEXT_USAGE_EVENT, {
+      detail: {
+        promptTokens,
+        totalTokens:
+          Number(metrics?.total_tokens) > 0 ? metrics.total_tokens : null,
+        model: metrics?.model ?? null,
+      },
+    })
+  );
+}
+
+/**
+ * Walk a chat history backward to find the most recent assistant turn that
+ * reported prompt token usage. Used to seed context window displays when a
+ * thread or workspace is loaded so refreshing doesn't show stale zero values.
+ * @param {Array<{metrics?: Object}>} history - frontend chat history entries
+ * @returns {{promptTokens: number, model: string|null}|null}
+ */
+export function lastContextUsageFromHistory(history = []) {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const promptTokens = Number(history?.[i]?.metrics?.prompt_tokens);
+    if (Number.isFinite(promptTokens) && promptTokens > 0)
+      return { promptTokens, model: history[i].metrics.model ?? null };
+  }
+  return null;
 }
 
 export function getWorkspaceSystemPrompt(workspace) {

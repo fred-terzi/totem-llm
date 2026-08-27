@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import Appearance from "@/models/appearance";
 import usePromptInputStorage from "@/hooks/usePromptInputStorage";
 import ToolsMenu, { TOOLS_MENU_KEYBOARD_EVENT } from "./ToolsMenu";
+import ContextUsageIndicator from "./ContextUsageIndicator";
 import { useSearchParams } from "react-router-dom";
 import { useIsAgentSessionActive } from "@/utils/chat/agent";
 import useFeatureFlag from "@/hooks/useFeatureFlag";
@@ -33,6 +34,9 @@ const MAX_EDIT_STACK_SIZE = 100;
  * @param {boolean} [props.centered] - renders in centered layout mode (for home page)
  * @param {string} [props.workspaceSlug] - workspace slug for home page context
  * @param {string} [props.threadSlug] - thread slug for home page context
+ * @param {{promptTokens: number, model?: string|null}|null} [props.contextUsage]
+ *   - most recent turn's prompt token usage (from `useContextUsage`); combined
+ *   with `workspace.contextWindow` to render the context window indicator.
  */
 export default function PromptInput({
   workspace = {},
@@ -43,6 +47,7 @@ export default function PromptInput({
   centered = false,
   workspaceSlug = null,
   threadSlug = null,
+  contextUsage = null,
 }) {
   const { t } = useTranslation();
   const { showAgentCommand = true } = workspace ?? {};
@@ -394,6 +399,11 @@ export default function PromptInput({
                   />
                 </div>
                 <div className="flex gap-x-2 items-center">
+                  <ContextUsageIndicator
+                    used={contextUsage?.promptTokens ?? null}
+                    max={workspace.contextWindow ?? null}
+                    model={contextUsage?.model ?? null}
+                  />
                   <SpeechToText sendCommand={sendCommand} />
                   {isStreaming ? (
                     <StopGenerationButton />
