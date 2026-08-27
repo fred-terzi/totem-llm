@@ -73,7 +73,8 @@ function getMainPath(conversation) {
     .map((id) => {
       const node = mapping[id];
       if (!node || !node.message) return null;
-      if (SKIP_CONTENT_TYPES.has(node.message.content?.content_type)) return null;
+      if (SKIP_CONTENT_TYPES.has(node.message.content?.content_type))
+        return null;
       return node;
     })
     .filter(Boolean);
@@ -87,7 +88,8 @@ function getMainPath(conversation) {
  */
 function extractText(message) {
   const content = message.content;
-  if (!content || !Array.isArray(content.parts)) return { text: "", hasAttachments: false };
+  if (!content || !Array.isArray(content.parts))
+    return { text: "", hasAttachments: false };
 
   let text = "";
   let hasAttachments = false;
@@ -140,7 +142,9 @@ function parseConversation(conversation) {
   return {
     conversationId: conversation.conversation_id || conversation.id,
     title: conversation.title || null,
-    createTime: conversation.create_time ? new Date(conversation.create_time * 1000) : null,
+    createTime: conversation.create_time
+      ? new Date(conversation.create_time * 1000)
+      : null,
     messages,
   };
 }

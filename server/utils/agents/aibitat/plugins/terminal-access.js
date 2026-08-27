@@ -23,20 +23,20 @@ const os = require("os");
 // ---------------------------------------------------------------------------
 const DANGEROUS_PATTERNS = [
   /rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\/|\~|\$HOME)/i, // rm -rf / ~ $HOME
-  /rm\s+-rf\s+["']?\/(?!tmp\b|var\b|dev\b)/i,                            // rm -rf on root-ish paths (allow /tmp, /var, /dev for cleanup)
-  /\bdd\s+of=\/dev\//i,                                                  // dd writing to block devices
-  /\bmkfs(\.[a-z]+)?\s/i,                                               // mkfs, mkfs.ext4, etc.
-  /:\(\)\{.*\|\s*&.*\};:/,                                              // fork bomb (literal pipes escaped via char class)
-  /\bchmod\s+(-[a-zA-Z]+\s+)*777\s+(\/|~)/i,                           // chmod -R 777 / or ~
-  />\s*\/dev\/sd[a-z]/i,                                                 // redirect to block device
-  /\b(shutdown|reboot|halt|poweroff)\b/i,                               // system shutdown commands
-  /\binit\s+[06]\b/,                                                    // init 0 (halt) / init 6 (reboot)
-  /\bsystemctl\s+(stop|disable|mask)\s+ssh/i,                           // disable SSH
-  /\bltinit\s+[06]\b/,                                                  // SysV equivalent
-  /\btelinit\s+[06]\b/,                                                 // SysV alt
-  /:\(\)\{.*\};:|fork\s*bomb/i,                                         // fork bomb variants
-  /\bwipefs\b|\bblkdiscard\b|\bsgdisk\b.*--zap/i,                      // disk wiping tools
-  />\s*\/dev\/nvme/,                                                    // write to NVMe device
+  /rm\s+-rf\s+["']?\/(?!tmp\b|var\b|dev\b)/i, // rm -rf on root-ish paths (allow /tmp, /var, /dev for cleanup)
+  /\bdd\s+of=\/dev\//i, // dd writing to block devices
+  /\bmkfs(\.[a-z]+)?\s/i, // mkfs, mkfs.ext4, etc.
+  /:\(\)\{.*\|\s*&.*\};:/, // fork bomb (literal pipes escaped via char class)
+  /\bchmod\s+(-[a-zA-Z]+\s+)*777\s+(\/|~)/i, // chmod -R 777 / or ~
+  />\s*\/dev\/sd[a-z]/i, // redirect to block device
+  /\b(shutdown|reboot|halt|poweroff)\b/i, // system shutdown commands
+  /\binit\s+[06]\b/, // init 0 (halt) / init 6 (reboot)
+  /\bsystemctl\s+(stop|disable|mask)\s+ssh/i, // disable SSH
+  /\bltinit\s+[06]\b/, // SysV equivalent
+  /\btelinit\s+[06]\b/, // SysV alt
+  /:\(\)\{.*\};:|fork\s*bomb/i, // fork bomb variants
+  /\bwipefs\b|\bblkdiscard\b|\bsgdisk\b.*--zap/i, // disk wiping tools
+  />\s*\/dev\/nvme/, // write to NVMe device
 ];
 
 // ---------------------------------------------------------------------------
@@ -47,7 +47,7 @@ const DEFAULT_TIMEOUT_SECONDS = parseInt(
   10
 );
 const MAX_TIMEOUT_SECONDS = 600; // hard cap: 10 minutes
-const MAX_OUTPUT_CHARS = 10000;  // truncation threshold for LLM context
+const MAX_OUTPUT_CHARS = 10000; // truncation threshold for LLM context
 const MAX_COMMAND_LENGTH = 4096; // reject absurdly long commands
 
 // ---------------------------------------------------------------------------
@@ -73,7 +73,9 @@ class TerminalManager {
     if (process.env.ANYTHING_LLM_RUNTIME === "docker") return true;
 
     try {
-      const { resolveFeatures } = require("../../../../../../totem.features.cjs");
+      const {
+        resolveFeatures,
+      } = require("../../../../../../totem.features.cjs");
       const features = resolveFeatures();
       return features?.terminalAccess?.enabled === true;
     } catch {
@@ -88,7 +90,8 @@ class TerminalManager {
   async init(workDir = null) {
     if (this.#initialized) return this.workDir;
 
-    const raw = workDir || process.env.TERMINAL_DEFAULT_WORK_DIR || os.homedir();
+    const raw =
+      workDir || process.env.TERMINAL_DEFAULT_WORK_DIR || os.homedir();
     const resolved = path.resolve(this.#expandHome(raw));
 
     try {
@@ -135,9 +138,7 @@ class TerminalManager {
         throw new Error(`"${resolved}" is not a directory`);
       }
     } catch (e) {
-      throw new Error(
-        `Cannot change to "${target}": ${e.message}`
-      );
+      throw new Error(`Cannot change to "${target}": ${e.message}`);
     }
 
     this.#workDir = resolved;
@@ -378,7 +379,8 @@ const terminalAccess = {
               await terminalManager.init();
 
               const timeoutSecs = Math.min(
-                Number.isFinite(DEFAULT_TIMEOUT_SECONDS) && DEFAULT_TIMEOUT_SECONDS > 0
+                Number.isFinite(DEFAULT_TIMEOUT_SECONDS) &&
+                  DEFAULT_TIMEOUT_SECONDS > 0
                   ? DEFAULT_TIMEOUT_SECONDS
                   : 300,
                 MAX_TIMEOUT_SECONDS
@@ -394,11 +396,12 @@ const terminalAccess = {
                   `${caller} WARNING: dangerous pattern detected. Requesting user approval...`
                 );
 
-                const { approved, message } = await this.super.requestToolApproval({
-                  skillName: "terminal-access",
-                  payload: trimmed,
-                  description: `Execute shell command in ${terminalManager.workDir}: "${trimmed}"`,
-                });
+                const { approved, message } =
+                  await this.super.requestToolApproval({
+                    skillName: "terminal-access",
+                    payload: trimmed,
+                    description: `Execute shell command in ${terminalManager.workDir}: "${trimmed}"`,
+                  });
 
                 if (!approved) {
                   return JSON.stringify({
@@ -462,7 +465,6 @@ const terminalAccess = {
                 elapsedSeconds: result.elapsedSeconds,
                 output: result.output,
               });
-
             } catch (e) {
               this.super.handlerProps.log(
                 `${caller}: terminal-access error: ${e.message}`

@@ -42,7 +42,9 @@ class FilesystemManager {
     if (process.env.NODE_ENV === "development") return true;
     if (process.env.ANYTHING_LLM_RUNTIME === "docker") return true;
     try {
-      const { resolveFeatures } = require("../../../../../../totem.features.cjs");
+      const {
+        resolveFeatures,
+      } = require("../../../../../../totem.features.cjs");
       return resolveFeatures()?.filesystemAgent?.enabled === true;
     } catch {
       return false;

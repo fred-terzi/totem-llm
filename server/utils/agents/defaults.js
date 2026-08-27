@@ -9,9 +9,9 @@ const MCPCompatibilityLayer = require("../MCP");
 // This is a list of skills that are built-in and default enabled.
 // These must match the frontend's getDefaultSkills() definitions to keep automatic mode consistent.
 const DEFAULT_SKILLS = [
-  AgentPlugins.memory.name,           // rag-memory
-  AgentPlugins.docSummarizer.name,    // document-summarizer
-  AgentPlugins.webScraping.name       // web-scraping
+  AgentPlugins.memory.name, // rag-memory
+  AgentPlugins.docSummarizer.name, // document-summarizer
+  AgentPlugins.webScraping.name, // web-scraping
 ];
 
 /**

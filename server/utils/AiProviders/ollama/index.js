@@ -51,7 +51,8 @@ class OllamaAILLM {
     const normalizedValue = String(value).trim().toLowerCase();
     if (!normalizedValue) return "";
     if (normalizedValue === "false" || normalizedValue === "off") return false;
-    if (["low", "medium", "high"].includes(normalizedValue)) return normalizedValue;
+    if (["low", "medium", "high"].includes(normalizedValue))
+      return normalizedValue;
     return normalizedValue;
   }
 

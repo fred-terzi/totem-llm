@@ -20,7 +20,9 @@ function resolveExportDir(dirPath) {
 
   // Check if this directory directly contains conversation files
   const entries = fs.readdirSync(dirPath);
-  const hasConversations = entries.some((f) => /^conversations-\d{3}\.json$/.test(f));
+  const hasConversations = entries.some((f) =>
+    /^conversations-\d{3}\.json$/.test(f)
+  );
 
   if (hasConversations) {
     return { dir: dirPath, error: null };
@@ -62,7 +64,10 @@ function validateExportDirectory(dirPath) {
 
   // Verify the first conversation file is valid JSON
   try {
-    const raw = fs.readFileSync(path.join(resolvedDir, "conversations-000.json"), "utf-8");
+    const raw = fs.readFileSync(
+      path.join(resolvedDir, "conversations-000.json"),
+      "utf-8"
+    );
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
       return `conversations-000.json does not contain a JSON array.`;
@@ -114,9 +119,15 @@ function getExportMetadata(dirPath) {
     fileCount: conversationFiles.length,
     totalConversations,
     totalMessages,
-    earliestDate: earliestDate ? new Date(earliestDate * 1000).toISOString() : null,
+    earliestDate: earliestDate
+      ? new Date(earliestDate * 1000).toISOString()
+      : null,
     latestDate: latestDate ? new Date(latestDate * 1000).toISOString() : null,
   };
 }
 
-module.exports = { validateExportDirectory, getExportMetadata, resolveExportDir };
+module.exports = {
+  validateExportDirectory,
+  getExportMetadata,
+  resolveExportDir,
+};

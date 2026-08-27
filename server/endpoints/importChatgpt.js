@@ -1,11 +1,20 @@
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
-const { flexUserRoleValid, ROLES } = require("../utils/middleware/multiUserProtected");
+const {
+  flexUserRoleValid,
+  ROLES,
+} = require("../utils/middleware/multiUserProtected");
 const { userFromSession, reqBody } = require("../utils/http");
-const { importChatgptExport, getImportPreview } = require("../utils/chatgptImport");
+const {
+  importChatgptExport,
+  getImportPreview,
+} = require("../utils/chatgptImport");
 const path = require("path");
 
 function defaultImportDir() {
-  return path.join(process.env.STORAGE_DIR || path.join(require("os").homedir(), "totem-llm"), "chatgpt-import");
+  return path.join(
+    process.env.STORAGE_DIR || path.join(require("os").homedir(), "totem-llm"),
+    "chatgpt-import"
+  );
 }
 
 function importChatgptEndpoints(app) {
@@ -24,7 +33,9 @@ function importChatgptEndpoints(app) {
 
         const result = await getImportPreview(dirPath);
         if (!result.success) {
-          return response.status(400).json({ ...result, dir: defaultImportDir() });
+          return response
+            .status(400)
+            .json({ ...result, dir: defaultImportDir() });
         }
 
         response.status(200).json({ ...result, dir: defaultImportDir() });

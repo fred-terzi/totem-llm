@@ -185,7 +185,6 @@ class FlowExecutor {
    * @param {Object} aibitat - The aibitat instance from the agent handler
    */
   async executeFlow(flow, initialVariables = {}, aibitat) {
-
     // Initialize variables with both initial values and any passed-in values
     this.variables = {
       ...(

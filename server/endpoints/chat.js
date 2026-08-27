@@ -163,7 +163,6 @@ function chatEndpoints(app) {
           },
         });
 
-
         await EventLogs.logEvent(
           "sent_chat",
           {

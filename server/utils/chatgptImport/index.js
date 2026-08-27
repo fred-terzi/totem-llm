@@ -39,7 +39,12 @@ async function importChatgptExport(dirPath, userId = null) {
   if (parsed.conversations.length === 0) {
     return {
       success: true,
-      summary: { workspacesCreated: 0, threadsImported: 0, chatsImported: 0, skipped: 0 },
+      summary: {
+        workspacesCreated: 0,
+        threadsImported: 0,
+        chatsImported: 0,
+        skipped: 0,
+      },
     };
   }
 
@@ -52,7 +57,10 @@ async function importChatgptExport(dirPath, userId = null) {
     });
 
     if (result.message) {
-      return { success: false, error: `Failed to create workspace: ${result.message}` };
+      return {
+        success: false,
+        error: `Failed to create workspace: ${result.message}`,
+      };
     }
     workspace = result.workspace;
 
@@ -85,7 +93,9 @@ async function importChatgptExport(dirPath, userId = null) {
     let threadName = conv.title;
     if (!threadName || !threadName.trim()) {
       const firstUserMsg = conv.messages.find((m) => m.role === "user");
-      threadName = firstUserMsg ? firstUserMsg.text.slice(0, 22).trim() : "Imported Thread";
+      threadName = firstUserMsg
+        ? firstUserMsg.text.slice(0, 22).trim()
+        : "Imported Thread";
     }
 
     // Use conversation ID as slug for determinism and uniqueness

@@ -9,7 +9,17 @@ if (!process.env.STORAGE_DIR) {
   process.env.STORAGE_DIR = path.join(os.homedir(), "totem-llm");
 }
 // Ensure all required storage subdirectories exist
-for (const sub of ["documents", "vector-cache", "models", "direct-uploads", "generated-files", "comkey", "tmp", "assets", "chatgpt-import"]) {
+for (const sub of [
+  "documents",
+  "vector-cache",
+  "models",
+  "direct-uploads",
+  "generated-files",
+  "comkey",
+  "tmp",
+  "assets",
+  "chatgpt-import",
+]) {
   mkdirSync(path.join(process.env.STORAGE_DIR, sub), { recursive: true });
 }
 
