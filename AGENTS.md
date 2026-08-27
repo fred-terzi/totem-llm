@@ -133,7 +133,7 @@ All routes mounted under `/api`. Each file exports a function that appends to th
 | `modelRouter.js` | Router + rule CRUD | Model routing configuration |
 | `embedManagement.js` | Widget config CRUD + token generation | Embedding widget setup |
 | `agentWebsocket.js` | WebSocket upgrade for agent sessions | Real-time agent tool execution stream |
-| `agentSkillWhitelist.js` | Plugin enable/disable per user | Agent permission control |
+| `agentSkillWhitelist.js` | Plugin enable/disable per user + terminal-access availability check (`GET /agent-skills/terminal-access/is-available`) | Agent permission control |
 | `agentFileServer.js` | Serve/receive files from agents | File I/O during agent sessions |
 | `experimental.js` | Live sync, imported agent plugins | Experimental/alpha features |
 | `invite.js` | Invite codes for multi-user join flows | User onboarding |
@@ -176,7 +176,8 @@ A workspace is a self-contained knowledge base with:
 
 ### Agent System (`server/utils/agents/aibitat/`)
 The "Aibitat" framework — a custom multi-step agent execution engine:
-- **Plugin system** (~35+ plugins): filesystem, gmail, google-calendar, outlook, sql-agent, web-scraping, create-files (docx/pptx/xlsx/pdf), websocket, memory, router-classifier, summarize, CLI, rechart
+- **Plugin system** (~35+ plugins): filesystem, terminal-access, gmail, google-calendar, outlook, sql-agent, web-scraping, create-files (docx/pptx/xlsx/pdf), websocket, memory, router-classifier, summarize, CLI, rechart
+- **Terminal access** (`plugins/terminal-access.js`): shell execution with layered safety — availability gate (dev/Docker/feature flag) → admin opt-in via `default_agent_skills` → per-command approval for dangerous patterns (`rm -rf /`, `dd of=/dev/…`, fork bombs, etc.) → process-group timeout kill + output truncation.
 - **Provider abstraction**: Each LLM provider has an agent wrapper in `aibitat/providers/` that handles tool-calling format adaptation (Anthropic uses tool_use, OpenAI uses function_calling patterns)
 - **Execution**: Agent session runs server-side, streams tool calls + results via WebSocket to frontend for real-time visibility
 - **Agent invocation lifecycle**: `workspace_agent_invocations` tracks each run; closed flag marks completion
