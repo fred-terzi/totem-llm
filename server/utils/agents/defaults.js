@@ -39,6 +39,11 @@ const SKILL_FILTER_CONFIG = {
       require("./aibitat/plugins/outlook/lib").OutlookBridge.isToolAvailable(),
     disabledSettingKey: "disabled_outlook_skills",
   },
+  "terminal-access": {
+    getAvailability: () =>
+      require("./aibitat/plugins/terminal-access").terminalManager.isToolAvailable(),
+    disabledSettingKey: "disabled_terminal_access_skills",
+  },
 };
 
 const USER_AGENT = {
@@ -185,6 +190,8 @@ async function agentSkillsFromSystemSettings() {
     }
 
     // This is normal single-stage plugin
+    const filterState = skillFilterState[skillName];
+    if (filterState && !filterState.available) continue;
     systemFunctions.push(AgentPlugins[skillName].name);
   }
   return systemFunctions;
