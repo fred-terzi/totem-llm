@@ -455,6 +455,15 @@ const router = createBrowserRouter([
           };
         },
       },
+      {
+        path: "/settings/import-data",
+        lazy: async () => {
+          const { default: ImportData } = await import(
+            "@/pages/GeneralSettings/ImportData"
+          );
+          return { element: <PrivateRoute Component={ImportData} /> };
+        },
+      },
       // Catch-all route for 404s
       {
         path: "*",

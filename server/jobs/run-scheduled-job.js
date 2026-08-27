@@ -8,9 +8,7 @@ const {
 } = require("./helpers/scheduled-job-helper.js");
 const { ScheduledJob } = require("../models/scheduledJob.js");
 const { ScheduledJobRun } = require("../models/scheduledJobRun.js");
-const {
-  SystemPromptVariables,
-} = require("../models/systemPromptVariables.js");
+const { SystemPromptVariables } = require("../models/systemPromptVariables.js");
 
 /** Status of the scheduled job run @type {'success' | 'failed' | 'timed_out' | 'not_found' | 'killed' | undefined} */
 let status;
@@ -63,11 +61,12 @@ process.on("message", async (payload) => {
 
     const { EphemeralAgentHandler } = require("../utils/agents/ephemeral.js");
     // Expand system prompt variables in the job prompt (same as workspace system prompts)
-    const expandedPrompt = await SystemPromptVariables.expandSystemPromptVariables(
-      job.prompt,
-      null,
-      null
-    );
+    const expandedPrompt =
+      await SystemPromptVariables.expandSystemPromptVariables(
+        job.prompt,
+        null,
+        null
+      );
     const agentHandler = await new EphemeralAgentHandler({
       uuid: uuidv4(),
       prompt: expandedPrompt,

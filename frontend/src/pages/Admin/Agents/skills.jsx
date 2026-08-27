@@ -14,6 +14,7 @@ import {
   ChartBar,
   FolderOpen,
   FilePlus,
+  Terminal,
 } from "@phosphor-icons/react";
 import RAGImage from "@/media/agents/rag-memory.png";
 import SummarizeImage from "@/media/agents/view-summarize.png";
@@ -54,7 +55,11 @@ export const getDefaultSkills = (t) => ({
 
 export const getConfigurableSkills = (
   t,
-  { fileSystemAgentAvailable = true, createFilesAgentAvailable = true } = {}
+  {
+    fileSystemAgentAvailable = true,
+    createFilesAgentAvailable = true,
+    terminalAccessAvailable = true,
+  } = {}
 ) => ({
   ...(fileSystemAgentAvailable && {
     "filesystem-agent": {
@@ -96,6 +101,15 @@ export const getConfigurableSkills = (
     component: AgentSQLConnectorSelection,
     skill: "sql-agent",
   },
+  ...(terminalAccessAvailable && {
+    "terminal-access": {
+      title: t("agent.skill.terminal.title"),
+      description: t("agent.skill.terminal.description"),
+      component: GenericSkillPanel,
+      skill: "terminal-access",
+      icon: Terminal,
+    },
+  }),
 });
 
 export const getAppIntegrationSkills = (t) => ({

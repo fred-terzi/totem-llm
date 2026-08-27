@@ -45,6 +45,26 @@ function agentSkillWhitelistEndpoints(app) {
     }
   );
 
+  app.get(
+    "/agent-skills/terminal-access/is-available",
+    [validatedRequest],
+    async (_request, response) => {
+      try {
+        const {
+          terminalManager,
+        } = require("../utils/agents/aibitat/plugins/terminal-access");
+        return response
+          .status(200)
+          .json({ available: terminalManager.isToolAvailable() });
+      } catch (e) {
+        console.error(e);
+        return response
+          .status(500)
+          .json({ available: false, error: e.message });
+      }
+    }
+  );
+
   app.post(
     "/agent-skills/whitelist/add",
     [validatedRequest, flexUserRoleValid(ROLES.all)],

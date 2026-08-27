@@ -81,7 +81,10 @@ class MetaGenerator {
       { tag: "meta", props: { property: "og:type", content: "website" } },
       {
         tag: "meta",
-        props: { property: "og:url", content: "https://github.com/fred-terzi/totem-llm" },
+        props: {
+          property: "og:url",
+          content: "https://github.com/fred-terzi/totem-llm",
+        },
       },
       {
         tag: "meta",
@@ -113,7 +116,10 @@ class MetaGenerator {
       },
       {
         tag: "meta",
-        props: { property: "twitter:url", content: "https://github.com/fred-terzi/totem-llm" },
+        props: {
+          property: "twitter:url",
+          content: "https://github.com/fred-terzi/totem-llm",
+        },
       },
       {
         tag: "meta",
@@ -227,9 +233,7 @@ class MetaGenerator {
           return {
             tag: "title",
             props: null,
-            content:
-              customTitle ??
-              "Totem LLM | Your private AI",
+            content: customTitle ?? "Totem LLM | Your private AI",
           };
         }
         // Override meta title
@@ -238,9 +242,7 @@ class MetaGenerator {
             tag: "meta",
             props: {
               name: "title",
-              content:
-                customTitle ??
-                "Totem LLM | Your private AI",
+              content: customTitle ?? "Totem LLM | Your private AI",
             },
           };
         }
@@ -250,9 +252,7 @@ class MetaGenerator {
             tag: "meta",
             props: {
               property: "og:title",
-              content:
-                customTitle ??
-                "Totem LLM | Your private AI",
+              content: customTitle ?? "Totem LLM | Your private AI",
             },
           };
         }
@@ -262,9 +262,7 @@ class MetaGenerator {
             tag: "meta",
             props: {
               property: "twitter:title",
-              content:
-                customTitle ??
-                "Totem LLM | Your private AI",
+              content: customTitle ?? "Totem LLM | Your private AI",
             },
           };
         }

@@ -95,8 +95,7 @@ const Workspace = {
       return n;
     },
     chatMode: (value) => {
-      if (!value || !Workspace.VALID_CHAT_MODES.includes(value))
-        return "chat";
+      if (!value || !Workspace.VALID_CHAT_MODES.includes(value)) return "chat";
       return value;
     },
     chatProvider: (value) => {

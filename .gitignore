@@ -19,3 +19,5 @@ coverage
 server/__tests__/utils/agents/models
 
 .anythingLLM_archive
+
+server/storage/chatgpt_import_example

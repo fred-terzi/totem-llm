@@ -26,7 +26,7 @@
 |---------|-------------|
 | **Privacy First** | All data stays on your machine. |
 | **Consumer Hardware** | Optimized for consumer-grade devices. |
-| **Local & Cloud** | Choose local models via Ollama or use cloud providers (OpenRouter). |
+| **Local & Cloud** | Bring your own LLM provider — local runtimes or cloud APIs. |
 | **Easy Setup** | One-line install with automatic dependency resolution. |
 
 ---
@@ -39,11 +39,11 @@ While local AI is the core focus, Totem LLM supports both local and cloud-based 
 
 ## ⚙️ Requirements
 
-Before installing Totem LLM, first install the below prerequisites:
+Before installing Totem LLM, you only need:
 
 - **[Node.js](https://nodejs.org/)** v18 or later
-- **[Ollama](https://ollama.com/)** (recommended for local models) *OR*
-- **[OpenRouter](https://openrouter.ai/)** API key (for cloud models)
+
+You'll also want an LLM provider to talk to — see [LLM Providers](#-llm-providers) below. Local runtimes like Ollama are free and keep everything on your machine; cloud providers only require an API key. You can configure a provider after first launch from the settings UI if you prefer not to set one up beforehand.
 
 ---
 
@@ -65,32 +65,35 @@ This automatically downloads Totem LLM and installs all dependencies (server, co
 totem-llm start
 ```
 
-**First run:** Creates `~/totem-llm/` directory, migrates database, then launches services.
+**First run:** Creates `~/totem-llm/` directory, generates secure configuration, migrates database, then launches services.
 
 **Access:** Open [http://localhost:8686](http://localhost:8686) in your browser.
 
-### 3️⃣ Optional: Install as Desktop App
+### 3️⃣ Connect an LLM Provider
+
+Once the app is running, select a provider from **Settings → LLM Providers**. Supported providers include local runtimes (Ollama, LM Studio) and cloud APIs (OpenRouter, OpenAI, Anthropic), as well as any endpoint that speaks the generic OpenAI format. See [LLM Providers](#-llm-providers).
+
+### 4️⃣ Optional: Install as Desktop App
 
 In the browser UI, click the **install icon** in the address bar (or use your browser menu) to add Totem LLM to your desktop. This is a link to the web GUI, but with its own window and taskbar/dock icon for easy access.
 
-## Model Selection
+---
 
-Once first installed, we recommend using qwen3.5:2b as a base model. This is a small model that is excellent to start with. It can help answer questions and provide guidance on if you can use a bigger model. 
+## 🧠 LLM Providers
 
-If qwen3.5:2b does not work well on your machine, it is recommened to move to OpenRouter. While a smaller model will work, there is a performance drop off.
+Totem LLM works with a range of local and cloud LLM providers, configurable from the settings UI:
 
-### Windows and Linux Model Download:
+| Provider | Type | Notes |
+|----------|------|-------|
+| **[Ollama](https://ollama.com/)** | Local | Run open-weight models on your own machine. Pull any model you like (e.g., `ollama pull llama3.2`). |
+| **[LM Studio](https://lmstudio.ai/)** | Local | GUI for running local models; exposes an OpenAI-compatible server that Totem connects to. |
+| **[OpenRouter](https://openrouter.ai/)** | Cloud | Single API key for access to hundreds of hosted models. |
+| **[OpenAI](https://platform.openai.com/)** | Cloud | GPT-4o, o-series, and other OpenAI models via your own API key. |
+| **[Anthropic](https://www.anthropic.com/)** | Cloud | Claude models via your own API key. |
+| **Generic OpenAI format** | Any | Point at any endpoint that implements the OpenAI chat completions API — self-hosted gateways, proxies, or other providers. |
 
-```
-ollama pull qwen3.5:2b
-```
+More providers are available in the settings UI if you need them. Local options keep all processing (and your data) on your machine; cloud options trade privacy for access to larger models.
 
-### Mac Model Download:
-```
-ollama pull qwen3.5:2b-mlx
-```
-
-> Note: The `-mlx` suffix indicates the version optimized for Apple Silicon (M1/M2) Macs. If you are on an Intel-based Mac, use the standard `qwen3.5:2b` model.
 ---
 
 ## 📚 Command Reference
@@ -100,6 +103,7 @@ totem-llm start                 # Start server and collector
 totem-llm --no-collector       # Start server only (skip document ingestion)
 totem-llm --port=8080          # Use custom server port
 totem-llm setup                # Run first-time setup without starting
+totem-llm --version            # Print version and exit
 totem-llm --help               # Show all available commands
 ```
 
@@ -110,6 +114,8 @@ totem-llm --help               # Show all available commands
 export TOTEM_STORAGE_DIR=/your/custom/path
 totem-llm start
 ```
+
+All configuration (secrets, ports, settings) is stored in `~/totem-llm/.env` and can be edited there.
 
 ---
 
@@ -139,4 +145,3 @@ Totem LLM is released under the **MIT License** — see [LICENSE](LICENSE) for d
 - 💬 **Discussions** → [GitHub Discussions](https://github.com/fred-terzi/totem-llm/discussions)
 
 ---
-

@@ -799,12 +799,12 @@ function workspaceEndpoints(app) {
         // Get threadId we are branching from if that request body is sent
         // and is a valid thread slug.
         const threadId = !!threadSlug
-          ? (
+          ? ((
               await WorkspaceThread.get({
                 slug: String(threadSlug),
                 workspace_id: workspace.id,
               })
-            )?.id ?? null
+            )?.id ?? null)
           : null;
         const chatsToFork = await WorkspaceChats.where(
           {

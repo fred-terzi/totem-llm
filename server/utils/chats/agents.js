@@ -6,8 +6,6 @@ const { writeResponseChunk } = require("../helpers/chat/responses");
 const { Workspace } = require("../../models/workspace");
 const { resolveFeatures } = require("../../../totem.features.cjs");
 
-
-
 /**
  * In-memory cache for attachments associated with agent invocations.
  * Attachments are stored here when grepAgents creates an invocation,

@@ -83,6 +83,10 @@
     "mcpServers": {
       "label": "MCP Servers",
       "tier": "L2"
+    },
+    "terminalAccess": {
+      "label": "Terminal Access",
+      "tier": "L2"
     }
   },
   "PROFILES": {
@@ -107,7 +111,8 @@
       "transcription": true,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": true
+      "mcpServers": true,
+      "terminalAccess": false
     },
     "L1": {
       "communityHub": false,
@@ -130,7 +135,8 @@
       "transcription": false,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": true
+      "mcpServers": true,
+      "terminalAccess": false
     },
     "L2": {
       "communityHub": false,
@@ -153,7 +159,8 @@
       "transcription": false,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": true
+      "mcpServers": true,
+      "terminalAccess": false
     },
     "source": {
       "communityHub": true,
@@ -176,7 +183,8 @@
       "transcription": false,
       "appIntegrations": false,
       "agentFlows": false,
-      "mcpServers": true
+      "mcpServers": true,
+      "terminalAccess": true
     }
   }
 }

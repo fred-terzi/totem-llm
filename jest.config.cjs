@@ -12,6 +12,14 @@ module.exports = {
     "<rootDir>/collector/node_modules",
   ],
 
+  // Frontend uses the `@/` alias for its src directory (Vite alias)
+  moduleNameMapper: {
+    "^@/(.*)$": "<rootDir>/frontend/src/$1",
+  },
+
+  // Frontend source files use .jsx alongside .js/.ts
+  moduleFileExtensions: ["js", "jsx", "ts", "tsx", "json", "node"],
+
   collectCoverage: true,
   coverageDirectory: "<rootDir>/coverage",
   coveragePathIgnorePatterns: [

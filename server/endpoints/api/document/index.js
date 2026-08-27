@@ -1195,7 +1195,6 @@ function apiDocumentEndpoints(app) {
         );
         response.setHeader("Content-Length", fileData.buffer.length);
         response.send(fileData.buffer);
-
       } catch (error) {
         console.error(
           "[document/generated-files] Download error:",
