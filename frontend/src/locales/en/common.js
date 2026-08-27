@@ -334,6 +334,11 @@ const TRANSLATIONS = {
         description:
           "Enable your agent to be able to leverage SQL to answer you questions by connecting to various SQL database providers.",
       },
+      terminal: {
+        title: "Terminal Access",
+        description:
+          "Enable your agent to execute shell commands with working directory tracking and safety guards. Useful for running tests, builds, git operations, package installs, and other command-line tasks.",
+      },
       filesystem: {
         title: "File System Access",
         description:
