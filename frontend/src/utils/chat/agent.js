@@ -32,6 +32,35 @@ const AGENT_PASSIVE_STREAM_EVENTS = [
 ];
 
 /**
+ * Extract cumulative prompt token usage from an agent WS event payload.
+ * Returns the total prompt tokens for this step (if available), or null.
+ */
+export function getAgentStepTokenUsage(data) {
+  // Check direct payload first (dedicated tokenUsage field)
+  if (data?.tokenUsage?.promptTokens != null) {
+    return { ...data.tokenUsage };
+  }
+
+  // Check nested in reportStreamEvent content
+  const content = data?.content;
+  if (content?.tokenUsage?.promptTokens != null) {
+    return { ...content.tokenUsage };
+  }
+  return null;
+}
+
+/**
+ * Emit cumulative token usage from agent step events so the context
+ * window bar can update in real-time during execution.
+ */
+export function emitAgentTokenUsage(data) {
+  const usage = getAgentStepTokenUsage(data);
+  if (usage && usage.promptTokens > 0) {
+    window.dispatchEvent(new CustomEvent("agent-token-usage", { detail: usage }));
+  }
+}
+
+/**
  * Determine what the chat loading state should become for an incoming agent
  * socket event: `true` while the agent is actively working (stop generation
  * button shows), `false` when it has paused to wait on the user (send button
@@ -116,6 +145,9 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
   }
 
   if (data.type === "reportStreamEvent") {
+    // Emit token usage data for the context window bar to consume live
+    emitAgentTokenUsage(data);
+
     // Enable agent streaming for the next message so we can handle streaming or non-streaming responses
     // If we get this message we know the provider supports agentic streaming
     socket.supportsAgentStreaming = true;
@@ -309,6 +341,12 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
         },
       ];
     });
+  }
+
+  // Handle dedicated tokenUsage events sent outside of reportStreamEvent
+  if (data.type === "agentStepUsage" || (data && getAgentStepTokenUsage(data))) {
+    emitAgentTokenUsage(data);
+    return;
   }
 
   if (data.type === "wssFailure") {

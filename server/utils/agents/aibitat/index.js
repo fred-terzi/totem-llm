@@ -245,6 +245,24 @@ class AIbitat {
   }
 
   /**
+   * Report the current context (prompt) token usage to the frontend.
+   * Emitted after every LLM step so UI displays like the context window
+   * indicator can track growth in real time as tool results are appended
+   * to the conversation.
+   */
+  emitContextUsage() {
+    const metrics = this.providerInstance?.getUsage();
+    if (!metrics) return;
+    const promptTokens = Number(metrics.prompt_tokens);
+    if (!Number.isFinite(promptTokens) || promptTokens <= 0) return;
+    this.socket?.send?.("reportStreamEvent", {
+      type: "usageMetrics",
+      uuid: `${v4()}:context_usage_step`,
+      metrics,
+    });
+  }
+
+  /**
    * Add an attachment (image) from a tool to be injected into the conversation.
    * The attachment will be added as a user message so the model can "see" it.
    * This leverages existing provider attachment handling for user messages.
@@ -1078,6 +1096,9 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         });
       }
 
+      // Report context usage so the UI can track token growth after this step.
+      this.emitContextUsage();
+
       return await this.handleAsyncExecution(
         newMessages,
         reachedToolLimit ? [] : functions,
@@ -1220,6 +1241,9 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
           attachments: toolAttachments,
         });
       }
+
+      // Report context usage so the UI can track token growth after this step.
+      this.emitContextUsage();
 
       return await this.handleExecution(
         newMessages,
