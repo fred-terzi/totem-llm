@@ -33,19 +33,34 @@ const AGENT_PASSIVE_STREAM_EVENTS = [
 
 /**
  * Extract cumulative prompt token usage from an agent WS event payload.
- * Returns the total prompt tokens for this step (if available), or null.
+ *
+ * Handles the shapes the server may send:
+ *   - `data.tokenUsage.promptTokens` — dedicated camelCase field
+ *   - `content.metrics.prompt_tokens` — aibitat reportStreamEvent metrics shape
+ *   - `data.metrics.prompt_tokens` — top-level metrics fallback
+ *
+ * Returns `{ promptTokens, model }` or null when no usable data is present.
  */
 export function getAgentStepTokenUsage(data) {
-  // Check direct payload first (dedicated tokenUsage field)
-  if (data?.tokenUsage?.promptTokens != null) {
-    return { ...data.tokenUsage };
+  // Shape 1: dedicated camelCase tokenUsage field (direct or nested)
+  const direct = data?.tokenUsage;
+  if (direct?.promptTokens != null && Number(direct.promptTokens) > 0) {
+    return {
+      promptTokens: Number(direct.promptTokens),
+      model: direct.model ?? null,
+    };
   }
 
-  // Check nested in reportStreamEvent content
-  const content = data?.content;
-  if (content?.tokenUsage?.promptTokens != null) {
-    return { ...content.tokenUsage };
+  // Shape 2 & 3: snake_case metrics object — reportStreamEvent nests it under
+  // content; also check top-level in case a future event carries it directly.
+  const metrics = data?.content?.metrics ?? data?.metrics;
+  if (metrics) {
+    const promptTokens = Number(metrics.prompt_tokens);
+    if (Number.isFinite(promptTokens) && promptTokens > 0) {
+      return { promptTokens, model: metrics.model ?? null };
+    }
   }
+
   return null;
 }
 
