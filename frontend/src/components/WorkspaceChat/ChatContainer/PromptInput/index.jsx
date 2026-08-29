@@ -401,7 +401,7 @@ export default function PromptInput({
                 <div className="flex gap-x-2 items-center">
                   <ContextUsageIndicator
                     used={contextUsage?.promptTokens ?? null}
-                    max={workspace.contextWindow ?? null}
+                    max={workspace?.contextWindow ?? null}
                     model={contextUsage?.model ?? null}
                   />
                   <SpeechToText sendCommand={sendCommand} />
