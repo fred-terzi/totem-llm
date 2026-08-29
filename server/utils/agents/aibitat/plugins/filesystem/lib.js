@@ -33,18 +33,23 @@ class FilesystemManager {
 
   /**
    * Checks if the filesystem tool is available.
-   * Available when running in development mode, in a Docker container,
-   * or when the `filesystemAgent` feature flag is enabled for the current
+   * Available when running in a Docker container, or when the
+   * `filesystemAgent` feature flag is enabled for the current
    * TOTEM_BUILD_PROFILE (e.g. the npm package running locally).
    * @returns {boolean} True if the tool is available
    */
   isToolAvailable() {
-    if (process.env.NODE_ENV === "development") return true;
     if (process.env.ANYTHING_LLM_RUNTIME === "docker") return true;
     try {
-      const {
-        resolveFeatures,
-      } = require("../../../../../../totem.features.cjs");
+      // Resolve relative to this file: filesystem -> plugins -> aibitat -> agents
+      // -> utils -> server -> package root (where totem.features.cjs lives). A
+      // bare relative path would resolve against the repo's *parent* directory.
+      const { resolveFeatures } = require(
+        require("path").resolve(
+          __dirname,
+          "../../../../../../totem.features.cjs"
+        )
+      );
       return resolveFeatures()?.filesystemAgent?.enabled === true;
     } catch {
       return false;

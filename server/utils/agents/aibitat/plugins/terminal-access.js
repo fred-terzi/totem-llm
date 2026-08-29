@@ -7,8 +7,9 @@ const os = require("os");
  * Terminal Access — built-in agent skill for executing shell commands.
  *
  * Security model (layered):
- *   1. Availability gate: tool only registers if enabled in this runtime
- *      (dev mode, Docker, or explicit feature flag).
+ *   1. Availability gate: tool only registers when the terminalAccess
+ *      feature flag is enabled for the current TOTEM_BUILD_PROFILE
+ *      (or in a Docker container).
  *   2. Admin opt-in: must be present in `default_agent_skills` SystemSettings
  *      to appear for users.
  *   3. Per-command approval: commands matching dangerous patterns trigger
@@ -62,20 +63,22 @@ class TerminalManager {
   #initialized = false;
 
   /**
-   * Availability gate — mirrors FilesystemManager.isToolAvailable().
-   * Returns true when the terminal tool should be registered:
-   *   - Development mode (NODE_ENV=development)
-   *   - Docker runtime (ANYTHING_LLM_RUNTIME=docker)
-   *   - Explicit feature flag enabled in totem.features.json
+   * Checks if the terminal tool is available.
+   * Available when running in a Docker container, or when the
+   * `terminalAccess` feature flag is enabled for the current
+   * TOTEM_BUILD_PROFILE (e.g. the source profile running locally).
+   * @returns {boolean} True if the tool is available
    */
   isToolAvailable() {
-    if (process.env.NODE_ENV === "development") return true;
     if (process.env.ANYTHING_LLM_RUNTIME === "docker") return true;
 
     try {
-      const {
-        resolveFeatures,
-      } = require("../../../../../../totem.features.cjs");
+      // Resolve relative to this file: plugins -> aibitat -> agents -> utils
+      // -> server -> package root (where totem.features.cjs lives). A bare
+      // relative path would resolve against the repo's *parent* directory.
+      const { resolveFeatures } = require(
+        require("path").resolve(__dirname, "../../../../../totem.features.cjs")
+      );
       const features = resolveFeatures();
       return features?.terminalAccess?.enabled === true;
     } catch {

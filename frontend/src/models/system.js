@@ -866,8 +866,9 @@ const System = {
 
   /**
    * Checks if the terminal-access skill is available.
-   * The terminal-access skill is only available in development mode, Docker,
-   * or when explicitly enabled via a feature flag.
+   * The terminal-access skill is only available in a Docker container,
+   * or when the terminalAccess feature flag is enabled for the current
+   * TOTEM_BUILD_PROFILE.
    * @returns {Promise<boolean>}
    */
   isTerminalAccessAvailable: async function () {

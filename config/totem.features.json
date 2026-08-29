@@ -112,7 +112,7 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": false
+      "terminalAccess": true
     },
     "L1": {
       "communityHub": false,
@@ -136,7 +136,7 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": false
+      "terminalAccess": true
     },
     "L2": {
       "communityHub": false,
@@ -160,7 +160,7 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": false
+      "terminalAccess": true
     },
     "source": {
       "communityHub": true,
