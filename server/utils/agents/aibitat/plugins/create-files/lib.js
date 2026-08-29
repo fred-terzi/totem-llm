@@ -60,7 +60,15 @@ class CreateFilesManager {
   isToolAvailable() {
     if (process.env.ANYTHING_LLM_RUNTIME === "docker") return true;
     try {
-      const { resolveFeatures } = require("../../../../../../totem.features.cjs");
+      // Resolve relative to this file: create-files -> plugins -> aibitat -> agents
+      // -> utils -> server -> package root (where totem.features.cjs lives). A
+      // bare relative path would resolve against the repo's *parent* directory.
+      const { resolveFeatures } = require(
+        require("path").resolve(
+          __dirname,
+          "../../../../../../totem.features.cjs"
+        )
+      );
       return resolveFeatures()?.filesystemAgent?.enabled === true;
     } catch {
       return false;
