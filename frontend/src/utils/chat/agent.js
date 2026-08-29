@@ -32,6 +32,50 @@ const AGENT_PASSIVE_STREAM_EVENTS = [
 ];
 
 /**
+ * Extract cumulative prompt token usage from an agent WS event payload.
+ *
+ * Handles the shapes the server may send:
+ *   - `data.tokenUsage.promptTokens` — dedicated camelCase field
+ *   - `content.metrics.prompt_tokens` — aibitat reportStreamEvent metrics shape
+ *   - `data.metrics.prompt_tokens` — top-level metrics fallback
+ *
+ * Returns `{ promptTokens, model }` or null when no usable data is present.
+ */
+export function getAgentStepTokenUsage(data) {
+  // Shape 1: dedicated camelCase tokenUsage field (direct or nested)
+  const direct = data?.tokenUsage;
+  if (direct?.promptTokens != null && Number(direct.promptTokens) > 0) {
+    return {
+      promptTokens: Number(direct.promptTokens),
+      model: direct.model ?? null,
+    };
+  }
+
+  // Shape 2 & 3: snake_case metrics object — reportStreamEvent nests it under
+  // content; also check top-level in case a future event carries it directly.
+  const metrics = data?.content?.metrics ?? data?.metrics;
+  if (metrics) {
+    const promptTokens = Number(metrics.prompt_tokens);
+    if (Number.isFinite(promptTokens) && promptTokens > 0) {
+      return { promptTokens, model: metrics.model ?? null };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Emit cumulative token usage from agent step events so the context
+ * window bar can update in real-time during execution.
+ */
+export function emitAgentTokenUsage(data) {
+  const usage = getAgentStepTokenUsage(data);
+  if (usage && usage.promptTokens > 0) {
+    window.dispatchEvent(new CustomEvent("agent-token-usage", { detail: usage }));
+  }
+}
+
+/**
  * Determine what the chat loading state should become for an incoming agent
  * socket event: `true` while the agent is actively working (stop generation
  * button shows), `false` when it has paused to wait on the user (send button
@@ -116,6 +160,9 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
   }
 
   if (data.type === "reportStreamEvent") {
+    // Emit token usage data for the context window bar to consume live
+    emitAgentTokenUsage(data);
+
     // Enable agent streaming for the next message so we can handle streaming or non-streaming responses
     // If we get this message we know the provider supports agentic streaming
     socket.supportsAgentStreaming = true;
@@ -309,6 +356,12 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
         },
       ];
     });
+  }
+
+  // Handle dedicated tokenUsage events sent outside of reportStreamEvent
+  if (data.type === "agentStepUsage" || (data && getAgentStepTokenUsage(data))) {
+    emitAgentTokenUsage(data);
+    return;
   }
 
   if (data.type === "wssFailure") {

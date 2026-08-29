@@ -2,6 +2,82 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.16.1](https://github.com/fred-terzi//compare/v0.12.0...v0.16.1) (2026-08-29)
+
+
+### Features
+
+* 0.15 ([04122b3](https://github.com/fred-terzi//commit/04122b36137c724a62cce0a1634d789fc4e22921))
+* add default MCP server configuration for Coingecko in hypervisor ([15572da](https://github.com/fred-terzi//commit/15572dad135bc2faa62afd98a733317b5552093d))
+* Add MCP servers - pump to 0.14.0 ([2f43f08](https://github.com/fred-terzi//commit/2f43f08f1ee660a4597c5d4257ecd716f0217fc7))
+* **agents:** add terminal-access as built-in agent tool ([1415e99](https://github.com/fred-terzi//commit/1415e99856ee768081e8c9a76442ed685dc6c37c))
+* **agents:** surface terminal-access skill availability in admin and tools menu ([91b54b1](https://github.com/fred-terzi//commit/91b54b1a196bfd8970fd7c925579ea40ecbdcd26))
+* change config for lm studio and mcp servers ([32524ce](https://github.com/fred-terzi//commit/32524ce9e9608dbe82abe6d864ca2d8ee111e44d))
+* Change max number of tool calls from 10 to 100 for agentic use. ([15754a0](https://github.com/fred-terzi//commit/15754a0ab5910429c6a5b0baf8b9cd29fc2d8358))
+* **chat:** track context window usage live during agent execution ([e501408](https://github.com/fred-terzi//commit/e5014084d9cdf98c738d5b83d6c1329443bf7090))
+* **config:** add openai, anthropic, lmstudio, and generic-openai providers ([5ce381c](https://github.com/fred-terzi//commit/5ce381ca4ef25c5c32e414c24ce10dce5b403710))
+* enable MCP Servers feature flag and update visibility logic in AdminAgents ([e2eec55](https://github.com/fred-terzi//commit/e2eec556419d65eca29560b98c6b29953abc3b06))
+* **frontend:** add context window usage indicator to chat prompt bar ([7162e8f](https://github.com/fred-terzi//commit/7162e8f5c37786018ff55d60dc44aa97da16ecbe))
+* **import:** add ChatGPT conversation history import endpoint ([965b6f0](https://github.com/fred-terzi//commit/965b6f0ae58c648c2e8f4e7d6194731d5dcc1841))
+* **import:** add Import Data tab under Tools in settings ([1185103](https://github.com/fred-terzi//commit/11851034cb9a103946aa01c8dad1665de5207e27))
+* **import:** detailed step-by-step instructions on Import Data page ([c314336](https://github.com/fred-terzi//commit/c3143360144eea1d0253f046166b0687b89c4551))
+* **import:** wire Import Data page to existing chatgpt import endpoints ([2ac8347](https://github.com/fred-terzi//commit/2ac8347a19010ce1ddf86772b4350ba58c9654a4))
+* increase max turn limit from 45 - 1000 ([d69b275](https://github.com/fred-terzi//commit/d69b2759fe8871f0f744efa7d67749e0b10c098a))
+* pump to 0.13.0 ([c43b2f3](https://github.com/fred-terzi//commit/c43b2f3d77cff70d8a5dda9ca739f1f622bf79b4))
+* **tg:** enhance group mention detection by using live bot username ([358e879](https://github.com/fred-terzi//commit/358e87996fe1b5f8c556ba0e566c8294df887940))
+* **tg:** migrate streaming to Telegram draft messaging API ([37e543b](https://github.com/fred-terzi//commit/37e543b1e1ec4eb26e97adef11d582207c5dba09))
+* **tg:** multi-user mode support with group chat linking ([2e13d89](https://github.com/fred-terzi//commit/2e13d893cb32aa6f73890a120851cc1fc3446e06))
+* **tg:** support command mention suffix in /link for Telegram bot ([ebd2bd9](https://github.com/fred-terzi//commit/ebd2bd96b9d62740058f9ef6a6bd0402dd77cbac))
+* v0.13.2 ([8a56ad0](https://github.com/fred-terzi//commit/8a56ad0d90b6963f18fd889593947632771fe6b4))
+
+
+### Bug Fixes
+
+* add optional chaining to workspace contextWindow ([80a8838](https://github.com/fred-terzi//commit/80a88388af62496acec0ecea6abd358e4d188ea5))
+* **agent:** handle aibitat snake_case token usage shape in WS events ([3a7f243](https://github.com/fred-terzi//commit/3a7f243dfa7652e60a0602320b969932f05db1e2))
+* **agent:** remove cursor character from response messages ([a3cb563](https://github.com/fred-terzi//commit/a3cb56364910bac08600073bc5f836a75a3451bd))
+* change thread id in telegram groups when bot is not mentioned. ([e9016d9](https://github.com/fred-terzi//commit/e9016d9b47bb494667ba4ab711637357f390c43e))
+* combine closing thought tag with first content chunk to prevent stray tags ([ca301d4](https://github.com/fred-terzi//commit/ca301d4b86f66860913288f97ae331ef7a3cacf7))
+* cursor agent logic in telegram. pump 0.13.1 ([a0c8168](https://github.com/fred-terzi//commit/a0c8168d435453609b297a72fceea80af0eef254))
+* **env:** write to all dotenv paths and preserve DATABASE_URL on config save ([c1958f9](https://github.com/fred-terzi//commit/c1958f913b355a1d2664bd41d2053f67d538b100))
+* **frontend:** filter workspace LLM provider lists by feature flag allowlist ([4395223](https://github.com/fred-terzi//commit/4395223d143c964d2830529151f0a192752a179a))
+* openrouter Premature close on mac. 0.13.2 ([0b49bc7](https://github.com/fred-terzi//commit/0b49bc73b930ac0f21b01f24cf9151df847a7f5d))
+* **openRouter:** handle premature stream closure gracefully ([51047b2](https://github.com/fred-terzi//commit/51047b22a193d668805bbf19c5c425d68c51e737))
+* **telegram:** remove single-user mode guards for multi-workspace support ([2f600f8](https://github.com/fred-terzi//commit/2f600f8d611815d1cb2f3fcafaac35d806773bd1))
+* **tg-bot:** allow linked groups through keyboard callback authentication ([9b9897b](https://github.com/fred-terzi//commit/9b9897bd4c8d40d591816610900d64d3c6cb0dd2)), closes [#15](https://github.com/fred-terzi//issues/15)
+* **tg-bot:** respond to users replying to bot messages in linked groups ([38c3ef9](https://github.com/fred-terzi//commit/38c3ef9edcfd094d4f399009aa36d44ac7e56884))
+* **tg-bot:** restrict slash commands to approved users in linked groups ([624cbf0](https://github.com/fred-terzi//commit/624cbf09200e3898aebeef3cce59ef5ce93dd60e))
+* **tg:** archive non-directed group messages to thread history without responding ([6d21f93](https://github.com/fred-terzi//commit/6d21f935fe8e7fde5825265d84adef165a84503b))
+* **tg:** drain splitOnOverflow at stream end to prevent duplicate segments ([276d601](https://github.com/fred-terzi//commit/276d60101bdae0498eb3ab241aad815fc8e98065))
+* **tg:** prevent splitOnOverflow re-entrancy causing duplicate segments ([96602f5](https://github.com/fred-terzi//commit/96602f59fa60e8d22948efed1569ed325631d98b))
+* **tg:** replace private #log access in static bootIfActive method ([d67cc2b](https://github.com/fred-terzi//commit/d67cc2b971f37477d2ca393d2e04543d1b741013))
+* v0.13.4 ([52ac14b](https://github.com/fred-terzi//commit/52ac14b353c9fe3de8c0c781ca41331d35a53fca))
+
+
+### Styles
+
+* **lint:** apply lint fixes across server endpoints and utils ([1d55229](https://github.com/fred-terzi//commit/1d552295d90d08130b87a561e40ba9aae64c72aa))
+
+
+### Documentation Changes
+
+* add branching strategy and versioning/release process to AGENTS.md ([3abdefb](https://github.com/fred-terzi//commit/3abdefbb07110f0173fdee4940b596e2b192121a))
+* **agents:** document terminal-access skill and availability endpoint ([ab4689b](https://github.com/fred-terzi//commit/ab4689bf9e8f67eb5f86c6c6975b53a19a345ea9))
+* **README:** remove model recommendation, list supported LLM providers ([1a4deef](https://github.com/fred-terzi//commit/1a4deef86b177441220a4f11fdeccababa46117e))
+
+
+### Miscellaneous Chores
+
+* add data folder to git igore ([ac86222](https://github.com/fred-terzi//commit/ac86222a5c9207e751b6cf95b48d5820985d40f2))
+* bump version to 0.12.1 ([181c5eb](https://github.com/fred-terzi//commit/181c5eb7aa77cc8c5de77fc2f863b604338dd701))
+* bump version to 0.16.0 ([82a890c](https://github.com/fred-terzi//commit/82a890c0014e0ffed46de33249b59d3688f7c76c))
+* bump version to 0.16.1 ([73e1adf](https://github.com/fred-terzi//commit/73e1adfc485f14fe50b9bfcfe3f58653ff5e0eea))
+* **github:** rebrand bug template to TotemLLM, remove upstream CI workflows ([c7179bc](https://github.com/fred-terzi//commit/c7179bca3e6910930b3575a9872f75cbe61d1ab5))
+* **github:** rebrand feature template to TotemLLM ([d832cb6](https://github.com/fred-terzi//commit/d832cb6629dfd5864db9e599385367090807a981))
+* **release:** v0.12.1 [skip ci] ([7fae845](https://github.com/fred-terzi//commit/7fae845bd7d5f5595055ee70ccf62ab2bbcbe01a))
+* **release:** v0.16.0 [skip ci] ([5249318](https://github.com/fred-terzi//commit/52493180e93ef9896e97c9e5603c258639316c43))
+* remove obsolete issue template config ([5a2e8e2](https://github.com/fred-terzi//commit/5a2e8e2f9a08b6a3579b96b75462e8dfad1de813))
+
 ## [0.16.0](https://github.com/fred-terzi//compare/v0.12.0...v0.16.0) (2026-08-27)
 
 

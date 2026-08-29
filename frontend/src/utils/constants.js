@@ -16,6 +16,12 @@ export const PENDING_HOME_MESSAGE = "anythingllm_pending_home_message";
 // Detail: { promptTokens, totalTokens?, model? }
 export const CONTEXT_USAGE_EVENT = "context-usage-update";
 
+// Emitted during agent execution so the context window bar updates live.
+// Dispatched via `emitAgentTokenUsage` from agent.js — same shape as
+// CONTEXT_USAGE_EVENT detail.
+// (Defined here for a single import point; tests mock this string directly.)
+export const AGENT_TOKEN_USAGE_EVENT = "agent-token-usage";
+
 export const APPEARANCE_SETTINGS = "anythingllm_appearance_settings";
 
 export const OLLAMA_COMMON_URLS = [
