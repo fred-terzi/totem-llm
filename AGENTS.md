@@ -274,8 +274,7 @@ Auto-generated on server start/restart by nodemon event hook in `server/nodemon.
 
 ## Versioning & Release Process
 
-- Use the **npm-versioning skill** (`software-development/npm-versioning/SKILL.md`) for every release.
-- The workflow: `standard-version --dry-run` → confirm bump type → `npx standard-version` → push tags → open/merge PR.
+- Use the **npm-versioning skill** (`~/.hermes/skills/software-development/npm-versioning/SKILL.md`) for every release. It is the single source of truth for the standard-version workflow, semver bump rules, and tag/publish steps.
 - Never skip the version bump when creating a PR that reaches main-totem.
 
 ## Node Version
