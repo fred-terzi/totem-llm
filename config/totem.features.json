@@ -112,7 +112,7 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": false
+      "terminalAccess": true
     },
     "L1": {
       "communityHub": false,

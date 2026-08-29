@@ -52,11 +52,19 @@ class CreateFilesManager {
 
   /**
    * Checks if file creation tools are available.
+   * Available when running in a Docker container, or when the
+   * `filesystemAgent` feature flag is enabled for the current
+   * TOTEM_BUILD_PROFILE (e.g. the npm package running locally).
    * @returns {boolean} True if tools are available
    */
   isToolAvailable() {
-    if (process.env.NODE_ENV === "development") return true;
-    return process.env.ANYTHING_LLM_RUNTIME === "docker";
+    if (process.env.ANYTHING_LLM_RUNTIME === "docker") return true;
+    try {
+      const { resolveFeatures } = require("../../../../../../totem.features.cjs");
+      return resolveFeatures()?.filesystemAgent?.enabled === true;
+    } catch {
+      return false;
+    }
   }
 
   /**

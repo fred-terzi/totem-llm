@@ -244,8 +244,15 @@ ESLint uses **hermes-eslint** parser with Flow annotations (`ftFlow` plugin). Ru
 Vite (`frontend/vite.config.js`). Feature flags are baked in at build time from `config/totem.features.json` via the `TOTEM_BUILD_PROFILE` env var. The public API is exposed as `__TOTEM_FEATURES__` constant. Change profile with:
 
 ```bash
-TOTEM_BUILD_PROFILE=source yarn dev:frontend
+TOTEM_BUILD_PROFILE=source yarn dev:all
 ```
+
+> **Gotcha:** Without `TOTEM_BUILD_PROFILE`, the frontend bundle is built with the
+> `npm` profile (feature flags are baked in at build time). Profile-specific UI —
+> e.g. Terminal Access (`terminalAccess`) and Agent Mode, both L2 features enabled only in
+> the `source` profile — will not appear even if the server would report them available.
+> When switching profiles between dev sessions, restart Vite (and rebuild for prod) so
+> `__TOTEM_FEATURES__` is regenerated.
 
 Frontend entry point alias: `@` → `frontend/src/`. Build output goes to `server/public/` with fixed filenames `index.js` and `index.css` (required for SSE in prod).
 
@@ -304,5 +311,6 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 
 Built-time feature flags loaded from:
 - **Dev**: `config/totem.features.json` via Vite env var `TOTEM_BUILD_PROFILE`
+  (defaults to the `npm` profile — use `source` for full-feature local dev)
 - **Prod**: Copied to `~/totem-llm/.totem.features.json` during setup
 - Exposed as global `__TOTEM_FEATURES__` in frontend
