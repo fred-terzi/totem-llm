@@ -1,7 +1,7 @@
 [submodule "browser-extension"]
 	path = browser-extension
-	url = https://github.com/fred-terzi/totem-llm-extension.git
+	url = https://github.com/fred-terzi/anythingllm-extension.git
 [submodule "embed"]
 	path = embed
-	url = https://github.com/fred-terzi/totem-embed.git
+	url = https://github.com/fred-terzi/anythingllm-embed.git
 	branch = main
