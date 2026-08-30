@@ -1389,6 +1389,17 @@ function dumpENV() {
     frozenEnvs[key] = process.env?.[key] || null;
   }
 
+  // Rewrite the default SQLite database filename to the Totem LLM name so a
+  // pre-existing AnythingLLM install (anythingllm.db) is not orphaned when its
+  // saved DATABASE_URL is restored. Only touches file: URLs under STORAGE_DIR.
+  if (frozenEnvs.DATABASE_URL && frozenEnvs.STORAGE_DIR) {
+    const re = /^file:(.*?)[/\\]storage[\\/]anythingllm\.db$/;
+    const m = String(frozenEnvs.DATABASE_URL).match(re);
+    if (m) {
+      frozenEnvs.DATABASE_URL = `file:${m[1]}/storage/totem-llm.db`;
+    }
+  }
+
   var envResult = `# Auto-dump ENV from system call on ${new Date().toTimeString()}\n`;
   envResult += Object.entries(frozenEnvs)
     .map(([key, value]) => `${key}='${sanitizeValue(value)}'`)

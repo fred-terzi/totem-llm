@@ -150,7 +150,7 @@ container rebuilds or pulls from Docker Hub.
 ## Build locally from source _not recommended for casual use_
 
 - `git clone` this repo and `cd anything-llm` to get to the root directory.
-- `touch server/storage/anythingllm.db` to create empty SQLite DB file.
+- `touch server/storage/totem-llm.db` to create empty SQLite DB file. (Upgrading from AnythingLLM? An existing `server/storage/anythingllm.db` is auto-renamed on first start — see `lib/migrateDbName.js`)
 - `cd docker/`
 - `cp .env.example .env` **you must do this before building**
 - `docker-compose up -d --build` to build the image - this will take a few moments.
