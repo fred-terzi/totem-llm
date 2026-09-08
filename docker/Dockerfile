@@ -1,182 +1,162 @@
-# Setup base image
-FROM ubuntu:noble-20251013 AS base
+# ──────────────────────────────────────────────────────────────────────────────
+# Totem LLM — GPU-Aware Docker Image (npm package + Ollama)
+#
+# Strategy:
+#   • Install the published `totem-llm` npm package (frontend pre-built,
+#     all production deps, Prisma client generated via postinstall)
+#   • Install Ollama (bundles CUDA runtime — auto-detects GPU at runtime)
+#   • Pre-pull the smallest LLM + embedding model into the image
+#   • At startup, detect GPU VRAM and pull/select the optimal model
+#
+# Primary target: Runpod GPU pod templates.
+# Also works: local `docker run --gpus all`, any OCI registry.
+#
+# GPU detection at runtime (run.sh):
+#   - Uses nvidia-smi if available (Runpod base images include it)
+#   - Falls back to /dev/nvidia* device check
+#   - Falls back to CPU mode (smallest model, low context)
+#
+# Override model selection (optional):
+#   TOTEM_MODEL_OVERRIDE    — force a specific Ollama model tag
+#   TOTEM_CONTEXT_OVERRIDE  — force a specific context window (tokens)
+# ──────────────────────────────────────────────────────────────────────────────
 
-# Build arguments
-ARG ARG_UID=1000
-ARG ARG_GID=1000
+FROM node:18-slim AS base
 
-FROM base AS build-arm64
-RUN echo "Preparing build of AnythingLLM image for arm64 architecture"
+# ── Build args ───────────────────────────────────────────────────────────────
+ARG TOTEM_LLM_VERSION=latest
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# ── System dependencies ──────────────────────────────────────────────────────
+# Required for: Chromium/Puppeteer (web-scraping), ffmpeg (audio),
+#              tesseract (OCR), basic utilities.
+#
+# NOTE: nvidia-smi is NOT installed here. It is injected at runtime by the
+# NVIDIA container runtime (--gpus all / Runpod GPU allocation). The run.sh
+# script gracefully falls back to CPU mode if nvidia-smi is unavailable.
+RUN apt-get update --yes && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        curl ca-certificates gnupg zstd \
+        libasound2 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 \
+        libexpat1 libfontconfig1 libglib2.0-0 libgtk-3-0 libnspr4 \
+        libpango-1.0-0 libx11-6 libx11-xcb1 libxcb1 libxcomposite1 \
+        libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 \
+        libxrender1 libxss1 libxtst6 libnss3 \
+        xdg-utils git ffmpeg tesseract-ocr \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install system dependencies
-# hadolint ignore=DL3008,DL3013
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-        unzip curl gnupg libgfortran5 libgbm1 tzdata netcat-openbsd \
-        libasound2t64 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 \
-        libgcc1 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libx11-6 libx11-xcb1 libxcb1 \
-        libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 \
-        libxss1 libxtst6 ca-certificates fonts-liberation libappindicator3-1 libnss3 lsb-release \
-        xdg-utils git build-essential ffmpeg && \
-    mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list && \
-    apt-get update && \
-    # Install node and yarn
-    apt-get install -yq --no-install-recommends nodejs && \
-    curl -LO https://github.com/yarnpkg/yarn/releases/download/v1.22.19/yarn_1.22.19_all.deb \
-        && dpkg -i yarn_1.22.19_all.deb \
-        && rm yarn_1.22.19_all.deb && \
-    # Install uvx (pinned to 0.6.10) for MCP support
-    curl -LsSf https://astral.sh/uv/0.6.10/install.sh | sh && \
-        mv /root/.local/bin/uv /usr/local/bin/uv && \
-        mv /root/.local/bin/uvx /usr/local/bin/uvx && \
-        echo "Installed uvx! $(uv --version)" && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# ── Ollama ───────────────────────────────────────────────────────────────────
+# The Ollama binary bundles its own CUDA runtime. At runtime it dlopen()s
+# libcuda.so.1 which is provided by the host driver (mounted by Docker's
+# --gpus flag / Runpod's GPU allocation). No CUDA packages needed here.
+RUN curl -fsSL https://ollama.com/install.sh | sh
 
-# Create a group and user with specific UID and GID
-# First, remove any existing user/group with the target UID/GID to avoid conflicts
-RUN (getent passwd "$ARG_UID" && userdel -f "$(getent passwd "$ARG_UID" | cut -d: -f1)") || true && \
-    (getent group "$ARG_GID" && groupdel "$(getent group "$ARG_GID" | cut -d: -f1)") || true && \
-    groupadd -g "$ARG_GID" anythingllm && \
-    useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g anythingllm anythingllm && \
-    mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R anythingllm:anythingllm /app
+# ── Install totem-llm globally ───────────────────────────────────────────────
+# The npm package postinstall script (scripts/postinstall.mjs) handles:
+#   • npm install --production in server/
+#   • npm install --production in collector/
+#   • npx prisma generate (platform-specific client)
+# The frontend is pre-built in the npm tarball (prepublishOnly at publish).
+RUN npm install -g "totem-llm@${TOTEM_LLM_VERSION}" --legacy-peer-deps --no-audit --no-fund
 
-# Copy docker helper scripts
-COPY ./docker/docker-entrypoint.sh /usr/local/bin/
-COPY ./docker/docker-healthcheck.sh /usr/local/bin/
-COPY --chown=anythingllm:anythingllm ./docker/.env.example /app/server/.env
+# ── Pre-pull Ollama models (baked into image for instant start) ──────────────
+# nomic-embed-text:  ~274 MB  — RAG embeddings (needed from first message)
+# qwen3.5:9b:        ~5.5 GB  — minimum LLM (CPU + small GPU tiers)
+#
+# Larger 27B variants are pulled at first startup based on detected VRAM.
+# This keeps the image ~6 GB while ensuring any GPU ≥ 10 GB is usable
+# immediately.
+RUN mkdir -p /root/.ollama && \
+    (ollama serve &) && sleep 5 && \
+    ollama pull nomic-embed-text:latest && \
+    ollama pull qwen3.5:9b && \
+    pkill -f "ollama serve" 2>/dev/null || true
 
-# Ensure the scripts are executable
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
-    chmod +x /usr/local/bin/docker-healthcheck.sh
+# ── Runtime environment defaults ─────────────────────────────────────────────
+# OLLAMA_MODEL_PREF and OLLAMA_MODEL_TOKEN_LIMIT are intentionally NOT set
+# here — they are determined at runtime by run.sh based on GPU detection.
+# Set TOTEM_MODEL_OVERRIDE / TOTEM_CONTEXT_OVERRIDE to force specific values.
+ENV NODE_ENV=production \
+    TOTEM_STORAGE_DIR=/app/totem-storage \
+    OLLAMA_HOST=0.0.0.0 \
+    OLLAMA_MODELS=/root/.ollama \
+    SERVER_PORT=8686 \
+    COLLECTOR_PORT=8888 \
+    LLM_PROVIDER=ollama \
+    OLLAMA_BASE_PATH=http://127.0.0.1:11434 \
+    OLLAMA_KEEP_ALIVE_TIMEOUT=3600 \
+    OLLAMA_RESPONSE_TIMEOUT=3600000 \
+    EMBEDDING_ENGINE=ollama \
+    EMBEDDING_BASE_PATH=http://127.0.0.1:11434 \
+    EMBEDDING_MODEL_PREF=nomic-embed-text:latest \
+    EMBEDDING_MODEL_MAX_CHUNK_LENGTH=8192 \
+    VECTOR_DB=lancedb
 
-USER anythingllm
-WORKDIR /app
+# ── Pre-create storage dir + .env ────────────────────────────────────────────
+# lib/setup.js generates a .env on first run IF it doesn't already exist.
+# Its default has EMBEDDING_ENGINE=native — which would OVERRIDE our Ollama
+# settings because lib/config.js#getEnv() gives the .env file HIGHER priority
+# than process.env.
+#
+# By pre-creating the .env here, we:
+#   • Ensure EMBEDDING_ENGINE=ollama (not native)
+#   • Provide valid secrets so the app works without first-run generation
+#   • Leave OLLAMA_MODEL_PREF / OLLAMA_MODEL_TOKEN_LIMIT unset so that the
+#     runtime values from run.sh (based on GPU detection) are used
+RUN mkdir -p /app/totem-storage && \
+    SECRET_KEY=$(openssl rand -hex 32) && \
+    SECRET_SALT=$(openssl rand -hex 32) && \
+    SECRET_JWT=$(openssl rand -hex 24) && \
+    cat > /app/totem-storage/.env << ENVFILE
+# Totem LLM — Docker container configuration
+# Generated at image build time. Model settings (OLLAMA_MODEL_PREF, OLLAMA_MODEL_TOKEN_LIMIT)
+# are injected at runtime by run.sh based on GPU detection.
 
-# Puppeteer does not ship with an ARM86 compatible build for Chromium
-# so web-scraping would be broken in arm docker containers unless we patch it
-# by manually installing a compatible chromedriver.
-RUN echo "Need to patch Puppeteer x Chromium support for ARM86 - installing dep!" && \
-    curl -fSL https://webassets.anythingllm.com/chromium-1088-linux-arm64.zip -o chrome-linux.zip && \
-    unzip chrome-linux.zip && \
-    rm -rf chrome-linux.zip
+STORAGE_DIR="/app/totem-storage"
+SERVER_PORT=8686
+COLLECTOR_PORT=8888
 
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV CHROME_PATH=/app/chrome-linux/chrome
-ENV PUPPETEER_EXECUTABLE_PATH=/app/chrome-linux/chrome
+# Security secrets (auto-generated at build time)
+JWT_SECRET="${SECRET_JWT}"
+SIG_KEY="${SECRET_KEY}"
+SIG_SALT="${SECRET_SALT}"
 
-RUN echo "Done running arm64 specific installation steps"
+# LLM Provider — Ollama (in-container)
+LLM_PROVIDER=ollama
+OLLAMA_BASE_PATH=http://127.0.0.1:11434
+OLLAMA_KEEP_ALIVE_TIMEOUT=3600
+OLLAMA_RESPONSE_TIMEOUT=3600000
+# OLLAMA_MODEL_PREF=          ← set at runtime by run.sh
+# OLLAMA_MODEL_TOKEN_LIMIT=   ← set at runtime by run.sh
 
-#############################################
+# Embedding Engine — Ollama (in-container)
+EMBEDDING_ENGINE=ollama
+EMBEDDING_BASE_PATH=http://127.0.0.1:11434
+EMBEDDING_MODEL_PREF=nomic-embed-text:latest
+EMBEDDING_MODEL_MAX_CHUNK_LENGTH=8192
 
-# amd64-specific stage
-FROM base AS build-amd64
-RUN echo "Preparing build of AnythingLLM image for non-ARM architecture"
+# Vector database (zero-setup file-based default)
+VECTOR_DB=lancedb
 
-SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+# Telemetry
+DISABLE_TELEMETRY=true
+ENVFILE
 
-# Install system dependencies
-# hadolint ignore=DL3008,DL3013
-RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-        curl gnupg libgfortran5 libgbm1 tzdata netcat-openbsd \
-        libasound2t64 libatk1.0-0 libc6 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 \
-        libgcc1 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libx11-6 libx11-xcb1 libxcb1 \
-        libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 \
-        libxss1 libxtst6 ca-certificates fonts-liberation libappindicator3-1 libnss3 lsb-release \
-        xdg-utils git build-essential ffmpeg && \
-    mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list && \
-    apt-get update && \
-    # Install node and yarn
-    apt-get install -yq --no-install-recommends nodejs && \
-    curl -LO https://github.com/yarnpkg/yarn/releases/download/v1.22.19/yarn_1.22.19_all.deb \
-        && dpkg -i yarn_1.22.19_all.deb \
-        && rm yarn_1.22.19_all.deb && \
-    # Install uvx (pinned to 0.6.10) for MCP support
-    curl -LsSf https://astral.sh/uv/0.6.10/install.sh | sh && \
-        mv /root/.local/bin/uv /usr/local/bin/uv && \
-        mv /root/.local/bin/uvx /usr/local/bin/uvx && \
-        echo "Installed uvx! $(uv --version)" && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+# ── Startup script ───────────────────────────────────────────────────────────
+COPY docker/run.sh /usr/local/bin/run.sh
+RUN chmod +x /usr/local/bin/run.sh
 
-# Create a group and user with specific UID and GID
-# First, remove any existing user/group with the target UID/GID to avoid conflicts
-RUN (getent passwd "$ARG_UID" && userdel -f "$(getent passwd "$ARG_UID" | cut -d: -f1)") || true && \
-    (getent group "$ARG_GID" && groupdel "$(getent group "$ARG_GID" | cut -d: -f1)") || true && \
-    groupadd -g "$ARG_GID" anythingllm && \
-    useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g anythingllm anythingllm && \
-    mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R anythingllm:anythingllm /app
+# ── Healthcheck ──────────────────────────────────────────────────────────────
+COPY docker/docker-healthcheck.sh /usr/local/bin/docker-healthcheck.sh
+RUN chmod +x /usr/local/bin/docker-healthcheck.sh
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s \
+    CMD /usr/local/bin/docker-healthcheck.sh || exit 1
 
-# Copy docker helper scripts
-COPY ./docker/docker-entrypoint.sh /usr/local/bin/
-COPY ./docker/docker-healthcheck.sh /usr/local/bin/
-COPY --chown=anythingllm:anythingllm ./docker/.env.example /app/server/.env
-
-# Ensure the scripts are executable
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh && \
-    chmod +x /usr/local/bin/docker-healthcheck.sh
-
-#############################################
-# COMMON BUILD FLOW FOR ALL ARCHS
-#############################################
-
-# hadolint ignore=DL3006
-FROM build-${TARGETARCH} AS build
-RUN echo "Running common build flow of AnythingLLM image for all architectures"
-
-USER anythingllm
-WORKDIR /app
-
-# Install & Build frontend layer
-# Use BUILDPLATFORM to run on the native host architecture (not emulated).
-# This avoids esbuild crashing under QEMU when cross-compiling.
-# The output (static HTML/CSS/JS) is platform-independent.
-FROM --platform=$BUILDPLATFORM node:18-slim AS frontend-build
-WORKDIR /app/frontend
-COPY ./frontend/package.json ./frontend/yarn.lock ./
-RUN yarn install --network-timeout 100000 && yarn cache clean
-COPY ./frontend/ ./
-RUN yarn build
-WORKDIR /app
-
-# Install server layer
-# Also pull and build collector deps (chromium issues prevent bad bindings)
-FROM build AS backend-build
-COPY --chown=anythingllm:anythingllm ./server /app/server/
-WORKDIR /app/server
-RUN yarn install --production --network-timeout 100000 && yarn cache clean
-WORKDIR /app
-
-# Install collector dependencies
-COPY --chown=anythingllm:anythingllm ./collector/ ./collector/
-WORKDIR /app/collector
-ENV PUPPETEER_DOWNLOAD_BASE_URL=https://storage.googleapis.com/chrome-for-testing-public
-RUN yarn install --production --network-timeout 100000 && yarn cache clean
+# ── Ports ────────────────────────────────────────────────────────────────────
+# 8686:  Totem LLM UI + API (Runpod HTTP proxy exposes this)
+# 11434: Ollama API (optional external access for model management)
+EXPOSE 8686 11434
 
 WORKDIR /app
-USER anythingllm
 
-# Since we are building from backend-build we just need to move built frontend into server/public
-FROM backend-build AS production-build
-WORKDIR /app
-COPY --chown=anythingllm:anythingllm --from=frontend-build /app/frontend/dist /app/server/public
-
-# Setup the environment
-ENV NODE_ENV=production
-ENV ANYTHING_LLM_RUNTIME=docker
-ENV DEPLOYMENT_VERSION=1.13.0
-
-# Setup the healthcheck
-HEALTHCHECK --interval=1m --timeout=10s --start-period=1m \
-  CMD /bin/bash /usr/local/bin/docker-healthcheck.sh || exit 1
-
-# Run the server
-# CMD ["sh", "-c", "tail -f /dev/null"] # For development: keep container open
-ENTRYPOINT ["/bin/bash", "/usr/local/bin/docker-entrypoint.sh"]
+# ── Entrypoint ───────────────────────────────────────────────────────────────
+ENTRYPOINT ["/usr/local/bin/run.sh"]

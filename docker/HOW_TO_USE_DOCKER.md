@@ -1,209 +1,154 @@
-# How to use Dockerized Anything LLM
+# Totem LLM — Docker
 
-Use the Dockerized version of AnythingLLM for a much faster and complete startup of AnythingLLM.
+Totem LLM ships as a single Docker container that includes both the app (via the `totem-llm` npm package) and Ollama (for local LLM + embedding inference with GPU acceleration).
 
-### Minimum Requirements
-
-> [!TIP]
-> Running AnythingLLM on AWS/GCP/Azure?
-> You should aim for at least 2GB of RAM. Disk storage is proportional to however much data
-> you will be storing (documents, vectors, models, etc). Minimum 10GB recommended.
-
-- `docker` installed on your machine
-- `yarn` and `node` on your machine
-- access to an LLM running locally or remotely
-
-\*AnythingLLM by default uses a built-in vector database powered by [LanceDB](https://github.com/lancedb/lancedb)
-
-\*AnythingLLM by default embeds text on instance privately [Learn More](../server/storage/models/README.md)
-
-## Recommend way to run dockerized AnythingLLM!
-
-> [!IMPORTANT]
-> If you are running another service on localhost like Chroma, LocalAi, or LMStudio
-> you will need to use http://host.docker.internal:xxxx to access the service from within
-> the docker container using AnythingLLM as `localhost:xxxx` will not resolve for the host system.
->
-> **Requires** Docker v18.03+ on Win/Mac and 20.10+ on Linux/Ubuntu for host.docker.internal to resolve!
->
-> _Linux_: add `--add-host=host.docker.internal:host-gateway` to docker run command for this to resolve.
->
-> eg: Chroma host URL running on localhost:8000 on host machine needs to be http://host.docker.internal:8000
-> when used in AnythingLLM.
-
-> [!TIP]
-> It is best to mount the containers storage volume to a folder on your host machine
-> so that you can pull in future updates without deleting your existing data!
-
-Pull in the latest image from docker. Supports both `amd64` and `arm64` CPU architectures.
-
-```shell
-docker pull mintplexlabs/anythingllm
-```
-
-<table>
-<tr>
-<th colspan="2">Mount the storage locally and run AnythingLLM in Docker</th>
-</tr>
-<tr>
-<td>
-  Linux/MacOs
-</td>
-<td>
-
-```shell
-export STORAGE_LOCATION=$HOME/anythingllm && \
-mkdir -p $STORAGE_LOCATION && \
-touch "$STORAGE_LOCATION/.env" && \
-docker run -d --rm -p 3001:3001 \
---cap-add SYS_ADMIN \
--v ${STORAGE_LOCATION}:/app/server/storage \
--v ${STORAGE_LOCATION}/.env:/app/server/.env \
--e STORAGE_DIR="/app/server/storage" \
-mintplexlabs/anythingllm
-```
-
-</td>
-</tr>
-<tr>
-<td>
-  Windows
-</td>
-<td>
-
-```powershell
-# Run this in powershell terminal
-$env:STORAGE_LOCATION="$HOME\Documents\anythingllm"; `
-If(!(Test-Path $env:STORAGE_LOCATION)) {New-Item $env:STORAGE_LOCATION -ItemType Directory}; `
-If(!(Test-Path "$env:STORAGE_LOCATION\.env")) {New-Item "$env:STORAGE_LOCATION\.env" -ItemType File}; `
-docker run -d --rm -p 3001:3001 `
---cap-add SYS_ADMIN `
--v "$env:STORAGE_LOCATION`:/app/server/storage" `
--v "$env:STORAGE_LOCATION\.env:/app/server/.env" `
--e STORAGE_DIR="/app/server/storage" `
-mintplexlabs/anythingllm;
-```
-
-</td>
-</tr>
-<tr>
-<td> Docker Compose</td>
-<td>
-
-
-```yaml
-version: '3.8'
-services:
-  anythingllm:
-    image: mintplexlabs/anythingllm
-    container_name: anythingllm
-    ports:
-    - "3001:3001"
-    cap_add:
-      - SYS_ADMIN
-    environment:
-    # Adjust for your environment
-      - STORAGE_DIR=/app/server/storage
-      - JWT_SECRET="make this a large list of random numbers and letters 20+"
-      - LLM_PROVIDER=ollama
-      - OLLAMA_BASE_PATH=http://127.0.0.1:11434
-      - OLLAMA_MODEL_PREF=llama2
-      - OLLAMA_MODEL_TOKEN_LIMIT=4096
-      - EMBEDDING_ENGINE=ollama
-      - EMBEDDING_BASE_PATH=http://127.0.0.1:11434
-      - EMBEDDING_MODEL_PREF=nomic-embed-text:latest
-      - EMBEDDING_MODEL_MAX_CHUNK_LENGTH=8192
-      - VECTOR_DB=lancedb
-      - WHISPER_PROVIDER=local
-      - TTS_PROVIDER=native
-      - PASSWORDMINCHAR=8
-      # Add any other keys here for services or settings
-      # you can find in the docker/.env.example file
-    volumes:
-      - anythingllm_storage:/app/server/storage
-    restart: always
-
-volumes:
-  anythingllm_storage:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /path/on/local/disk
-```
-
-  </td>
-</tr>
-</table>
-
-Go to `http://localhost:3001` and you are now using AnythingLLM! All your data and progress will persist between
-container rebuilds or pulls from Docker Hub.
-
-## How to use the user interface
-
-- To access the full application, visit `http://localhost:3001` in your browser.
-
-## About UID and GID in the ENV
-
-- The UID and GID are set to 1000 by default. This is the default user in the Docker container and on most host operating systems. If there is a mismatch between your host user UID and GID and what is set in the `.env` file, you may experience permission issues.
-
-## Build locally from source _not recommended for casual use_
-
-- `git clone` this repo and `cd anything-llm` to get to the root directory.
-- `touch server/storage/totem-llm.db` to create empty SQLite DB file. (Upgrading from AnythingLLM? An existing `server/storage/anythingllm.db` is auto-renamed on first start — see `lib/migrateDbName.js`)
-- `cd docker/`
-- `cp .env.example .env` **you must do this before building**
-- `docker-compose up -d --build` to build the image - this will take a few moments.
-
-Your docker host will show the image as online once the build process is completed. This will build the app to `http://localhost:3001`.
-
-## Integrations and one-click setups
-
-The integrations below are templates or tooling built by the community to make running the docker experience of AnythingLLM easier.
-
-### Use the Midori AI Subsystem to Manage AnythingLLM
-
-Follow the setup found on [Midori AI Subsystem Site](https://io.midori-ai.xyz/subsystem/manager/) for your host OS
-After setting that up install the AnythingLLM docker backend to the Midori AI Subsystem.
-
-Once that is done, you are all set!
-
-## Common questions and fixes
-
-### Cannot connect to service running on localhost!
-
-If you are in docker and cannot connect to a service running on your host machine running on a local interface or loopback:
-
-- `localhost`
-- `127.0.0.1`
-- `0.0.0.0`
-
-> [!IMPORTANT]
-> On linux `http://host.docker.internal:xxxx` does not work.
-> Use `http://172.17.0.1:xxxx` instead to emulate this functionality.
-
-Then in docker you need to replace that localhost part with `host.docker.internal`. For example, if running Ollama on the host machine, bound to http://127.0.0.1:11434 you should put `http://host.docker.internal:11434` into the connection URL in AnythingLLM.
-
-
-### API is not working, cannot login, LLM is "offline"?
-
-You are likely running the docker container on a remote machine like EC2 or some other instance where the reachable URL
-is not `http://localhost:3001` and instead is something like `http://193.xx.xx.xx:3001` - in this case all you need to do is add the following to your `frontend/.env.production` before running `docker-compose up -d --build`
+## How It Works
 
 ```
-# frontend/.env.production
-GENERATE_SOURCEMAP=false
-VITE_API_BASE="http://<YOUR_REACHABLE_IP_ADDRESS>:3001/api"
+┌─────────────────────────────────────────────────────────┐
+│  Container                                               │
+│                                                         │
+│  ┌───────────────┐         ┌────────────────────────┐  │
+│  │  Totem LLM    │  calls  │      Ollama            │  │
+│  │  (node:18)    │────────►│  (GPU inference)       │  │
+│  │  :8686        │  :11434 │  auto-detects CUDA     │  │
+│  └───────────────┘         └────────────────────────┘  │
+│                                                         │
+│  run.sh (entrypoint):                                   │
+│    1. Detects GPU via nvidia-smi                        │
+│    2. Selects model + quant + context from tier table   │
+│    3. Pulls model if not already on disk                │
+│    4. Starts Ollama (background)                        │
+│    5. Launches totem-llm (foreground, PID 1)            │
+└─────────────────────────────────────────────────────────┘
 ```
 
-For example, if the docker instance is available on `192.186.1.222` your `VITE_API_BASE` would look like `VITE_API_BASE="http://192.186.1.222:3001/api"` in `frontend/.env.production`.
+## Model Selection
 
-### Having issues with Ollama?
+The container automatically selects the best model based on available GPU VRAM:
 
-If you are getting errors like `llama:streaming - could not stream chat. Error: connect ECONNREFUSED 172.17.0.1:11434` then visit the README below.
+| VRAM (total) | Model | Quant | Context | Typical GPU |
+|---|---|---|---|---|
+| CPU only | `qwen3.5:9b` | Q4_K_M | 4 096 | — |
+| 1 – 15 GB | `qwen3.5:9b` | Q4_K_M | 8 192 | T4, RTX 3060 |
+| 16 – 23 GB | `qwen3.5:9b-q8_0` | Q8_0 | 16 384 | T4, L4, A10G |
+| 24 – 31 GB | `qwen3.8:27b` | Q4_K_M | 8 192 | A10G, L4 |
+| 32 – 39 GB | `qwen3.8:27b` | Q4_K_M | 32 768 | A100 40 GB |
+| 40 – 79 GB | `qwen3.8:27b-q8_0` | Q8_0 | 32 768 | A100 80 GB |
+| 80+ GB | `qwen3.8:27b-q8_0` | Q8_0 | 131 072 | 2×H100, B200 |
 
-[Fix common issues with Ollama](../server/utils/AiProviders/ollama/README.md)
+**Embedding model** (all tiers): `nomic-embed-text` (274 MB)
 
-### Still not working?
+> Multi-GPU: VRAM is summed across all visible GPUs. Ollama splits layers automatically.
 
-[Ask for help on Discord](https://discord.gg/6UyHPeGZAC)
+## Quick Start (Local)
+
+```bash
+# Build the image (from repo root)
+docker build --platform linux/amd64 -f docker/Dockerfile -t totem-llm:latest .
+
+# Run with GPU access
+docker run -d --rm \
+    --name totem \
+    --gpus all \
+    -p 8686:8686 \
+    -p 11434:11434 \
+    -v totem-data:/app/totem-storage \
+    -v ollama-models:/root/.ollama \
+    totem-llm:latest
+
+# Or without GPU (CPU mode)
+docker run -d --rm \
+    --name totem \
+    -p 8686:8686 \
+    -v totem-data:/app/totem-storage \
+    -v ollama-models:/root/.ollama \
+    totem-llm:latest
+```
+
+Then open http://localhost:8686
+
+## Docker Compose (Local)
+
+```bash
+docker compose -f docker/docker-compose.yml up --build
+```
+
+## Runpod Template
+
+For deploying as a Runpod pod template, see [RUNPOD.md](./RUNPOD.md).
+
+## Environment Variables
+
+### Runtime (set via `docker run -e` or Runpod template config)
+
+| Variable | Default | Description |
+|---|---|---|
+| `TOTEM_MODEL_OVERRIDE` | _(auto)_ | Force a specific Ollama model tag (skips GPU detection) |
+| `TOTEM_CONTEXT_OVERRIDE` | _(auto)_ | Force context window in tokens (used with `TOTEM_MODEL_OVERRIDE`) |
+| `AUTH_TOKEN` | _(none)_ | Set a password for the app (required for remote access) |
+| `SERVER_PORT` | `8686` | Port for the Totem UI/API |
+| `COLLECTOR_PORT` | `8888` | Port for the Collector service |
+| `OLLAMA_KEEP_ALIVE_TIMEOUT` | `3600` | Seconds before Ollama unloads idle models |
+| `OLLAMA_RESPONSE_TIMEOUT` | `3600000` | Max ms to wait for an Ollama response |
+| `AGENT_MAX_TOOL_CALLS` | _(none)_ | Max tool calls per agent response |
+
+### Internal (managed by run.sh — do not override)
+
+| Variable | Value |
+|---|---|
+| `LLM_PROVIDER` | `ollama` |
+| `OLLAMA_BASE_PATH` | `http://127.0.0.1:11434` |
+| `OLLAMA_MODEL_PREF` | GPU-detected model tag |
+| `OLLAMA_MODEL_TOKEN_LIMIT` | GPU-detected context window |
+| `EMBEDDING_ENGINE` | `ollama` |
+| `EMBEDDING_BASE_PATH` | `http://127.0.0.1:11434` |
+| `EMBEDDING_MODEL_PREF` | `nomic-embed-text:latest` |
+| `VECTOR_DB` | `lancedb` |
+| `TOTEM_STORAGE_DIR` | `/app/totem-storage` |
+
+## Volumes
+
+| Mount Path | Contents | Persistence |
+|---|---|---|
+| `/app/totem-storage` | SQLite DB, documents, vector cache, logs, secrets | **Required** for data persistence |
+| `/root/.ollama` | Ollama model weights (5–45 GB) | Optional (pre-baked models survive without it; runtime-pulled models need it) |
+
+## Pulling Additional Models
+
+Once the container is running, you can pull any Ollama model:
+
+```bash
+docker exec -it totem ollama pull llama3.1:8b
+docker exec -it totem ollama list
+```
+
+Then select it from the Totem UI → Workspace Settings → LLM Selection.
+
+## Troubleshooting
+
+### "No NVIDIA GPU detected"
+
+The container runs in CPU mode. This happens when:
+- Running without `--gpus all` flag
+- Runpod pod has no GPU allocated
+- `nvidia-smi` is not in the container's PATH
+
+### Model not loading
+
+Check Ollama logs:
+```bash
+docker logs totem 2>&1 | grep -i ollama
+cat /tmp/ollama.log  # inside container
+```
+
+### Out of memory / OOM
+
+The selected model may be too large for the available VRAM. Force a smaller model:
+```bash
+docker run ... -e TOTEM_MODEL_OVERRIDE=qwen3.5:9b -e TOTEM_CONTEXT_OVERRIDE=8192 ...
+```
+
+### Slow first response
+
+The first inference after model load compiles CUDA kernels. Subsequent responses are faster. This is normal.

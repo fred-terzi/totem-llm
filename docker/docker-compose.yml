@@ -1,31 +1,59 @@
-name: anythingllm
+# ──────────────────────────────────────────────────────────────────────────────
+# Totem LLM — Local Docker Compose (for testing outside Runpod)
+#
+# This is a convenience for local development/testing. The primary deployment
+# target is the Runpod Pod Template (see HOW_TO_USE_DOCKER.md).
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up --build
+#
+# For GPU access, add --gpus all:
+#   docker compose -f docker/docker-compose.yml --gpus all up
+# ──────────────────────────────────────────────────────────────────────────────
 
-networks:
-  anything-llm:
-    driver: bridge
+name: totem-llm
 
 services:
-  anything-llm:
-    container_name: anythingllm
+  totem:
     build:
-      context: ../.
-      dockerfile: ./docker/Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
       args:
-        ARG_UID: ${UID:-1000}
-        ARG_GID: ${GID:-1000}
-    cap_add:
-      - SYS_ADMIN
-    volumes:
-      - "./.env:/app/server/.env"
-      - "../server/storage:/app/server/storage"
-      - "../collector/hotdir/:/app/collector/hotdir"
-      - "../collector/outputs/:/app/collector/outputs"
-    user: "${UID:-1000}:${GID:-1000}"
+        # Pin a specific version for reproducible builds:
+        # TOTEM_LLM_VERSION: 0.16.1
+        TOTEM_LLM_VERSION: latest
+    container_name: totem-llm
+    restart: unless-stopped
     ports:
-      - "8686:8686"
-    env_file:
-      - .env
-    networks:
-      - anything-llm
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "8686:8686"   # Totem LLM UI + API
+      - "11434:11434" # Ollama API (optional)
+    volumes:
+      - totem-data:/app/totem-storage      # App data (DB, docs, vector cache)
+      - ollama-models:/root/.ollama        # Ollama model weights
+    environment:
+      # GPU detection is automatic — no config needed.
+      # Override model selection if desired:
+      # TOTEM_MODEL_OVERRIDE: qwen3.8:27b-q8_0
+      # TOTEM_CONTEXT_OVERRIDE: "32768"
+      #
+      # Or force specific provider settings:
+      # OLLAMA_MODEL_PREF: qwen3.5:9b
+      # OLLAMA_MODEL_TOKEN_LIMIT: "8192"
+    # GPU passthrough (uncomment for local GPU testing):
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/docker-healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+volumes:
+  totem-data:
+  ollama-models:
