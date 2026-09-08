@@ -122,12 +122,15 @@ if [ "$SKIP_TEST" = false ]; then
     docker run -d --name totem-smoke-test -p 18686:8686 "$IMAGE_NAME:$VERSION"
 
     SMOKE_OK=false
-    for i in $(seq 1 45); do
+    SMOKE_MAX_WAIT=180  # 180s max — allows model pull on first run (~6GB at 50MB/s)
+    SMOKE_ELAPSED=0
+    while [ "$SMOKE_ELAPSED" -lt "$SMOKE_MAX_WAIT" ]; do
         if curl -s --max-time 2 http://localhost:18686/api/ping > /dev/null 2>&1; then
             SMOKE_OK=true
             break
         fi
         sleep 2
+        SMOKE_ELAPSED=$((SMOKE_ELAPSED + 2))
     done
 
     if [ "$SMOKE_OK" = true ]; then

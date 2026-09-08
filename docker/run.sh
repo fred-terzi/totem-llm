@@ -140,6 +140,9 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
+# Give Ollama a moment to index pre-baked models from disk
+sleep 2
+
 # ══════════════════════════════════════════════════════════════════════════════
 # 4. PULL MODELS (skip if already on disk)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -148,7 +151,25 @@ model_exists() {
     # Check if a model (with tag) is already pulled
     # e.g. model_exists "qwen3.8:27b-q8_0"
     local full="$1"
-    ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$full"
+
+    # Primary check: ollama list
+    if ollama list 2>/dev/null | awk '{print $1}' | grep -qx "$full"; then
+        return 0
+    fi
+
+    # Fallback: check filesystem directly (model may be on disk but Ollama
+    # hasn't finished indexing it into its in-memory list yet)
+    # Ollama layout: $OLLAMA_MODELS/models/manifests/registry.ollama.ai/library/<name>/<tag>
+    local name="${full%%:*}"
+    local tag="${full##*:}"
+    if [ "$tag" = "$full" ]; then
+        tag="latest"
+    fi
+    if [ -f "${OLLAMA_MODELS:-/root/.ollama}/models/manifests/registry.ollama.ai/library/${name}/${tag}" ]; then
+        return 0
+    fi
+
+    return 1
 }
 
 # Pull embedding model
