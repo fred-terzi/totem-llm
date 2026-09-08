@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.17.0](https://github.com/fred-terzi//compare/v0.16.1...v0.17.0) (2026-09-08)
+
+
+### Features
+
+* **agents:** add custom-skill-creator skill for AnythingLLM agent plugin authoring ([6cabeb2](https://github.com/fred-terzi//commit/6cabeb2cabbad9e2386e0f7219c517b58b1775de))
+* **db:** rename default SQLite DB filename to totem-llm.db with startup migration ([48919cf](https://github.com/fred-terzi//commit/48919cf8f85a37903aa5a29d8c3139913d92a4e9))
+* **docker:** rebuild container using npm package + Ollama with GPU-aware model selection ([27994b2](https://github.com/fred-terzi//commit/27994b2b4cfc0714f76a877dfdf60c195f1d2c95))
+
+
+### Bug Fixes
+
+* **agents:** gate terminal-access and create-files on feature flag instead of dev mode ([a50dda1](https://github.com/fred-terzi//commit/a50dda1efe2e6f6149cd77299850c8d77f4d47f1))
+* **agents:** resolve feature flags relative to __dirname and enable terminalAccess in L1/L2 ([33d2088](https://github.com/fred-terzi//commit/33d20883c5434a4ac593aecdd2fbdab2fcfc6f6f))
+
+
+### Documentation Changes
+
+* add tool call reference and coding workflow docs ([acb96bb](https://github.com/fred-terzi//commit/acb96bbbfdd6aa4314ca747d6704227668c9f921))
+* **agents:** point release process at npm-versioning skill as single source of truth ([678d6ba](https://github.com/fred-terzi//commit/678d6ba63bd6cf1f507f418e8b41f9201f5ec8d8))
+* **agents:** point release process at RELEASE.md as single source of truth ([a99af32](https://github.com/fred-terzi//commit/a99af32772acac47ddcd2aca97ecbbda0e827d87))
+
+
+### CI/CD Changes
+
+* **docker:** add release pipeline, RunPod template docs, and Makefile ([37f7dec](https://github.com/fred-terzi//commit/37f7dec1dca537ab991406579f205989b0ef6b73))
+
+
+### Miscellaneous Chores
+
+* bump version to 0.17.0 ([197dbc9](https://github.com/fred-terzi//commit/197dbc9a4f1b4f4f0c1e3cc6ec893390ad963b7c))
+* **submodules:** fix fork names in URLs (rename id-collision) ([fa13c5d](https://github.com/fred-terzi//commit/fa13c5d3757b4ecc28e4f463c9bc7f314deddf06))
+* **submodules:** point submodule URLs at fred-terzi forks ([4e8fc8f](https://github.com/fred-terzi//commit/4e8fc8f8783bd4bf6282997d82548ae430b24126))
+
 ### [0.16.1](https://github.com/fred-terzi//compare/v0.12.0...v0.16.1) (2026-08-29)
 
 
