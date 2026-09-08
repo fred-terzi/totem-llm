@@ -13,17 +13,41 @@ GPU         ?= --gpus all
 .PHONY: help
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+
+# ── Release pipeline (two-machine) ──────────────────────────────
+
+.PHONY: npm-publish
+npm-publish: ## [NPM machine] Bump version + publish to npm
+	./scripts/publish-npm.sh $(VERSION)
+
+.PHONY: npm-publish-patch
+npm-publish-patch: ## [NPM machine] Publish with patch bump
+	./scripts/publish-npm.sh patch
+
+.PHONY: npm-publish-minor
+npm-publish-minor: ## [NPM machine] Publish with minor bump
+	./scripts/publish-npm.sh minor
+
+.PHONY: npm-publish-major
+npm-publish-major: ## [NPM machine] Publish with major bump
+	./scripts/publish-npm.sh major
+
+# ── Docker build (docker machine) ────────────────────────────────
 
 .PHONY: docker-build
-docker-build: ## Build the Docker image (VERSION=latest by default)
-	docker build \
-		--platform $(PLATFORM) \
-		-f docker/Dockerfile \
-		--build-arg TOTEM_LLM_VERSION=$(VERSION) \
-		-t $(IMAGE_NAME):$(VERSION) \
-		-t $(IMAGE_NAME):latest \
-		.
+docker-build: ## [DOCKER machine] Build image (VERSION=0.17.0 or latest)
+	./scripts/build-docker.sh $(VERSION)
+
+.PHONY: docker-build-nopush
+docker-build-nopush: ## [DOCKER machine] Build only, don't push
+	./scripts/build-docker.sh $(VERSION) --no-push --skip-test
+
+.PHONY: docker-build-skiptest
+docker-build-skiptest: ## [DOCKER machine] Build + push, skip smoke test
+	./scripts/build-docker.sh $(VERSION) --skip-test
+
+# ── Local development ───────────────────────────────────────────
 
 .PHONY: docker-test
 docker-test: ## Run a quick smoke test (no GPU)
@@ -61,31 +85,11 @@ docker-run-cpu: ## Run interactively without GPU (CPU mode)
 		-p 11434:11434 \
 		$(IMAGE_NAME):$(VERSION)
 
+# ── Utilities ───────────────────────────────────────────────────
+
 .PHONY: docker-logs
 docker-logs: ## Tail logs of running container
 	docker logs -f totem
-
-.PHONY: docker-push
-docker-push: ## Push to Docker Hub (requires: docker login)
-	docker push $(IMAGE_NAME):$(VERSION)
-	docker push $(IMAGE_NAME):latest
-	@echo "✓ Pushed $(IMAGE_NAME):$(VERSION) + :latest to Docker Hub"
-
-.PHONY: docker-release
-docker-release: ## Full release: version bump → npm publish → docker build → push
-	./scripts/release-docker.sh $(VERSION)
-
-.PHONY: docker-release-patch
-docker-release-patch: ## Release patch version
-	./scripts/release-docker.sh patch
-
-.PHONY: docker-release-minor
-docker-release-minor: ## Release minor version
-	./scripts/release-docker.sh minor
-
-.PHONY: docker-release-major
-docker-release-major: ## Release major version
-	./scripts/release-docker.sh major
 
 .PHONY: docker-clean
 docker-clean: ## Remove the local image
@@ -93,12 +97,16 @@ docker-clean: ## Remove the local image
 	docker rmi $(IMAGE_NAME):latest 2>/dev/null || true
 	@echo "✓ Removed local image"
 
-.PHONY: docker-pull-models
-docker-pull-models: ## List models in the running container
+.PHONY: docker-ollama-list
+docker-ollama-list: ## List models in a running container
 	docker exec totem ollama list
 
-.PHONY: docker-pull-model
-docker-pull-model: ## Pull a model into the running container (MODEL=llama3.1:8b)
-	@test -n "$(MODEL)" || (echo "Usage: make docker-pull-model MODEL=llama3.1:8b"; exit 1)
+.PHONY: docker-ollama-pull
+docker-ollama-pull: ## Pull a model into running container (MODEL=qwen3.8:27b)
+	@test -n "$(MODEL)" || (echo "Usage: make docker-ollama-pull MODEL=qwen3.8:27b"; exit 1)
 	docker exec totem ollama pull $(MODEL)
 	@echo "✓ Pulled $(MODEL)"
+
+.PHONY: docker-exec
+docker-exec: ## Shell into running container (CMD=bash)
+	docker exec -it totem $(CMD)
