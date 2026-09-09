@@ -32,10 +32,10 @@ The container automatically selects the best model based on available GPU VRAM:
 | CPU only | `qwen3.5:9b` | Q4_K_M | 4 096 | — |
 | 1 – 15 GB | `qwen3.5:9b` | Q4_K_M | 8 192 | T4, RTX 3060 |
 | 16 – 23 GB | `qwen3.5:9b-q8_0` | Q8_0 | 16 384 | T4, L4, A10G |
-| 24 – 31 GB | `qwen3.8:27b` | Q4_K_M | 8 192 | A10G, L4 |
-| 32 – 39 GB | `qwen3.8:27b` | Q4_K_M | 32 768 | A100 40 GB |
-| 40 – 79 GB | `qwen3.8:27b-q8_0` | Q8_0 | 32 768 | A100 80 GB |
-| 80+ GB | `qwen3.8:27b-q8_0` | Q8_0 | 131 072 | 2×H100, B200 |
+| 24 – 31 GB | `qwen3.8:27b-mtp-q4_K_M` | Q4_K_M | 8 192 | A10G, L4 |
+| 32 – 39 GB | `qwen3.8:27b-mtp-q4_K_M` | Q4_K_M | 32 768 | A100 40 GB |
+| 40 – 79 GB | `qwen3.8:27b-mtp-q8_0` | Q8_0 | 32 768 | A100 80 GB |
+| 80+ GB | `qwen3.8:27b-mtp-q8_0` | Q8_0 | 131 072 | 2×H100, B200 |
 
 **Embedding model** (all tiers): `nomic-embed-text` (274 MB)
 

@@ -102,8 +102,8 @@ docker-ollama-list: ## List models in a running container
 	docker exec totem ollama list
 
 .PHONY: docker-ollama-pull
-docker-ollama-pull: ## Pull a model into running container (MODEL=qwen3.8:27b)
-	@test -n "$(MODEL)" || (echo "Usage: make docker-ollama-pull MODEL=qwen3.8:27b"; exit 1)
+docker-ollama-pull: ## Pull a model into running container (MODEL=qwen3.8:27b-mtp-q4_K_M)
+	@test -n "$(MODEL)" || (echo "Usage: make docker-ollama-pull MODEL=qwen3.8:27b-mtp-q4_K_M"; exit 1)
 	docker exec totem ollama pull $(MODEL)
 	@echo "✓ Pulled $(MODEL)"
 

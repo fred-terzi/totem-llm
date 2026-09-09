@@ -59,8 +59,8 @@ The container auto-detects your GPU and selects the best model that fits. You do
 | GPU | VRAM | Auto-Selected Model | Speed (approx.) |
 |---|---|---|---|
 | RTX 3060 / T4 | 12 GB | `qwen3.5:9b` (Q8_0) | ~20 tok/s |
-| RTX 4000 Ada / A4000 | 16 GB | `qwen3.8:27b` (Q4_K_M) | ~8-12 tok/s |
-| 2× A4000 | 32 GB | `qwen3.8:27b` (Q6_K) | ~10-14 tok/s |
+| RTX 4000 Ada / A4000 | 16 GB | `qwen3.8:27b-mtp-q4_K_M` (Q4_K_M) | ~8-12 tok/s |
+| 2× A4000 | 32 GB | `qwen3.8:27b-mtp-q4_K_M` (Q6_K) | ~10-14 tok/s |
 | A100 40GB | 40 GB | `qwen3.8:32b` (Q4_K_M) | ~12-16 tok/s |
 | A100 80GB / H100 | 80+ GB | `qwen3.8:32b` (Q8_0) | ~15-20 tok/s |
 
@@ -71,7 +71,7 @@ The container auto-detects your GPU and selects the best model that fits. You do
 If you want a specific model, set this environment variable in your RunPod template config:
 
 ```
-OLLAMA_MODEL_PREF=qwen3.8:27b
+OLLAMA_MODEL_PREF=qwen3.8:27b-mtp-q4_K_M
 ```
 
 Or any valid [Ollama model](https://ollama.com/library):

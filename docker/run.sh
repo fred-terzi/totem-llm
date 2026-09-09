@@ -10,7 +10,7 @@
 #
 # Pre-vetted model list:
 #   qwen3.5:9b    — minimum LLM (CPU or small GPU)
-#   qwen3.8:27b   — primary LLM (≥ 24 GB VRAM), quant varies by VRAM tier
+#   qwen3.8:27b-mtp-q4_K_M   — primary LLM (≥ 24 GB VRAM), quant varies by VRAM tier
 #   nomic-embed-text — RAG embeddings (all tiers)
 #
 # User overrides (via Runpod template env or docker run -e):
@@ -59,10 +59,10 @@ fi
 #   CPU        | 0        | qwen3.5:9b       | Q4_K_M  |  4096    | CPU inference, low ctx
 #   Small      | 1-15 GB  | qwen3.5:9b       | Q4_K_M  |  8192    | Fits comfortably
 #   Medium     | 16-23 GB | qwen3.5:9b-q8_0  | Q8_0    | 16384    | T4/A10G — 9b at high quality
-#   Large      | 24-31 GB | qwen3.8:27b      | Q4_K_M  |  8192    | 27b fits with default quant
-#   XL         | 32-39 GB | qwen3.8:27b      | Q4_K_M  | 32768    | A100 40GB — extra VRAM → bigger ctx
-#   XXL        | 40-79 GB | qwen3.8:27b-q8_0 | Q8_0    | 32768    | A100 80GB — 27b full precision
-#   MAX        | 80+ GB   | qwen3.8:27b-q8_0 | Q8_0    | 131072   | 2×H100/B200 — max context
+#   Large      | 24-31 GB | qwen3.8:27b-mtp-q4_K_M      | Q4_K_M  |  8192    | 27b fits with default quant
+#   XL         | 32-39 GB | qwen3.8:27b-mtp-q4_K_M      | Q4_K_M  | 32768    | A100 40GB — extra VRAM → bigger ctx
+#   XXL        | 40-79 GB | qwen3.8:27b-mtp-q8_0 | Q8_0    | 32768    | A100 80GB — 27b full precision
+#   MAX        | 80+ GB   | qwen3.8:27b-mtp-q8_0 | Q8_0    | 131072   | 2×H100/B200 — max context
 # ══════════════════════════════════════════════════════════════════════════════
 
 SELECTED_MODEL=""
@@ -78,19 +78,19 @@ if [ -n "${TOTEM_MODEL_OVERRIDE:-}" ]; then
 else
     # Auto-select based on VRAM tier
     if [ "$TOTAL_VRAM_GB" -ge 80 ]; then
-        SELECTED_MODEL="qwen3.8:27b-q8_0"
+        SELECTED_MODEL="qwen3.8:27b-mtp-q8_0"
         SELECTED_CTX=131072
         TIER="MAX (80+ GB)"
     elif [ "$TOTAL_VRAM_GB" -ge 40 ]; then
-        SELECTED_MODEL="qwen3.8:27b-q8_0"
+        SELECTED_MODEL="qwen3.8:27b-mtp-q8_0"
         SELECTED_CTX=32768
         TIER="XXL (40-79 GB)"
     elif [ "$TOTAL_VRAM_GB" -ge 32 ]; then
-        SELECTED_MODEL="qwen3.8:27b"
+        SELECTED_MODEL="qwen3.8:27b-mtp-q4_K_M"
         SELECTED_CTX=32768
         TIER="XL (32-39 GB)"
     elif [ "$TOTAL_VRAM_GB" -ge 24 ]; then
-        SELECTED_MODEL="qwen3.8:27b"
+        SELECTED_MODEL="qwen3.8:27b-mtp-q4_K_M"
         SELECTED_CTX=8192
         TIER="Large (24-31 GB)"
     elif [ "$TOTAL_VRAM_GB" -ge 16 ]; then
@@ -149,7 +149,7 @@ sleep 2
 
 model_exists() {
     # Check if a model (with tag) is already pulled
-    # e.g. model_exists "qwen3.8:27b-q8_0"
+    # e.g. model_exists "qwen3.8:27b-mtp-q8_0"
     local full="$1"
 
     # Primary check: ollama list
@@ -201,7 +201,7 @@ echo ""
 #
 # The Ollama LLM provider (server/utils/AiProviders/ollama/index.js) reads:
 #   OLLAMA_BASE_PATH        — server URL
-#   OLLAMA_MODEL_PREF       — model tag (e.g. "qwen3.8:27b-q8_0")
+#   OLLAMA_MODEL_PREF       — model tag (e.g. "qwen3.8:27b-mtp-q8_0")
 #   OLLAMA_MODEL_TOKEN_LIMIT — max context window (num_ctx)
 #   OLLAMA_KEEP_ALIVE_TIMEOUT — model warm-up timeout (seconds)
 #

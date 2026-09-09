@@ -21,8 +21,8 @@
 | VRAM | Auto-selected model | Speed |
 |---|---|---|
 | 12 GB | qwen3.5:9b | ~20 tok/s |
-| 16 GB | qwen3.8:27b (Q4) | ~10 tok/s |
-| 32 GB | qwen3.8:27b (Q6) | ~14 tok/s |
+| 16 GB | qwen3.8:27b-mtp-q4_K_M (Q4) | ~10 tok/s |
+| 32 GB | qwen3.8:27b-mtp-q4_K_M (Q6) | ~14 tok/s |
 | 80+ GB | qwen3.8:32b (Q8) | ~18 tok/s |
 
 Override with env: `OLLAMA_MODEL_PREF=llama3.1:70b`
