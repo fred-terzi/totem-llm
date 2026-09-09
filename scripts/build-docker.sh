@@ -46,7 +46,7 @@ for arg in "$@"; do
 done
 
 REGISTRY="docker.io"
-IMAGE_NAME="fred-terzi/totem-llm"
+IMAGE_NAME="fredterzi/totem-llm"
 PLATFORM="linux/amd64"
 
 # ── Verify prerequisites ────────────────────────────────────────

@@ -19,7 +19,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: fred-terzi/totem-llm
+  IMAGE_NAME: fredterzi/totem-llm
 
 jobs:
   build-and-push:

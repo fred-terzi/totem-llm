@@ -4,7 +4,7 @@ Deploy Totem LLM as a one-click RunPod template. Users pick a GPU, click Deploy,
 
 ## Prerequisites
 
-- A **Docker Hub** account with the image published: `fred-terzi/totem-llm`
+- A **Docker Hub** account with the image published: `fredterzi/totem-llm`
 - A **RunPod** account (free tier works for testing)
 - The npm package published: `npm view totem-llm version`
 
@@ -22,7 +22,7 @@ Click **"Create Template"**.
 |---|---|
 | **Template Name** | `Totem LLM` |
 | **Description** | `Self-hosted AI assistant with GPU-accelerated LLM inference. Auto-selects the best model for your GPU. Includes RAG, agent mode, and multi-model support.` |
-| **Container Image** | `fred-terzi/totem-llm:latest` |
+| **Container Image** | `fredterzi/totem-llm:latest` |
 | **Public** | ✅ Yes (so others can find it) |
 | **Tags** | `ai`, `llm`, `chat`, `rag`, `ollama`, `qwen` |
 
@@ -90,7 +90,7 @@ If you want others to discover it:
 ## User Experience (what your friends see)
 
 ```
-1. Visit: https://www.runpod.io/templates/fred-terzi/totem-llm
+1. Visit: https://www.runpod.io/templates/fredterzi/totem-llm
 2. Click "Deploy"
 3. Pick a GPU (or let RunPod pick cheapest available)
 4. Wait 30-90 seconds
@@ -164,7 +164,7 @@ curl https://[POD_ID]-8686.proxy.runpod.net/api/api/openai/chat/completions \
 
 ### Pod won't start
 - Check RunPod **Pod Logs** — look for OOM or image pull errors
-- Ensure the image `fred-terzi/totem-llm:latest` is public on Docker Hub
+- Ensure the image `fredterzi/totem-llm:latest` is public on Docker Hub
 
 ### Slow first response
 - The model may still be loading into VRAM (27B takes ~10-20s to load)
@@ -205,8 +205,8 @@ npm publish
 For pinned versions (e.g., for enterprise users who want stability):
 
 ```
-fred-terzi/totem-llm:0.16.1    # specific version
-fred-terzi/totem-llm:latest    # rolling (template default)
+fredterzi/totem-llm:0.16.1    # specific version
+fredterzi/totem-llm:latest    # rolling (template default)
 ```
 
 Users can change the image tag in their template settings to pin a version.

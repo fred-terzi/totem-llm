@@ -3,7 +3,7 @@
 # Convenience targets for Docker build/test/push
 # ──────────────────────────────────────────────────────────────────
 
-IMAGE_NAME  ?= fred-terzi/totem-llm
+IMAGE_NAME  ?= fredterzi/totem-llm
 VERSION     ?= latest
 PLATFORM    ?= linux/amd64
 GPU         ?= --gpus all
