@@ -25,10 +25,22 @@ const { getAnythingLLMUserAgent } = require("../../../endpoints/utils");
  * Native tool calling is handled by the Aibitat agent provider in Slice B
  * (`server/utils/agents/aibitat/providers/venice.js`), which extends `Provider`
  * and forces the native path. This class is chat + streaming only.
+ *
+ * Context windows: Venice's `/models` endpoint reports `context_length` (and
+ * `model_spec.availableContextTokens`) for every model. We cache these on first
+ * construction (same pattern as the Ollama/Cerebras providers) so the message
+ * compressor budgets against the real window of the selected model instead of a
+ * hardcoded 8k.
  */
 class VeniceLLM {
   static DEFAULT_BASE_URL = "https://api.venice.ai/api/v1";
   static DEFAULT_MODEL = "zai-org-glm-5-1";
+
+  /** @see VeniceLLM.cacheContextWindows */
+  static modelContextWindows = {};
+  /** @see VeniceLLM.cacheContextWindows */
+  static modelSpecs = {};
+  static modelContextCachePromise = null;
 
   constructor(embedder = null, modelPreference = null) {
     const { OpenAI: OpenAIApi } = require("openai");
@@ -55,15 +67,10 @@ class VeniceLLM {
       ? toValidNumber(process.env.VENICE_MAX_TOKENS, 1024)
       : 1024;
 
-    // Venice models vary widely in context window; default to a conservative 8k.
-    // Override with VENICE_MODEL_TOKEN_LIMIT if you know the model's real window.
-    this.promptWindow = Number(process.env.VENICE_MODEL_TOKEN_LIMIT) || 8192;
+    // Lazy load the limits to avoid blocking the main thread on cacheContextWindows
+    this.limits = null;
 
-    this.limits = {
-      history: this.promptWindow * 0.15,
-      system: this.promptWindow * 0.15,
-      user: this.promptWindow * 0.7,
-    };
+    VeniceLLM.cacheContextWindows();
 
     this.embedder = embedder ?? new NativeEmbedder();
     this.defaultTemp = 0.7;
@@ -73,6 +80,87 @@ class VeniceLLM {
 
   #log(text, ...args) {
     console.log(`\x1b[36m[${this.className}]\x1b[0m ${text}`, ...args);
+  }
+
+  static #slog(text, ...args) {
+    console.log(`\x1b[36m[VeniceLLM]\x1b[0m ${text}`, ...args);
+  }
+
+  async assertModelContextLimits() {
+    if (this.limits !== null) return;
+    await VeniceLLM.cacheContextWindows();
+    this.limits = {
+      history: this.promptWindowLimit() * 0.15,
+      system: this.promptWindowLimit() * 0.15,
+      user: this.promptWindowLimit() * 0.7,
+    };
+    this.#log(
+      `model ${this.model} is using a max context window of ${this.promptWindowLimit()}/${VeniceLLM.maxContextWindow(this.model)} tokens.`
+    );
+  }
+
+  /**
+   * Cache the context windows for the Venice models.
+   * This is done once and then cached for the lifetime of the server. This is
+   * absolutely necessary to ensure that the context windows are correct.
+   *
+   * Venice exposes both a top-level `context_length` and
+   * `model_spec.availableContextTokens` for every model on `GET /models` - we
+   * prefer `availableContextTokens` and fall back to `context_length`.
+   * @param {boolean} force - Force the cache to be refreshed.
+   * @returns {Promise<void>} - A promise that resolves when the cache is refreshed.
+   */
+  static async cacheContextWindows(force = false) {
+    if (VeniceLLM.modelContextCachePromise)
+      return VeniceLLM.modelContextCachePromise;
+    if (Object.keys(VeniceLLM.modelContextWindows).length > 0 && !force)
+      return;
+    if (!process.env.VENICE_API_KEY)
+      return VeniceLLM.#slog(
+        `No VENICE_API_KEY set - skipping context window cache.`
+      );
+
+    const cachePromise = (async () => {
+      try {
+        const { OpenAI: OpenAIApi } = require("openai");
+        const venice = new OpenAIApi({
+          baseURL: process.env.VENICE_BASE_PATH || VeniceLLM.DEFAULT_BASE_URL,
+          apiKey: process.env.VENICE_API_KEY,
+          defaultHeaders: {
+            "User-Agent": getAnythingLLMUserAgent(),
+          },
+        });
+
+        const { data: models } = await venice.models.list();
+        if (!models?.length) return;
+
+        const modelContextWindows = {};
+        const modelSpecs = {};
+        models.forEach((model) => {
+          const contextWindow = Number(
+            model?.model_spec?.availableContextTokens ?? model?.context_length
+          );
+          if (!contextWindow || isNaN(contextWindow) || contextWindow <= 0)
+            return;
+          modelContextWindows[model.id] = contextWindow;
+          if (model?.model_spec) modelSpecs[model.id] = model.model_spec;
+        });
+
+        VeniceLLM.modelContextWindows = modelContextWindows;
+        VeniceLLM.modelSpecs = modelSpecs;
+        VeniceLLM.#slog(`Context windows cached for all models!`);
+      } catch (e) {
+        VeniceLLM.#slog(`Error caching context windows`, e.message);
+      }
+    })();
+
+    VeniceLLM.modelContextCachePromise = cachePromise;
+    try {
+      await cachePromise;
+    } finally {
+      if (VeniceLLM.modelContextCachePromise === cachePromise)
+        VeniceLLM.modelContextCachePromise = null;
+    }
   }
 
   #appendContext(contextTexts = []) {
@@ -91,14 +179,46 @@ class VeniceLLM {
     return "streamGetChatCompletion" in this;
   }
 
-  static promptWindowLimit(_modelName) {
-    // Venice does not expose a single public context-window endpoint for all
-    // models; we rely on the ENV override or a conservative default.
-    return Number(process.env.VENICE_MODEL_TOKEN_LIMIT) || 8192;
+  static promptWindowLimit(modelName) {
+    if (Object.keys(VeniceLLM.modelContextWindows).length === 0) {
+      VeniceLLM.#slog(
+        "No context windows cached - Context window may be inaccurately reported."
+      );
+      return Number(process.env.VENICE_MODEL_TOKEN_LIMIT) || 8192;
+    }
+
+    let userDefinedLimit = null;
+    const systemDefinedLimit = VeniceLLM.maxContextWindow(modelName);
+
+    if (
+      process.env.VENICE_MODEL_TOKEN_LIMIT &&
+      !isNaN(Number(process.env.VENICE_MODEL_TOKEN_LIMIT)) &&
+      Number(process.env.VENICE_MODEL_TOKEN_LIMIT) > 0
+    )
+      userDefinedLimit = Number(process.env.VENICE_MODEL_TOKEN_LIMIT);
+
+    // The user defined limit is always higher priority than the context window limit, but it cannot be higher than the context window limit
+    // so we return the minimum of the two, if there is no user defined limit, we return the system defined limit as-is.
+    if (userDefinedLimit !== null)
+      return Math.min(userDefinedLimit, systemDefinedLimit);
+
+    // Unlike Ollama (local runtimes that silently truncate prompts beyond their
+    // allocated num_ctx, hence its 16,384 safety cap), Venice is a hosted API
+    // that honors the context window reported by /models and returns an
+    // explicit 400 on overflow. Report the model's real window as-is.
+    return systemDefinedLimit;
   }
 
   promptWindowLimit() {
     return this.constructor.promptWindowLimit(this.model);
+  }
+
+  static maxContextWindow(modelName = null) {
+    if (Object.keys(VeniceLLM.modelContextWindows).length === 0 || !modelName)
+      return 8192;
+    // Unknown model slug (typo'd or newer than the cache) → conservative 8192,
+    // matching the cold-cache fallback above.
+    return Number(VeniceLLM.modelContextWindows[modelName]) || 8192;
   }
 
   // Venice is OpenAI-compatible at the wire level. Any model slug the account
@@ -234,11 +354,23 @@ class VeniceLLM {
    * @returns {{tools: boolean, reasoning: boolean, imageGeneration: boolean, vision: boolean}}
    */
   getModelCapabilities() {
+    const spec = VeniceLLM.modelSpecs[this.model];
+    if (!spec?.capabilities) {
+      // Cache is cold (or the model vanished from /models) - keep the old
+      // optimistic defaults rather than disabling tool calling outright.
+      return {
+        tools: true,
+        reasoning: true,
+        imageGeneration: false,
+        vision: false,
+      };
+    }
+    const capabilities = spec.capabilities;
     return {
-      tools: true,
-      reasoning: true,
-      imageGeneration: false,
-      vision: false,
+      tools: capabilities.supportsFunctionCalling === true,
+      reasoning: capabilities.supportsReasoning === true,
+      imageGeneration: false, // text-model endpoint; image gen is a separate API surface
+      vision: capabilities.supportsVision === true,
     };
   }
 
@@ -251,6 +383,7 @@ class VeniceLLM {
   }
 
   async compressMessages(promptArgs = {}, rawHistory = []) {
+    await this.assertModelContextLimits();
     const { messageArrayCompressor } = require("../../helpers/chat");
     const messageArray = this.constructPrompt(promptArgs);
     return await messageArrayCompressor(this, messageArray, rawHistory);

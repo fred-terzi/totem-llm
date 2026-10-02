@@ -54,9 +54,10 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
    * Falls back to `false` if no key is set or the check throws.
    * @returns {Promise<boolean>}
    */
-  supportsNativeToolCalling() {
+  async supportsNativeToolCalling() {
     if (this._supportsToolCalling !== null) return this._supportsToolCalling;
     try {
+      await VeniceLLM.cacheContextWindows();
       const venice = new VeniceLLM(null, this.model);
       const capabilities = venice.getModelCapabilities();
       this._supportsToolCalling = capabilities.tools === true;
