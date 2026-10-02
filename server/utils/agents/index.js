@@ -285,6 +285,10 @@ class AgentHandler {
         if (!process.env.CEREBRAS_API_KEY)
           throw new Error("Cerebras API key must be provided to use agents.");
         break;
+      case "venice":
+        if (!process.env.VENICE_API_KEY)
+          throw new Error("Venice API key must be provided to use agents.");
+        break;
       default:
         throw new Error(
           "No workspace agent provider set. Please set your agent provider in the workspace's settings"
@@ -379,6 +383,8 @@ class AgentHandler {
         return process.env.MINIMAX_MODEL_PREF ?? "MiniMax-M2.7";
       case "cerebras":
         return process.env.CEREBRAS_MODEL_PREF ?? "gpt-oss-120b";
+      case "venice":
+        return process.env.VENICE_MODEL_PREF ?? "zai-org-glm-5-1";
       default:
         return null;
     }

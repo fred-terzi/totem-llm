@@ -689,6 +689,24 @@ const KEY_MAPPING = {
     checks: [isNotEmpty],
   },
 
+  // Venice AI Options
+  VeniceApiKey: {
+    envKey: "VENICE_API_KEY",
+    checks: [isNotEmpty],
+  },
+  VeniceModelPref: {
+    envKey: "VENICE_MODEL_PREF",
+    checks: [isNotEmpty],
+  },
+  VeniceTokenLimit: {
+    envKey: "VENICE_MODEL_TOKEN_LIMIT",
+    checks: [nonZero],
+  },
+  VeniceMaxTokens: {
+    envKey: "VENICE_MAX_TOKENS",
+    checks: [nonZero],
+  },
+
   // APIPie Options
   ApipieLLMApiKey: {
     envKey: "APIPIE_LLM_API_KEY",
@@ -996,6 +1014,7 @@ function supportedLLM(input = "") {
     "lemonade",
     "minimax",
     "cerebras",
+    "venice",
     "anythingllm-router",
   ].includes(input);
   return validSelection ? null : `${input} is not a valid LLM provider.`;
