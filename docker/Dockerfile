@@ -66,10 +66,21 @@ RUN npm install -g "totem-llm@${TOTEM_LLM_VERSION}" --legacy-peer-deps --no-audi
 # This keeps the image ~6 GB while ensuring any GPU ≥ 10 GB is usable
 # immediately.
 RUN mkdir -p /root/.ollama && \
-    (ollama serve &) && sleep 5 && \
+    (ollama serve > /dev/null 2>&1 & echo $! > /tmp/ollama-build.pid) && \
+    for i in $(seq 1 30); do \
+        curl -s --max-time 2 http://127.0.0.1:11434/api/version > /dev/null 2>&1 && break; \
+        sleep 1; \
+    done && \
     ollama pull nomic-embed-text:latest && \
     ollama pull qwen3.5:9b && \
-    pkill -f "ollama serve" 2>/dev/null || true
+    OLLAMA_PID=$(cat /tmp/ollama-build.pid) && \
+    kill $OLLAMA_PID && \
+    for i in $(seq 1 10); do \
+        kill -0 $OLLAMA_PID 2>/dev/null || break; \
+        sleep 1; \
+    done && \
+    sync && \
+    echo "Pre-baked models:" && ollama list 2>/dev/null || ls /root/.ollama/models/manifests/registry.ollama.ai/library/ 2>/dev/null
 
 # ── Runtime environment defaults ─────────────────────────────────────────────
 # OLLAMA_MODEL_PREF and OLLAMA_MODEL_TOKEN_LIMIT are intentionally NOT set

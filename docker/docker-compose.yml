@@ -33,7 +33,7 @@ services:
     environment:
       # GPU detection is automatic — no config needed.
       # Override model selection if desired:
-      # TOTEM_MODEL_OVERRIDE: qwen3.8:27b-q8_0
+      # TOTEM_MODEL_OVERRIDE: qwen3.8:27b-mtp-q8_0
       # TOTEM_CONTEXT_OVERRIDE: "32768"
       #
       # Or force specific provider settings:
