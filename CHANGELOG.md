@@ -2,6 +2,42 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.18.0](https://github.com/fred-terzi//compare/v0.17.0...v0.18.0) (2026-10-04)
+
+
+### Features
+
+* **agents:** add Venice Aibitat agent provider ([90e6602](https://github.com/fred-terzi//commit/90e660260616e9bb5ce19d5f458eb2b187befc78))
+* **docker:** add Venice-only base image (Phase 1 of hosted infra) ([f94619f](https://github.com/fred-terzi//commit/f94619f443b682d4e3ffa466398d8c664be9e8e2))
+* **venice:** add Venice AI as a supported LLM provider ([ac59de9](https://github.com/fred-terzi//commit/ac59de9eaa9c7592a0baea188b287a3e5c0fcb29))
+* **venice:** add Venice to the frontend provider picker ([1a6be2e](https://github.com/fred-terzi//commit/1a6be2e9b1aa1b3b08eb5418e757ce22e4918104))
+* **venice:** cache model context windows & specs; fix Ollama empty-user-turn ([5c2cb43](https://github.com/fred-terzi//commit/5c2cb4378f7990beef958b304af11fe3d14e7a23))
+
+
+### Bug Fixes
+
+* **docker:** prevent model re-download by ensuring clean Ollama shutdown ([135e437](https://github.com/fred-terzi//commit/135e4371af66bb1209a7b69e1b5db481ac3a595e))
+* **docker:** rename 27b models to qwen3.8:27b-mtp variants ([034d9c2](https://github.com/fred-terzi//commit/034d9c2fdec7cc65d3bc05bc6cb66d6e9e423db5))
+
+
+### Code Refactoring
+
+* **release:** split npm publish and docker build into separate scripts ([ba8d81d](https://github.com/fred-terzi//commit/ba8d81d653cd56903616d325dc84432ec1b899eb))
+
+
+### Documentation Changes
+
+* **docker:** add RunPod template README ([6603863](https://github.com/fred-terzi//commit/66038631d891eca581ff94f4112c6ca87c5e79dc))
+* **docker:** fix Docker Hub username and add RunPod template README ([ff160e9](https://github.com/fred-terzi//commit/ff160e948676aa098635b4e8d2d03ba3b2d6cfcb))
+
+
+### Miscellaneous Chores
+
+* add planning/ directory to .gitignore for local docs ([41caee9](https://github.com/fred-terzi//commit/41caee9c7cc85e6e259a4b900538c85be0975d4e))
+* bump version to 0.18.0 ([b46e7dd](https://github.com/fred-terzi//commit/b46e7dd81c5421d34e9eade07fd822be8dc8491b))
+* Make docker script executable. ([2a15950](https://github.com/fred-terzi//commit/2a1595067bbbfeaab3fba38ceea4e9f8e18631a7))
+* update OpenRouter attribution headers to Totem-LLM branding ([c86eb82](https://github.com/fred-terzi//commit/c86eb82a155c59859ffa3f00e5f15e6d583172a6))
+
 ## [0.17.0](https://github.com/fred-terzi//compare/v0.16.1...v0.17.0) (2026-09-08)
 
 
