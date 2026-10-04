@@ -10,6 +10,10 @@ jest.mock("../../../../../utils/agents/aibitat/providers/ai-provider", () => {
 
     providerLog() {}
 
+    resetUsage() {}
+
+    recordUsage() {}
+
     cleanMsgs(messages) {
       return messages;
     }
@@ -21,11 +25,24 @@ jest.mock("../../../../../utils/agents/aibitat/providers/helpers/untooled", () =
 });
 
 jest.mock("../../../../../utils/AiProviders/ollama", () => ({
-  OllamaAILLM: {
-    promptWindowLimit: jest.fn(() => 4096),
-    maxContextWindow: jest.fn(() => 8192),
-    cacheContextWindows: jest.fn().mockResolvedValue(),
-    applyOllamaFetch: jest.fn(() => jest.fn()),
+  OllamaAILLM: class {
+    static promptWindowLimit() {
+      return 4096;
+    }
+
+    static maxContextWindow() {
+      return 8192;
+    }
+
+    static async cacheContextWindows() {}
+
+    static applyOllamaFetch() {
+      return jest.fn();
+    }
+
+    async getModelCapabilities() {
+      return { tools: true };
+    }
   },
 }));
 
@@ -54,6 +71,28 @@ describe("OllamaProvider think level support", () => {
       expect.objectContaining({
         model: "demo-model",
         think: false,
+      })
+    );
+  });
+
+  it("adds a synthetic user turn when native tool requests have no user message", async () => {
+    const chatMock = jest.fn().mockResolvedValue(
+      (async function* () {})()
+    );
+    Ollama.mockImplementation(() => ({ chat: chatMock }));
+
+    const provider = new OllamaProvider({ model: "demo-model" });
+    await provider.stream([], [
+      {
+        name: "test_tool",
+        description: "A test tool",
+        parameters: { type: "object", properties: {} },
+      },
+    ]);
+
+    expect(chatMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [{ role: "user", content: "Continue." }],
       })
     );
   });

@@ -181,6 +181,9 @@ function getModelTag() {
     case "cerebras":
       model = process.env.CEREBRAS_MODEL_PREF;
       break;
+    case "venice":
+      model = process.env.VENICE_MODEL_PREF;
+      break;
     default:
       model = "--";
       break;

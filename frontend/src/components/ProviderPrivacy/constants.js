@@ -47,6 +47,7 @@ import SambaNovaLogo from "@/media/llmprovider/sambanova.png";
 import LemonadeLogo from "@/media/llmprovider/lemonade.png";
 import MinimaxLogo from "@/media/llmprovider/minimax.png";
 import CerebrasLogo from "@/media/llmprovider/cerebras.png";
+import VeniceLogo from "@/media/llmprovider/venice.png";
 
 const LLM_PROVIDER_PRIVACY_MAP = {
   openai: {
@@ -263,6 +264,11 @@ const LLM_PROVIDER_PRIVACY_MAP = {
     name: "Cerebras",
     policyUrl: "https://www.cerebras.ai/privacy-policy",
     logo: CerebrasLogo,
+  },
+  venice: {
+    name: "Venice",
+    policyUrl: "https://venice.ai/privacy",
+    logo: VeniceLogo,
   },
 };
 

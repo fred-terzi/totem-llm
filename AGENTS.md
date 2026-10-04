@@ -65,7 +65,9 @@ yarn dev:collector    # Collector on :8888 (nodemon, hot-reloads)
 yarn dev:frontend     # Vite on :3000 (proxies /api → server :8686)
 ```
 
-`yarn setup` is idempotent. It copies `.env.example` → `.env` only if target doesn't exist. It also generates the Prisma client and runs migrations against `server/storage/anythingllm.db`.
+`yarn setup` is idempotent. It copies `.env.example` → `.env` only if target doesn't exist. It also generates the Prisma client and runs migrations against `server/storage/totem-llm.db`.
+
+> **DB filename migration (Totem rebrand):** pre-existing AnythingLLM installs store their SQLite DB as `~/totem-llm/anythingllm.db` (or `$STORAGE_DIR/anythingllm.db`). On startup, `lib/migrateDbName.js#migrateDatabaseFilename()` renames it to the new default `totem-llm.db` before Prisma migrations run. If both files exist, the existing `totem-llm.db` is kept and the legacy file is preserved as a timestamped backup (`anythingllm.db.bak-<ts>`) — no data loss, but the user must merge manually.
 
 ## Env Files
 
@@ -274,8 +276,7 @@ Auto-generated on server start/restart by nodemon event hook in `server/nodemon.
 
 ## Versioning & Release Process
 
-- Use the **npm-versioning skill** (`software-development/npm-versioning/SKILL.md`) for every release.
-- The workflow: `standard-version --dry-run` → confirm bump type → `npx standard-version` → push tags → open/merge PR.
+- **`RELEASE.md`** (repo root) is the single source of truth for versioning and releases: standard-version workflow, semver bump rules, tag/publish steps. Follow it for every release.
 - Never skip the version bump when creating a PR that reaches main-totem.
 
 ## Node Version

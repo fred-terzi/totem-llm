@@ -15,4 +15,5 @@
 **/tmp/**
 **/.log
 !docker/.env.example
+!docker/venice/.env.template
 !frontend/.env.production

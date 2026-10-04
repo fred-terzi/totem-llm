@@ -37,6 +37,7 @@ import SambaNovaLogo from "@/media/llmprovider/sambanova.png";
 import LemonadeLogo from "@/media/llmprovider/lemonade.png";
 import MinimaxLogo from "@/media/llmprovider/minimax.png";
 import CerebrasLogo from "@/media/llmprovider/cerebras.png";
+import VeniceLogo from "@/media/llmprovider/venice.png";
 
 import OpenAiOptions from "@/components/LLMSelection/OpenAiOptions";
 import GenericOpenAiOptions from "@/components/LLMSelection/GenericOpenAiOptions";
@@ -75,6 +76,7 @@ import SambaNovaOptions from "@/components/LLMSelection/SambaNovaOptions";
 import LemonadeOptions from "@/components/LLMSelection/LemonadeOptions";
 import MinimaxOptions from "@/components/LLMSelection/MinimaxOptions";
 import CerebrasLLMOptions from "@/components/LLMSelection/CerebrasLLMOptions";
+import VeniceLLMOptions from "@/components/LLMSelection/VeniceLLMOptions";
 
 import LLMItem from "@/components/LLMSelection/LLMItem";
 import System from "@/models/system";
@@ -353,6 +355,13 @@ const LLMS = [
     logo: CerebrasLogo,
     options: (settings) => <CerebrasLLMOptions settings={settings} />,
     description: "Run models at instant speed on Cerebras inference.",
+  },
+  {
+    name: "Venice",
+    value: "venice",
+    logo: VeniceLogo,
+    options: (settings) => <VeniceLLMOptions settings={settings} />,
+    description: "Private, uncensored AI on Venice's privacy-first API.",
   },
 ];
 

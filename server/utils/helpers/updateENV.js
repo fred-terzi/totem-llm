@@ -689,6 +689,24 @@ const KEY_MAPPING = {
     checks: [isNotEmpty],
   },
 
+  // Venice AI Options
+  VeniceApiKey: {
+    envKey: "VENICE_API_KEY",
+    checks: [isNotEmpty],
+  },
+  VeniceModelPref: {
+    envKey: "VENICE_MODEL_PREF",
+    checks: [isNotEmpty],
+  },
+  VeniceTokenLimit: {
+    envKey: "VENICE_MODEL_TOKEN_LIMIT",
+    checks: [nonZero],
+  },
+  VeniceMaxTokens: {
+    envKey: "VENICE_MAX_TOKENS",
+    checks: [nonZero],
+  },
+
   // APIPie Options
   ApipieLLMApiKey: {
     envKey: "APIPIE_LLM_API_KEY",
@@ -996,6 +1014,7 @@ function supportedLLM(input = "") {
     "lemonade",
     "minimax",
     "cerebras",
+    "venice",
     "anythingllm-router",
   ].includes(input);
   return validSelection ? null : `${input} is not a valid LLM provider.`;
@@ -1387,6 +1406,17 @@ function dumpENV() {
     const envValue = process.env?.[key] || null;
     if (!envValue) continue;
     frozenEnvs[key] = process.env?.[key] || null;
+  }
+
+  // Rewrite the default SQLite database filename to the Totem LLM name so a
+  // pre-existing AnythingLLM install (anythingllm.db) is not orphaned when its
+  // saved DATABASE_URL is restored. Only touches file: URLs under STORAGE_DIR.
+  if (frozenEnvs.DATABASE_URL && frozenEnvs.STORAGE_DIR) {
+    const re = /^file:(.*?)[/\\]storage[\\/]anythingllm\.db$/;
+    const m = String(frozenEnvs.DATABASE_URL).match(re);
+    if (m) {
+      frozenEnvs.DATABASE_URL = `file:${m[1]}/storage/totem-llm.db`;
+    }
   }
 
   var envResult = `# Auto-dump ENV from system call on ${new Date().toTimeString()}\n`;

@@ -34,6 +34,11 @@ async function eagerLoadContextWindows() {
       await CerebrasLLM.cacheContextWindows(true);
       log("Cerebras");
       break;
+    case "venice":
+      const { VeniceLLM } = require("../AiProviders/venice");
+      await VeniceLLM.cacheContextWindows(true);
+      log("Venice");
+      break;
   }
 }
 

@@ -51,6 +51,7 @@ const SUPPORT_CUSTOM_MODELS = [
   "lemonade",
   "minimax",
   "cerebras",
+  "venice",
   "generic-openai",
   // Embedding Engines
   "native-embedder",
@@ -140,6 +141,8 @@ async function getCustomModels(provider = "", apiKey = null, basePath = null) {
       return await getMinimaxModels(apiKey);
     case "cerebras":
       return await getCerebrasModels();
+    case "venice":
+      return await getVeniceModels(basePath, apiKey);
     case "generic-openai":
       return await getGenericOpenAiModels(basePath, apiKey);
     default:
@@ -1102,6 +1105,54 @@ async function getCerebrasModels() {
   } catch (e) {
     console.error(`Cerebras:getCerebrasModels`, e.message);
     return { models: [], error: "Could not fetch Cerebras Models" };
+  }
+}
+
+/**
+ * Venice AI models — fetched from the Venice API using the account's API key.
+ * Falls back to a small hardcoded list of known-good tool-capable models if the
+ * fetch fails, so the UI can still render a usable selection.
+ */
+async function getVeniceModels(basePath = null, apiKey = null) {
+  const DEFAULT_BASE = "https://api.venice.ai/api/v1";
+  const base = basePath || process.env.VENICE_BASE_PATH || DEFAULT_BASE;
+  const key = apiKey || process.env.VENICE_API_KEY || null;
+  try {
+    const { OpenAI: OpenAIApi } = require("openai");
+    const venice = new OpenAIApi({ baseURL: base, apiKey: key });
+    const models = await venice.models
+      .list()
+      .then((results) => results.data)
+      .then((models) =>
+        models.map((model) => ({
+          id: model.id,
+          name: model.id,
+          organization: model.owned_by ?? "venice",
+        }))
+      )
+      .catch((e) => {
+        console.error(`Venice:listModels`, e.message);
+        return [];
+      });
+
+    if (models.length > 0 && !!key) process.env.VENICE_API_KEY = key;
+
+    if (models.length > 0) return { models, error: null };
+
+    // Fallback list — known-good Venice model slugs that support tool calling.
+    // Keep this short; the real list comes from /models.
+    const FALLBACK = [
+      "zai-org-glm-5-1",
+      "kimi-k2-6",
+      "anthropic-claude-sonnet-4-5",
+    ];
+    return {
+      models: FALLBACK.map((id) => ({ id, name: id, organization: "venice" })),
+      error: null,
+    };
+  } catch (e) {
+    console.error(`Venice:getVeniceModels`, e.message);
+    return { models: [], error: "Could not fetch Venice Models" };
   }
 }
 

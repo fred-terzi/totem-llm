@@ -80,6 +80,28 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
   }
 
   /**
+   * Ollama's qwen3.8+ chat renderer hard-rejects any request containing zero
+   * user-role messages with a 500: "no user query found in messages".
+   * Agent tool-loops and continue-without-feedback turns can legitimately
+   * produce such payloads. Ollama accepts a user message anywhere in the
+   * array, so synthesize a trailing one when none exists - this keeps the
+   * agent session alive instead of terminating it with an APIError.
+   * @param {Array<{role: string, content: any}>} formattedMessages
+   * @returns {Array}
+   */
+  #ensureUserQuery(formattedMessages = []) {
+    if (!Array.isArray(formattedMessages)) return formattedMessages;
+    const hasUserQuery = formattedMessages.some(
+      (msg) => msg?.role === "user" && !!msg?.content
+    );
+    if (hasUserQuery) return formattedMessages;
+    this.providerLog(
+      "[warning]: No user query found in messages - injecting a synthetic one so Ollama (qwen3.8+ renderer) accepts the request."
+    );
+    return [...formattedMessages, { role: "user", content: "Continue." }];
+  }
+
+  /**
    * Handle a chat completion with tool calling
    *
    * @param messages
@@ -89,7 +111,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     await OllamaAILLM.cacheContextWindows();
     const requestPayload = {
       model: this.model,
-      messages,
+      messages: this.#ensureUserQuery(messages),
       options: this.queryOptions,
     };
     if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
@@ -101,7 +123,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     await OllamaAILLM.cacheContextWindows();
     const requestPayload = {
       model: this.model,
-      messages,
+      messages: this.#ensureUserQuery(messages),
       stream: true,
       options: this.queryOptions,
     };
@@ -216,7 +238,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     const history = [...messages].filter((msg) =>
       ["user", "assistant"].includes(msg.role)
     );
-    if (history[history.length - 1].role !== "user") return null;
+    if (history.at(-1)?.role !== "user") return null;
 
     const msgUUID = v4();
     let token = "";
@@ -330,7 +352,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
 
       const requestPayload = {
         model: this.model,
-        messages: formattedMessages,
+        messages: this.#ensureUserQuery(formattedMessages),
         tools,
         stream: true,
         options: this.queryOptions,
@@ -567,7 +589,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
 
       const requestPayload = {
         model: this.model,
-        messages: formattedMessages,
+        messages: this.#ensureUserQuery(formattedMessages),
         tools,
         options: this.queryOptions,
       };

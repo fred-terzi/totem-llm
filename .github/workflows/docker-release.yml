@@ -1,0 +1,137 @@
+name: Docker Release
+
+description: >
+  Build and push the Totem LLM Docker image to Docker Hub
+  when a version tag is pushed. The npm package must be
+  published first (via ./scripts/publish-npm.sh).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Manual trigger from GitHub UI (e.g. re-build after a fix)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'NPM package version to install (e.g. 0.17.0). Leave empty for latest.'
+        required: false
+        default: ''
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: fredterzi/totem-llm
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+
+    steps:
+      # ── Determine version ──────────────────────────────────────
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "version=latest" >> $GITHUB_OUTPUT
+          fi
+          echo "Using version: ${{ steps.version.outputs.version }}"
+
+      # ── Checkout (for Dockerfile) ──────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── Verify npm package exists (with retry) ────────────────
+      - name: Verify npm package is published
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [ "$VERSION" = "latest" ]; then
+            echo "Using @latest — checking package exists"
+            npm view totem-llm version || {
+              echo "::error::Package totem-llm not found on npm."
+              exit 1
+            }
+          else
+            echo "Checking if totem-llm@$VERSION exists on npm (with retries)..."
+            FOUND=false
+            for i in $(seq 1 12); do
+              if npm view totem-llm@$VERSION version > /dev/null 2>&1; then
+                FOUND=true
+                break
+              fi
+              echo "  Not yet visible… retrying ($i/12)"
+              sleep 5
+            done
+            if [ "$FOUND" = false ]; then
+              echo "::error::Package totem-llm@$VERSION not found on npm after 60s."
+              echo "::error::Run ./scripts/publish-npm.sh $VERSION first."
+              exit 1
+            fi
+            echo "✓ totem-llm@$VERSION found on npm"
+          fi
+
+      # ── Set up Docker Buildx ───────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Login to Docker Hub ────────────────────────────────────
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ── Build & Push ───────────────────────────────────────────
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          build-args: |
+            TOTEM_LLM_VERSION=${{ steps.version.outputs.version }}
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      # ── Smoke test ─────────────────────────────────────────────
+      - name: Smoke test
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Pulling and testing ${{ env.IMAGE_NAME }}:$VERSION..."
+
+          docker run -d --name totem-smoke-test \
+            -p 18686:8686 \
+            "${{ env.IMAGE_NAME }}:$VERSION"
+
+          echo "Waiting for Totem LLM to start..."
+          for i in $(seq 1 60); do
+            if curl -s --max-time 2 http://localhost:18686/api/ping > /dev/null 2>&1; then
+              echo "✓ Totem LLM is responding"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "::error::Totem LLM did not start within 120s"
+              docker logs totem-smoke-test
+              docker stop totem-smoke-test || true
+              exit 1
+            fi
+            sleep 2
+          done
+
+          PING=$(curl -s http://localhost:18686/api/ping)
+          echo "Health check: $PING"
+
+          docker stop totem-smoke-test
+          docker rm totem-smoke-test
+
+          echo "✓ Smoke test passed"

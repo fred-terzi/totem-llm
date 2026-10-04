@@ -1,0 +1,55 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Totem LLM (Venice AI) — Local Docker Compose
+#
+# Local dev/testing convenience. The hosted deployment (Hetzner VPS) uses
+# docker CLI directly via the orchestrator — this compose file is for
+# local verification and manual testing.
+#
+# Usage:
+#   export VENICE_API_KEY=sk-...   # set in your shell
+#   docker compose -f docker/venice/docker-compose.yml up --build
+#
+# Optional — run on a different host port (e.g. dev instance is on 8686):
+#   HOST_PORT=18686 docker compose -f docker/venice/docker-compose.yml up --build
+#   then open http://localhost:18686
+#
+# The VENICE_API_KEY is read from the host environment and injected into
+# the container. It is NEVER written to a file, never in the image, and
+# never visible in the web UI (Phase 4 hardening handles the UI side).
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: totem-venice
+
+services:
+  totem:
+    build:
+      context: ../..
+      dockerfile: docker/venice/Dockerfile
+      args:
+        # Pin a specific version for reproducible builds:
+        # TOTEM_LLM_VERSION: 0.17.0
+        TOTEM_LLM_VERSION: latest
+    container_name: totem-venice
+    restart: unless-stopped
+    ports:
+      # Host port is configurable so you can run alongside a local dev
+      # instance already on 8686. Default stays 8686 for the hosted case.
+      #   HOST_PORT=18686 docker compose ... up   ->   http://localhost:18686
+      - "${HOST_PORT:-8686}:8686"   # Totem LLM UI + API
+    volumes:
+      - totem-data:/app/totem-storage
+    environment:
+      # Required — injected from host env (see usage above)
+      VENICE_API_KEY: ${VENICE_API_KEY}
+      # Optional overrides (defaults shown for reference):
+      # VENICE_MODEL_PREF: zai-org-glm-5-1
+      # VENICE_MAX_TOKENS: "1024"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/docker-healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+
+volumes:
+  totem-data:

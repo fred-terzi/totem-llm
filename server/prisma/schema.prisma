@@ -3,7 +3,7 @@ generator client {
 }
 
 // DATABASE_URL controls the database location.
-// SQLite default (development):  DATABASE_URL="file:../storage/anythingllm.db"
+// SQLite default (development):  DATABASE_URL="file:../storage/totem-llm.db"
 // SQLite (npm package / production): DATABASE_URL is set automatically by the launcher to the user's storage dir.
 // PostgreSQL: DATABASE_URL="postgresql://user:pass@host:5432/dbname"
 datasource db {
