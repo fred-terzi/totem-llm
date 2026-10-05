@@ -83,6 +83,9 @@ model users {
   desktop_mobile_devices       desktop_mobile_devices[]
   workspace_parsed_files       workspace_parsed_files[]
   memories                     memories[]
+  wallet_address               String?                         @unique
+  credits_balance              Int                             @default(0)
+  credit_transactions          credit_transactions[]
 }
 
 model recovery_codes {
@@ -454,6 +457,18 @@ model model_routers {
   createdAt         DateTime             @default(now())
   lastUpdatedAt     DateTime             @default(now())
   rules             model_router_rules[]
+}
+
+model credit_transactions {
+  id        Int      @id @default(autoincrement())
+  user_id   Int
+  amount    Int
+  type      String   // "purchase" | "debit" | "refund"
+  reference String?
+  createdAt DateTime @default(now())
+  user      users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
 }
 
 model model_router_rules {
