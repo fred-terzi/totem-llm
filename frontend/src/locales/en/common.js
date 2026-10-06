@@ -139,7 +139,7 @@ const TRANSLATIONS = {
     },
   },
   "main-page": {
-    greeting: "How can I help you today?",
+    greeting: "TOTEM - Your Mind Leads.",
     quickActions: {
       createAgent: "Create an Agent",
       editWorkspace: "Edit Workspace",
