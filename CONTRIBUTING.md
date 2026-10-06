@@ -28,7 +28,7 @@ Before you start working on an issue, please read the following so that you don'
 
 3. It is our discretion to merge or not merge a PR. We value every contribution, but we also value the quality of the code and the user experience we envision for the project. It is a fine line to walk when running a project like this and please understand that merging or not merging a PR is not a reflection of the quality of the contribution and is not personal. We will do our best to provide feedback on the PR and help you make the changes necessary to get it merged.
 
-4. **Security** is always important. If you have a security concern, please do not open an issue. Instead, please open a CVE on our designated reporting platform [Huntr](https://huntr.com) or contact us at [team@mintplexlabs.com](mailto:team@mintplexlabs.com).
+4. **Security** is always important. If you have a security concern, please do not open an issue. Instead, please open a CVE on our designated reporting platform [Huntr](https://huntr.com) or contact us at [terzitech@gmail.com](mailto:terzitech@gmail.com).
 
 ## Configuring Git
 
