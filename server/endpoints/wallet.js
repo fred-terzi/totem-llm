@@ -1,7 +1,11 @@
 const { v4: uuidv4 } = require("uuid");
 const { ethers } = require("ethers");
-const { reqBody, makeJWT } = require("../utils/http");
+const { reqBody, makeJWT, userFromSession } = require("../utils/http");
 const { User } = require("../models/user");
+const {
+  totemConfig,
+  fetchTotemBalance,
+} = require("../utils/totemBalance");
 const { Workspace } = require("../models/workspace");
 const { EventLogs } = require("../models/eventLogs");
 const prisma = require("../utils/prisma");
@@ -43,6 +47,59 @@ function buildWalletMessage(domain, origin, nonce) {
 
 function walletEndpoints(app) {
   if (!app) return;
+
+  /**
+   * GET /api/wallet/balance
+   *
+   * Reads the caller's $TOTEM token balance (on-chain, Base) for the wallet
+   * address stored on their account. Read-only — no transaction is created.
+   * Requires a valid session (multi-user mode). Feature is off (204, no
+   * body) when TOTEM_ADDRESS is not configured — the UI then shows the
+   * badge in its "non-holder" state.
+   *
+   * Response 200: { available: true,  tokenAddress, symbol, chainId, amount (decimal string), updatedAt }
+   * Response 200: { available: false, noWallet: true } when the account has no wallet
+   * Response 200: { available: false, error? } when configured but the on-chain read failed
+   */
+  app.get("/wallet/balance", async (request, response) => {
+    const config = totemConfig();
+    if (!config.enabled) {
+      response.status(204).end();
+      return;
+    }
+
+    try {
+      const user = await userFromSession(request, response);
+      if (!user || !user.wallet_address) {
+        response
+          .status(200)
+          .json({ available: false, noWallet: true, error: "Not signed in with a wallet." });
+        return;
+      }
+
+      const amount = await fetchTotemBalance({
+        rpcUrl: config.rpcUrl,
+        tokenAddress: config.tokenAddress,
+        ownerAddress: user.wallet_address,
+        decimals: config.decimals,
+      });
+
+      response.status(200).json({
+        available: true,
+        tokenAddress: config.tokenAddress,
+        symbol: config.symbol,
+        chainId: config.chainId,
+        amount,
+        updatedAt: Date.now(),
+      });
+    } catch (e) {
+      console.error("TOTEM balance read failed:", e.message);
+      response.status(200).json({
+        available: false,
+        error: "Could not read $TOTEM balance. Try again later.",
+      });
+    }
+  });
 
   /**
    * POST /api/auth/wallet/nonce

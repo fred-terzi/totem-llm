@@ -141,6 +141,32 @@ const System = {
       return { valid: false, user: null, token: null, message: e.message };
     }
   },
+
+  /**
+   * Reads the caller's $TOTEM token balance from the server (on-chain, Base).
+   * The server reads it for the wallet address stored on the account at
+   * login time; this endpoint re-checks it on demand (page load + manual refresh).
+   *
+   * @returns {Promise<{available: boolean, configured?: boolean, noWallet?: boolean, tokenAddress?: string|null, symbol?: string, chainId?: number, amount?: string, error?: string}>}
+   *   - `configured: false` → server has no $TOTEM token configured (show "non-holder")
+   *   - `available: true`  → `amount` is the decimal balance string (may be "0")
+   *   - `available: false, noWallet: true` → account has no wallet (show "non-holder")
+   *   - `available: false` → configured but the on-chain read failed (show retry)
+   */
+  totemBalance: async function () {
+    try {
+      const res = await fetch(`${API_BASE}/wallet/balance`, {
+        headers: baseHeaders(),
+      });
+      if (res.status === 204) return { available: false, configured: false };
+      if (!res.ok)
+        return { available: false, error: "Could not read $TOTEM balance." };
+      const data = await res.json();
+      return { configured: true, ...data };
+    } catch (e) {
+      return { available: false, error: e.message };
+    }
+  },
   /**
    * Refreshes the user object from the session.
    * @returns {Promise<{success: boolean, user: Object | null, message: string | null}>}
