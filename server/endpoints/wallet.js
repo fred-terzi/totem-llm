@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const { ethers } = require("ethers");
 const { reqBody, makeJWT } = require("../utils/http");
 const { User } = require("../models/user");
+const { Workspace } = require("../models/workspace");
 const { EventLogs } = require("../models/eventLogs");
 const prisma = require("../utils/prisma");
 
@@ -164,6 +165,26 @@ function walletEndpoints(app) {
           });
 
           user = newUser;
+
+          // --- Auto-create a default workspace for the new user ---
+          try {
+            const { workspace, message: wsError } = await Workspace.new(
+              "My Workspace",
+              user.id
+            );
+            if (wsError) {
+              console.error(
+                "Wallet signup: failed to create default workspace:",
+                wsError
+              );
+            }
+          } catch (wsErr) {
+            // Non-fatal: user can still log in and create a workspace manually.
+            console.error(
+              "Wallet signup: workspace creation error:",
+              wsErr.message
+            );
+          }
 
           await EventLogs.logEvent(
             "wallet_account_created",
