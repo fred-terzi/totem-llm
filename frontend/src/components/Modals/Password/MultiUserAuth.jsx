@@ -6,6 +6,7 @@ import showToast from "@/utils/toast";
 import ModalWrapper from "@/components/ModalWrapper";
 import { useModal } from "@/hooks/useModal";
 import RecoveryCodeModal from "@/components/Modals/DisplayRecoveryCodeModal";
+import WalletConnectMobile from "@/components/Modals/Password/WalletConnectMobile";
 import { useTranslation } from "react-i18next";
 import { t } from "i18next";
 
@@ -22,13 +23,17 @@ const WalletConnectButton = () => {
   const handleConnect = async () => {
     setError(null);
     if (!hasWallet) {
-      setError("No wallet detected. Please install MetaMask or another wallet extension.");
+      setError(
+        "No wallet detected. Please install MetaMask or another wallet extension."
+      );
       return;
     }
     setLoading(true);
     try {
       // Step 1: Request wallet account (prompts user to connect if needed)
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
       if (!accounts || accounts.length === 0) {
         throw new Error("No wallet account available.");
       }
@@ -64,7 +69,9 @@ const WalletConnectButton = () => {
     <>
       <div className="flex items-center w-[300px] my-3">
         <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
-        <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">or</span>
+        <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">
+          or
+        </span>
         <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
       </div>
       <button
@@ -75,12 +82,14 @@ const WalletConnectButton = () => {
       >
         {/* Ethereum diamond icon */}
         <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor">
-          <path d="M16 2L5.5 16.746L16 23.199L26.5 16.746L16 2Z" opacity=".7"/>
-          <path d="M16 25.288L5.5 18.799L16 30L26.5 18.799L16 25.288Z"/>
+          <path d="M16 2L5.5 16.746L16 23.199L26.5 16.746L16 2Z" opacity=".7" />
+          <path d="M16 25.288L5.5 18.799L16 30L26.5 18.799L16 25.288Z" />
         </svg>
         {loading ? "Connecting..." : "Connect Wallet"}
       </button>
-      {error && <p className="text-red-400 text-xs mt-2 text-center">{error}</p>}
+      {error && (
+        <p className="text-red-400 text-xs mt-2 text-center">{error}</p>
+      )}
     </>
   );
 };
@@ -417,6 +426,7 @@ export default function MultiUserAuth() {
               : t("login.multi-user.login")}
           </button>
           <WalletConnectButton />
+          <WalletConnectMobile />
           <button
             type="button"
             className="text-zinc-200 light:text-zinc-600 hover:text-sky-300 light:hover:text-sky-600 hover:underline text-sm flex gap-x-1"
