@@ -87,10 +87,10 @@ export default function TotemBalanceBadge() {
         </span>
       ) : state.status === "non-holder" ? (
         <span
-          className="uppercase tracking-wide text-white/60 light:text-slate-500 whitespace-nowrap"
+          className="tabular-nums text-white/60 light:text-slate-500 whitespace-nowrap"
           title={tooltip}
         >
-          {t("totem-balance.non-holder", { defaultValue: "non-holder" })}
+          0
         </span>
       ) : (
         <span
