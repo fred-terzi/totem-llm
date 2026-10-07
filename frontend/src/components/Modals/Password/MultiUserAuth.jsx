@@ -9,6 +9,82 @@ import RecoveryCodeModal from "@/components/Modals/DisplayRecoveryCodeModal";
 import { useTranslation } from "react-i18next";
 import { t } from "i18next";
 
+/**
+ * Wallet connect button with SIWE (Sign-In with Ethereum) flow.
+ * Requires a wallet extension (MetaMask, Rainbow, etc.) to be installed.
+ */
+const WalletConnectButton = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const hasWallet = typeof window !== "undefined" && !!window.ethereum;
+
+  const handleConnect = async () => {
+    setError(null);
+    if (!hasWallet) {
+      setError("No wallet detected. Please install MetaMask or another wallet extension.");
+      return;
+    }
+    setLoading(true);
+    try {
+      // Step 1: Request wallet account (prompts user to connect if needed)
+      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No wallet account available.");
+      }
+      const address = accounts[0];
+
+      // Step 2: Get nonce + message from server
+      const { nonce, message } = await System.walletNonce();
+      if (!nonce || !message) throw new Error("Could not get signing message.");
+
+      // Step 3: Sign the message with the wallet
+      const signature = await window.ethereum.request({
+        method: "personal_sign",
+        params: [message, address],
+      });
+      if (!signature) throw new Error("Signature was rejected.");
+
+      // Step 4: Verify signature on server, get JWT
+      const result = await System.walletVerify({ signature, nonce });
+      if (result.valid && result.token && result.user) {
+        window.localStorage.setItem(AUTH_USER, JSON.stringify(result.user));
+        window.localStorage.setItem(AUTH_TOKEN, result.token);
+        window.location = paths.home();
+      } else {
+        throw new Error(result.message || "Wallet login failed.");
+      }
+    } catch (e) {
+      setError(e.message || "Wallet connection failed.");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center w-[300px] my-3">
+        <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+        <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">or</span>
+        <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+      </div>
+      <button
+        type="button"
+        onClick={handleConnect}
+        disabled={loading}
+        className="text-zinc-200 light:text-slate-700 hover:bg-zinc-800 light:hover:bg-slate-200 text-sm rounded-lg border border-zinc-600 light:border-slate-400 h-[38px] w-[300px] flex items-center justify-center gap-x-2 transition-colors"
+      >
+        {/* Ethereum diamond icon */}
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor">
+          <path d="M16 2L5.5 16.746L16 23.199L26.5 16.746L16 2Z" opacity=".7"/>
+          <path d="M16 25.288L5.5 18.799L16 30L26.5 18.799L16 25.288Z"/>
+        </svg>
+        {loading ? "Connecting..." : "Connect Wallet"}
+      </button>
+      {error && <p className="text-red-400 text-xs mt-2 text-center">{error}</p>}
+    </>
+  );
+};
+
 const RecoveryForm = ({ onSubmit, setShowRecoveryForm }) => {
   const [username, setUsername] = useState("");
   const [recoveryCodeInputs, setRecoveryCodeInputs] = useState(
@@ -340,6 +416,7 @@ export default function MultiUserAuth() {
               ? t("login.multi-user.validating")
               : t("login.multi-user.login")}
           </button>
+          <WalletConnectButton />
           <button
             type="button"
             className="text-zinc-200 light:text-zinc-600 hover:text-sky-300 light:hover:text-sky-600 hover:underline text-sm flex gap-x-1"

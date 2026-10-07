@@ -109,6 +109,38 @@ const System = {
         return { valid: false, message: e.message };
       });
   },
+
+  /**
+   * Wallet auth (SIWE) — two-step flow.
+   * Step 1: getNonce() → { nonce, message }
+   * Step 2: verify({ signature, nonce }) → { valid, user, token }
+   */
+  walletNonce: async function (origin) {
+    try {
+      const res = await fetch(`${API_BASE}/auth/wallet/nonce`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: origin || window.location.origin }),
+      });
+      if (!res.ok) throw new Error("Could not get wallet nonce.");
+      return await res.json();
+    } catch (e) {
+      return { nonce: null, message: null, error: e.message };
+    }
+  },
+
+  walletVerify: async function (body) {
+    try {
+      const res = await fetch(`${API_BASE}/auth/wallet/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return await res.json();
+    } catch (e) {
+      return { valid: false, user: null, token: null, message: e.message };
+    }
+  },
   /**
    * Refreshes the user object from the session.
    * @returns {Promise<{success: boolean, user: Object | null, message: string | null}>}
