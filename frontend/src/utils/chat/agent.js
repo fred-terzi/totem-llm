@@ -71,7 +71,9 @@ export function getAgentStepTokenUsage(data) {
 export function emitAgentTokenUsage(data) {
   const usage = getAgentStepTokenUsage(data);
   if (usage && usage.promptTokens > 0) {
-    window.dispatchEvent(new CustomEvent("agent-token-usage", { detail: usage }));
+    window.dispatchEvent(
+      new CustomEvent("agent-token-usage", { detail: usage })
+    );
   }
 }
 
@@ -359,7 +361,10 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
   }
 
   // Handle dedicated tokenUsage events sent outside of reportStreamEvent
-  if (data.type === "agentStepUsage" || (data && getAgentStepTokenUsage(data))) {
+  if (
+    data.type === "agentStepUsage" ||
+    (data && getAgentStepTokenUsage(data))
+  ) {
     emitAgentTokenUsage(data);
     return;
   }

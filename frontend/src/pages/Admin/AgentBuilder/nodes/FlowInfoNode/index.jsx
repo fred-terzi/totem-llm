@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/refs */
 import React, { forwardRef } from "react";
 
 const FlowInfoNode = forwardRef(({ config, onConfigChange }, refs) => {

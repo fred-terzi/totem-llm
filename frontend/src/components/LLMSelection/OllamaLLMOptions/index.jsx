@@ -245,8 +245,8 @@ export default function OllamaLLMOptions({ settings }) {
                   }}
                 >
                   <p className="text-xs leading-[18px] font-base">
-                    Set the Ollama think level for supported models. Leave
-                    blank to use the model default.
+                    Set the Ollama think level for supported models. Leave blank
+                    to use the model default.
                   </p>
                 </Tooltip>
               </div>

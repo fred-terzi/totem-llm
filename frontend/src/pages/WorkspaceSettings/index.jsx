@@ -27,10 +27,9 @@ import { useTranslation } from "react-i18next";
 import System from "@/models/system";
 
 /**
- * If agentmode is disabled, the entire agent configuration section must be hidden 
+ * If agentmode is disabled, the entire agent configuration section must be hidden
  */
 import useFeatureFlag from "@/hooks/useFeatureFlag";
-
 
 const TABS = {
   "general-appearance": GeneralAppearance,
@@ -86,7 +85,9 @@ function ShowWorkspaceChat() {
 
   // If agent-config tab is disabled and user is on it, redirect to general-appearance
   if (tab === "agent-config" && !agentModeEnabled.enabled) {
-    return <Navigate to={paths.workspace.settings.generalAppearance(slug)} replace />;
+    return (
+      <Navigate to={paths.workspace.settings.generalAppearance(slug)} replace />
+    );
   }
 
   const TabContent = TABS[tab];

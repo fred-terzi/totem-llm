@@ -45,18 +45,16 @@ const router = createBrowserRouter([
       {
         path: "/workspace/:slug/settings/:tab",
         lazy: async () => {
-          const { default: WorkspaceSettings } = await import(
-            "@/pages/WorkspaceSettings"
-          );
+          const { default: WorkspaceSettings } =
+            await import("@/pages/WorkspaceSettings");
           return { element: <ManagerRoute Component={WorkspaceSettings} /> };
         },
       },
       {
         path: "/workspace/:slug",
         lazy: async () => {
-          const { default: WorkspaceChat } = await import(
-            "@/pages/WorkspaceChat"
-          );
+          const { default: WorkspaceChat } =
+            await import("@/pages/WorkspaceChat");
           return { element: <PrivateRoute Component={WorkspaceChat} /> };
         },
         children: [{ path: "t/:threadSlug" }],
@@ -72,16 +70,18 @@ const router = createBrowserRouter([
       {
         path: "/settings/llm-preference",
         lazy: async () => {
-          const { default: GeneralLLMPreference } = await import(
-            "@/pages/GeneralSettings/LLMPreference"
-          );
+          const { default: GeneralLLMPreference } =
+            await import("@/pages/GeneralSettings/LLMPreference");
           return { element: <AdminRoute Component={GeneralLLMPreference} /> };
         },
       },
       {
         path: "/settings/transcription-preference",
         lazy: async () => {
-          const [{ default: GeneralTranscriptionPreference }, { default: NotFound }] = await Promise.all([
+          const [
+            { default: GeneralTranscriptionPreference },
+            { default: NotFound },
+          ] = await Promise.all([
             import("@/pages/GeneralSettings/TranscriptionPreference"),
             import("@/pages/404"),
           ]);
@@ -96,9 +96,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/audio-preference",
         lazy: async () => {
-          const { default: GeneralAudioPreference } = await import(
-            "@/pages/GeneralSettings/AudioPreference"
-          );
+          const { default: GeneralAudioPreference } =
+            await import("@/pages/GeneralSettings/AudioPreference");
           return {
             element: <AdminRoute Component={GeneralAudioPreference} />,
           };
@@ -107,7 +106,10 @@ const router = createBrowserRouter([
       {
         path: "/settings/embedding-preference",
         lazy: async () => {
-          const [{ default: GeneralEmbeddingPreference }, { default: NotFound }] = await Promise.all([
+          const [
+            { default: GeneralEmbeddingPreference },
+            { default: NotFound },
+          ] = await Promise.all([
             import("@/pages/GeneralSettings/EmbeddingPreference"),
             import("@/pages/404"),
           ]);
@@ -122,7 +124,10 @@ const router = createBrowserRouter([
       {
         path: "/settings/text-splitter-preference",
         lazy: async () => {
-          const [{ default: EmbeddingTextSplitterPreference }, { default: NotFound }] = await Promise.all([
+          const [
+            { default: EmbeddingTextSplitterPreference },
+            { default: NotFound },
+          ] = await Promise.all([
             import("@/pages/GeneralSettings/EmbeddingTextSplitterPreference"),
             import("@/pages/404"),
           ]);
@@ -137,10 +142,11 @@ const router = createBrowserRouter([
       {
         path: "/settings/vector-database",
         lazy: async () => {
-          const [{ default: GeneralVectorDatabase }, { default: NotFound }] = await Promise.all([
-            import("@/pages/GeneralSettings/VectorDatabase"),
-            import("@/pages/404"),
-          ]);
+          const [{ default: GeneralVectorDatabase }, { default: NotFound }] =
+            await Promise.all([
+              import("@/pages/GeneralSettings/VectorDatabase"),
+              import("@/pages/404"),
+            ]);
           const Guard = () => {
             const { enabled } = useFeatureFlag("vectorDB");
             if (!enabled) return <NotFound />;
@@ -159,9 +165,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/agents/builder",
         lazy: async () => {
-          const { default: AgentBuilder } = await import(
-            "@/pages/Admin/AgentBuilder"
-          );
+          const { default: AgentBuilder } =
+            await import("@/pages/Admin/AgentBuilder");
           return {
             element: (
               <AdminRoute Component={AgentBuilder} hideUserMenu={true} />
@@ -172,9 +177,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/agents/builder/:flowId",
         lazy: async () => {
-          const { default: AgentBuilder } = await import(
-            "@/pages/Admin/AgentBuilder"
-          );
+          const { default: AgentBuilder } =
+            await import("@/pages/Admin/AgentBuilder");
           return {
             element: (
               <AdminRoute Component={AgentBuilder} hideUserMenu={true} />
@@ -192,9 +196,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/embed-chat-widgets",
         lazy: async () => {
-          const { default: ChatEmbedWidgets } = await import(
-            "@/pages/GeneralSettings/ChatEmbedWidgets"
-          );
+          const { default: ChatEmbedWidgets } =
+            await import("@/pages/GeneralSettings/ChatEmbedWidgets");
           return { element: <AdminRoute Component={ChatEmbedWidgets} /> };
         },
       },
@@ -202,18 +205,16 @@ const router = createBrowserRouter([
       {
         path: "/settings/security",
         lazy: async () => {
-          const { default: GeneralSecurity } = await import(
-            "@/pages/GeneralSettings/Security"
-          );
+          const { default: GeneralSecurity } =
+            await import("@/pages/GeneralSettings/Security");
           return { element: <ManagerRoute Component={GeneralSecurity} /> };
         },
       },
       {
         path: "/settings/interface",
         lazy: async () => {
-          const { default: InterfaceSettings } = await import(
-            "@/pages/GeneralSettings/Settings/Interface"
-          );
+          const { default: InterfaceSettings } =
+            await import("@/pages/GeneralSettings/Settings/Interface");
           return { element: <ManagerRoute Component={InterfaceSettings} /> };
         },
       },
@@ -222,9 +223,8 @@ const router = createBrowserRouter([
             {
               path: "/settings/branding",
               lazy: async () => {
-                const { default: BrandingSettings } = await import(
-                  "@/pages/GeneralSettings/Settings/Branding"
-                );
+                const { default: BrandingSettings } =
+                  await import("@/pages/GeneralSettings/Settings/Branding");
                 return {
                   element: <ManagerRoute Component={BrandingSettings} />,
                 };
@@ -235,36 +235,32 @@ const router = createBrowserRouter([
       {
         path: "/settings/default-system-prompt",
         lazy: async () => {
-          const { default: DefaultSystemPrompt } = await import(
-            "@/pages/Admin/DefaultSystemPrompt"
-          );
+          const { default: DefaultSystemPrompt } =
+            await import("@/pages/Admin/DefaultSystemPrompt");
           return { element: <AdminRoute Component={DefaultSystemPrompt} /> };
         },
       },
       {
         path: "/settings/chat",
         lazy: async () => {
-          const { default: ChatSettings } = await import(
-            "@/pages/GeneralSettings/Settings/Chat"
-          );
+          const { default: ChatSettings } =
+            await import("@/pages/GeneralSettings/Settings/Chat");
           return { element: <ManagerRoute Component={ChatSettings} /> };
         },
       },
       {
         path: "/settings/beta-features",
         lazy: async () => {
-          const { default: ExperimentalFeatures } = await import(
-            "@/pages/Admin/ExperimentalFeatures"
-          );
+          const { default: ExperimentalFeatures } =
+            await import("@/pages/Admin/ExperimentalFeatures");
           return { element: <AdminRoute Component={ExperimentalFeatures} /> };
         },
       },
       {
         path: "/settings/api-keys",
         lazy: async () => {
-          const { default: GeneralApiKeys } = await import(
-            "@/pages/GeneralSettings/ApiKeys"
-          );
+          const { default: GeneralApiKeys } =
+            await import("@/pages/GeneralSettings/ApiKeys");
           return { element: <AdminRoute Component={GeneralApiKeys} /> };
         },
       },
@@ -273,18 +269,16 @@ const router = createBrowserRouter([
             {
               path: "/settings/model-routers",
               lazy: async () => {
-                const { default: ModelRouters } = await import(
-                  "@/pages/GeneralSettings/ModelRouters"
-                );
+                const { default: ModelRouters } =
+                  await import("@/pages/GeneralSettings/ModelRouters");
                 return { element: <AdminRoute Component={ModelRouters} /> };
               },
             },
             {
               path: "/settings/model-routers/:id",
               lazy: async () => {
-                const { default: RouterRulesPage } = await import(
-                  "@/pages/GeneralSettings/ModelRouters/RouterRulesPage"
-                );
+                const { default: RouterRulesPage } =
+                  await import("@/pages/GeneralSettings/ModelRouters/RouterRulesPage");
                 return {
                   element: <AdminRoute Component={RouterRulesPage} />,
                 };
@@ -295,9 +289,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/system-prompt-variables",
         lazy: async () => {
-          const { default: SystemPromptVariables } = await import(
-            "@/pages/Admin/SystemPromptVariables"
-          );
+          const { default: SystemPromptVariables } =
+            await import("@/pages/Admin/SystemPromptVariables");
           return {
             element: <AdminRoute Component={SystemPromptVariables} />,
           };
@@ -306,9 +299,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/browser-extension",
         lazy: async () => {
-          const { default: GeneralBrowserExtension } = await import(
-            "@/pages/GeneralSettings/BrowserExtensionApiKey"
-          );
+          const { default: GeneralBrowserExtension } =
+            await import("@/pages/GeneralSettings/BrowserExtensionApiKey");
           return {
             element: <ManagerRoute Component={GeneralBrowserExtension} />,
           };
@@ -317,18 +309,16 @@ const router = createBrowserRouter([
       {
         path: "/settings/workspace-chats",
         lazy: async () => {
-          const { default: GeneralChats } = await import(
-            "@/pages/GeneralSettings/Chats"
-          );
+          const { default: GeneralChats } =
+            await import("@/pages/GeneralSettings/Chats");
           return { element: <ManagerRoute Component={GeneralChats} /> };
         },
       },
       {
         path: "/settings/invites",
         lazy: async () => {
-          const { default: AdminInvites } = await import(
-            "@/pages/Admin/Invitations"
-          );
+          const { default: AdminInvites } =
+            await import("@/pages/Admin/Invitations");
           return { element: <ManagerRoute Component={AdminInvites} /> };
         },
       },
@@ -342,9 +332,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/workspaces",
         lazy: async () => {
-          const { default: AdminWorkspaces } = await import(
-            "@/pages/Admin/Workspaces"
-          );
+          const { default: AdminWorkspaces } =
+            await import("@/pages/Admin/Workspaces");
           return { element: <ManagerRoute Component={AdminWorkspaces} /> };
         },
       },
@@ -361,9 +350,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/beta-features/live-document-sync/manage",
         lazy: async () => {
-          const { default: LiveDocumentSyncManage } = await import(
-            "@/pages/Admin/ExperimentalFeatures/Features/LiveSync/manage"
-          );
+          const { default: LiveDocumentSyncManage } =
+            await import("@/pages/Admin/ExperimentalFeatures/Features/LiveSync/manage");
           return {
             element: <AdminRoute Component={LiveDocumentSyncManage} />,
           };
@@ -374,9 +362,8 @@ const router = createBrowserRouter([
             {
               path: "/settings/community-hub/trending",
               lazy: async () => {
-                const { default: CommunityHubTrending } = await import(
-                  "@/pages/GeneralSettings/CommunityHub/Trending"
-                );
+                const { default: CommunityHubTrending } =
+                  await import("@/pages/GeneralSettings/CommunityHub/Trending");
                 return {
                   element: <AdminRoute Component={CommunityHubTrending} />,
                 };
@@ -385,9 +372,8 @@ const router = createBrowserRouter([
             {
               path: "/settings/community-hub/authentication",
               lazy: async () => {
-                const { default: CommunityHubAuthentication } = await import(
-                  "@/pages/GeneralSettings/CommunityHub/Authentication"
-                );
+                const { default: CommunityHubAuthentication } =
+                  await import("@/pages/GeneralSettings/CommunityHub/Authentication");
                 return {
                   element: (
                     <AdminRoute Component={CommunityHubAuthentication} />
@@ -398,9 +384,8 @@ const router = createBrowserRouter([
             {
               path: "/settings/community-hub/import-item",
               lazy: async () => {
-                const { default: CommunityHubImportItem } = await import(
-                  "@/pages/GeneralSettings/CommunityHub/ImportItem"
-                );
+                const { default: CommunityHubImportItem } =
+                  await import("@/pages/GeneralSettings/CommunityHub/ImportItem");
                 return {
                   element: <AdminRoute Component={CommunityHubImportItem} />,
                 };
@@ -411,45 +396,40 @@ const router = createBrowserRouter([
       {
         path: "/settings/mobile-connections",
         lazy: async () => {
-          const { default: MobileConnections } = await import(
-            "@/pages/GeneralSettings/MobileConnections"
-          );
+          const { default: MobileConnections } =
+            await import("@/pages/GeneralSettings/MobileConnections");
           return { element: <ManagerRoute Component={MobileConnections} /> };
         },
       },
       {
         path: "/settings/external-connections/telegram",
         lazy: async () => {
-          const { default: TelegramBotSettings } = await import(
-            "@/pages/GeneralSettings/Connections/TelegramBot"
-          );
+          const { default: TelegramBotSettings } =
+            await import("@/pages/GeneralSettings/Connections/TelegramBot");
           return { element: <AdminRoute Component={TelegramBotSettings} /> };
         },
       },
       {
         path: "/settings/scheduled-jobs",
         lazy: async () => {
-          const { default: ScheduledJobs } = await import(
-            "@/pages/GeneralSettings/ScheduledJobs"
-          );
+          const { default: ScheduledJobs } =
+            await import("@/pages/GeneralSettings/ScheduledJobs");
           return { element: <SingleUserRoute Component={ScheduledJobs} /> };
         },
       },
       {
         path: "/settings/scheduled-jobs/:id/runs",
         lazy: async () => {
-          const { default: ScheduledJobRuns } = await import(
-            "@/pages/GeneralSettings/ScheduledJobs/RunHistoryPage"
-          );
+          const { default: ScheduledJobRuns } =
+            await import("@/pages/GeneralSettings/ScheduledJobs/RunHistoryPage");
           return { element: <SingleUserRoute Component={ScheduledJobRuns} /> };
         },
       },
       {
         path: "/settings/scheduled-jobs/:id/runs/:runId",
         lazy: async () => {
-          const { default: ScheduledJobRunDetail } = await import(
-            "@/pages/GeneralSettings/ScheduledJobs/RunDetailPage"
-          );
+          const { default: ScheduledJobRunDetail } =
+            await import("@/pages/GeneralSettings/ScheduledJobs/RunDetailPage");
           return {
             element: <SingleUserRoute Component={ScheduledJobRunDetail} />,
           };
@@ -458,9 +438,8 @@ const router = createBrowserRouter([
       {
         path: "/settings/import-data",
         lazy: async () => {
-          const { default: ImportData } = await import(
-            "@/pages/GeneralSettings/ImportData"
-          );
+          const { default: ImportData } =
+            await import("@/pages/GeneralSettings/ImportData");
           return { element: <PrivateRoute Component={ImportData} /> };
         },
       },

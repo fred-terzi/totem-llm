@@ -20,13 +20,14 @@ export default function useBackendOfflineNotifications() {
       );
     };
 
-    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+    navigator.serviceWorker.addEventListener(
+      "message",
+      handleServiceWorkerMessage
+    );
 
-    navigator.serviceWorker
-      .register("/service-worker.js")
-      .catch((error) => {
-        console.error("Failed to register backend offline service worker", error);
-      });
+    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+      console.error("Failed to register backend offline service worker", error);
+    });
 
     return () => {
       navigator.serviceWorker.removeEventListener(

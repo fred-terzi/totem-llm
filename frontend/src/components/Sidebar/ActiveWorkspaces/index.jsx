@@ -174,11 +174,15 @@ export default function ActiveWorkspaces() {
                                 >
                                   {workspace.name}
                                 </p>
-                                {(unreadWorkspaces[workspace.slug] ?? 0) > 0 && (
+                                {(unreadWorkspaces[workspace.slug] ?? 0) >
+                                  0 && (
                                   <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold leading-[18px] text-center">
-                                    {unreadWorkspaces[workspace.slug] > 99 ? "99+" : unreadWorkspaces[workspace.slug]}
+                                    {unreadWorkspaces[workspace.slug] > 99
+                                      ? "99+"
+                                      : unreadWorkspaces[workspace.slug]}
                                   </span>
-                                )}                              </div>
+                                )}{" "}
+                              </div>
                             </div>
                             {user?.role !== "default" && (
                               <div
@@ -194,8 +198,7 @@ export default function ActiveWorkspaces() {
                                     }}
                                     data-tooltip-id="upload-workspace"
                                     data-tooltip-content="Upload documents to this workspace for RAG indexing"
-                                    className={`group/upload border-none rounded-md flex items-center justify-center ml-auto p-[2px] ${isActive ? "hover:bg-zinc-500 light:hover:bg-sky-800/30" : "hover:bg-zinc-500 light:hover:bg-slate-400"}`
-                                    }
+                                    className={`group/upload border-none rounded-md flex items-center justify-center ml-auto p-[2px] ${isActive ? "hover:bg-zinc-500 light:hover:bg-sky-800/30" : "hover:bg-zinc-500 light:hover:bg-slate-400"}`}
                                   >
                                     <UploadSimple
                                       className={`h-[20px] w-[20px] ${isActive ? "text-zinc-400 hover:text-white light:text-blue-700 light:group-hover/upload:text-blue-900" : "text-zinc-400 hover:text-white light:text-slate-600 light:group-hover/upload:text-slate-950"}`}
