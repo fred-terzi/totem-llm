@@ -1,27 +1,27 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Coins, ArrowClockwise, Warning } from "@phosphor-icons/react";
 import System from "@/models/system";
 import { useTranslation } from "react-i18next";
 
 /**
- * Compact $TOTEM badge shown at the top of the UI (next to the user menu).
+ * Compact $TOTEM level badge shown at the top of the UI (next to the user menu).
  * The badge is always visible while the app is loaded. Its state is one of:
  *
- * - loading       → placeholder with a spinning refresh icon (first fetch)
- * - holder        → wallet holds $TOTEM: shows a holding tier (see below)
- * - non-holder    → user isn't signed in with a wallet, the wallet holds 0
- *                   $TOTEM, or the server has no $TOTEM token configured → 'NH'
- * - error         → on-chain read failed (shows retry affordance)
+ * - loading    → placeholder showing just the symbol (first fetch)
+ * - holder     → wallet holds $TOTEM: shows a holding tier (see below)
+ * - non-holder → user isn't signed in with a wallet, the wallet holds 0
+ *                $TOTEM, or the server has no $TOTEM token configured → 'NH'
+ * - error      → on-chain read failed (symbol shown muted)
  *
  * Holding tiers (exact balance stays in the tooltip):
- * - 0          → 'NH'   (not holding)
- * - >0, <500k  → 'L1'
- * - >500k      → 'L2'
- * - >1M        → 'MAX'
+ * - 0         → 'NH'  (not holding)
+ * - >0, <500k → 'L1'
+ * - >500k     → 'L2'
+ * - >1M       → 'MAX'
  *
- * The balance is read from the server, which reads it on-chain (Base) for
- * the wallet address stored on the account at login time. The badge fetches
- * once on mount and offers a manual refresh.
+ * The balance is read from the server, which reads it on-chain (Base) for the
+ * wallet address stored on the account at login time. The badge fetches once
+ * on mount; clicking the pill retries the fetch (that is the only refresh
+ * affordance — there is no dedicated refresh button).
  */
 export default function TotemBalanceBadge() {
   const { t } = useTranslation();
@@ -69,61 +69,44 @@ export default function TotemBalanceBadge() {
           defaultValue: "${{symbol}} balance unavailable — click to retry",
         });
 
+  const label =
+    state.status === "loading"
+      ? symbol
+      : isHolder
+        ? holdingsTier(state.amount)
+        : state.status === "non-holder"
+          ? "NH"
+          : symbol;
+
   return (
-    <div
+    <button
+      type="button"
       data-testid="totem-balance-badge"
-      className="flex items-center gap-x-1.5 h-[35px] px-3 rounded-full border border-white/10 bg-theme-bg-secondary/90 light:bg-white/80 text-white light:text-slate-800 text-xs font-medium shadow-sm shrink-0"
+      onClick={isSpinning ? undefined : load}
+      disabled={isSpinning}
+      title={tooltip}
+      aria-label={
+        isHolder
+          ? t("totem-balance.holder.aria", {
+              tier: holdingsTier(state.amount),
+              defaultValue: "{{tier}} ${{symbol}} holder — click to refresh",
+            })
+          : t("totem-balance.non-holder.aria", {
+              defaultValue: "Not a ${{symbol}} holder",
+            })
+      }
+      className="flex items-center h-[35px] px-3 rounded-full border border-white/10 bg-theme-bg-secondary/90 light:bg-white/80 text-white light:text-slate-800 text-xs font-medium shadow-sm shrink-0 cursor-pointer hover:border-white/20 light:hover:border-slate-300 transition-colors disabled:cursor-default"
     >
-      <Coins
-        size={14}
-        weight="fill"
+      <span
         className={
           isHolder
-            ? "text-amber-400 light:text-amber-500"
-            : "text-amber-400/40 light:text-amber-500/40"
+            ? "tabular-nums whitespace-nowrap"
+            : "tabular-nums whitespace-nowrap text-white/60 light:text-slate-500"
         }
-      />
-      {state.status === "loading" ? (
-        <span className="text-white/60 light:text-slate-500 whitespace-nowrap">
-          {symbol}
-        </span>
-      ) : isHolder ? (
-        <span className="tabular-nums whitespace-nowrap" title={tooltip}>
-          {holdingsTier(state.amount)}
-        </span>
-      ) : state.status === "non-holder" ? (
-        <span
-          className="tabular-nums text-white/60 light:text-slate-500 whitespace-nowrap"
-          title={tooltip}
-        >
-          NH
-        </span>
-      ) : (
-        <span
-          className="text-white/60 light:text-slate-500 whitespace-nowrap"
-          title={tooltip}
-        >
-          {symbol} —
-        </span>
-      )}
-      <button
-        type="button"
-        onClick={load}
-        disabled={isSpinning}
-        aria-label={t("totem-balance.refresh", {
-          defaultValue: "Refresh $TOTEM balance",
-        })}
-        className="flex items-center justify-center rounded-full hover:bg-white/10 light:hover:bg-black/10 transition-colors p-0.5 disabled:opacity-50"
       >
-        <ArrowClockwise
-          size={12}
-          className={isSpinning ? "animate-spin" : ""}
-        />
-      </button>
-      {state.status === "error" && (
-        <Warning size={12} weight="fill" className="text-amber-400" />
-      )}
-    </div>
+        {label}
+      </span>
+    </button>
   );
 }
 
