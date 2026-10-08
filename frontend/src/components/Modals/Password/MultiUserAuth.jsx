@@ -70,7 +70,7 @@ const WalletConnectButton = () => {
       <div className="flex items-center w-[300px] my-3">
         <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
         <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">
-          or
+          on desktop
         </span>
         <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
       </div>
@@ -85,7 +85,7 @@ const WalletConnectButton = () => {
           <path d="M16 2L5.5 16.746L16 23.199L26.5 16.746L16 2Z" opacity=".7" />
           <path d="M16 25.288L5.5 18.799L16 30L26.5 18.799L16 25.288Z" />
         </svg>
-        {loading ? "Connecting..." : "Connect Wallet"}
+        {loading ? "Connecting..." : "Connect Wallet in Browser"}
       </button>
       {error && (
         <p className="text-red-400 text-xs mt-2 text-center">{error}</p>
@@ -386,7 +386,23 @@ export default function MultiUserAuth() {
             </p>
           </div>
         </div>
-        <div className="w-full px-12">
+
+        {/* Wallet login (primary) */}
+        <div className="flex items-center w-[300px] flex-col gap-y-6">
+          <WalletConnectButton />
+          <WalletConnectMobile />
+        </div>
+
+        {/* Official install — password login */}
+        <div className="flex items-center w-[300px] mt-3">
+          <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+          <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">
+            Totem Official Installs
+          </span>
+          <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+        </div>
+
+        <div className="w-full px-12 mt-3">
           <div className="w-full flex flex-col gap-y-3">
             <div className="w-full flex flex-col gap-y-2">
               <label className="text-zinc-300 light:text-slate-800 text-sm">
@@ -415,6 +431,7 @@ export default function MultiUserAuth() {
             {error && <p className="text-red-400 text-sm">Error: {error}</p>}
           </div>
         </div>
+
         <div className="flex items-center px-12 mt-9 space-x-2 w-full flex-col gap-y-6">
           <button
             disabled={loading}
@@ -425,8 +442,6 @@ export default function MultiUserAuth() {
               ? t("login.multi-user.validating")
               : t("login.multi-user.login")}
           </button>
-          <WalletConnectButton />
-          <WalletConnectMobile />
           <button
             type="button"
             className="text-zinc-200 light:text-zinc-600 hover:text-sky-300 light:hover:text-sky-600 hover:underline text-sm flex gap-x-1"
