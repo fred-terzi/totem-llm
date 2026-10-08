@@ -95,6 +95,14 @@ class Provider {
    */
   _requestStartTime = 0;
 
+  /**
+   * Cumulative usage across all LLM calls in this provider instance's lifetime.
+   * Since a new provider instance is created per user turn (in AIbitat.reply()),
+   * this effectively tracks the total tokens for one agent session/turn.
+   * @type {{prompt_tokens: number, completion_tokens: number, total_tokens: number}}
+   */
+  _sessionUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
   constructor(client) {
     if (this.constructor == Provider) {
       return;
@@ -547,8 +555,9 @@ class Provider {
   }
 
   /**
-   * Resets the usage metrics to zero and starts the request timer.
+   * Resets the per-call usage metrics and starts the request timer.
    * Call this before each completion to ensure accurate per-call metrics.
+   * Does NOT reset the session accumulator.
    */
   resetUsage() {
     this._requestStartTime = Date.now();
@@ -565,6 +574,16 @@ class Provider {
   }
 
   /**
+   * Resets the session-level usage accumulator.
+   * Called at the start of a new agent turn if the provider instance is reused.
+   * In practice, a new provider instance is created per turn in AIbitat.reply(),
+   * so this is a safety measure.
+   */
+  resetSessionUsage() {
+    this._sessionUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  }
+
+  /**
    * Formats an array of messages to handle attachments (images) for multimodal content.
    * @param {Array<{role: string, content: string, attachments?: Array}>} messages
    * @returns {Array} - Messages formatted for the API
@@ -578,6 +597,7 @@ class Provider {
   /**
    * Updates the stored usage metrics from a provider response.
    * Override in subclasses to handle provider-specific usage formats.
+   * Also accumulates into the session total for credit billing.
    * @param {Object} usage - The usage object from the provider response
    */
   recordUsage(usage = {}) {
@@ -589,11 +609,12 @@ class Provider {
     const promptTokens = usage.prompt_tokens || usage.input_tokens || 0;
     const completionTokens =
       usage.completion_tokens || usage.output_tokens || 0;
+    const totalTokens = usage.total_tokens || promptTokens + completionTokens;
 
     this.lastUsage = {
       prompt_tokens: promptTokens,
       completion_tokens: completionTokens,
-      total_tokens: usage.total_tokens || promptTokens + completionTokens,
+      total_tokens: totalTokens,
       outputTps:
         completionTokens && duration > 0 ? completionTokens / duration : 0,
       duration,
@@ -601,6 +622,11 @@ class Provider {
       provider: this.constructor.name,
       timestamp: new Date(),
     };
+
+    // Accumulate into session total for credit billing
+    this._sessionUsage.prompt_tokens += promptTokens;
+    this._sessionUsage.completion_tokens += completionTokens;
+    this._sessionUsage.total_tokens += totalTokens;
   }
 
   /**
@@ -609,6 +635,15 @@ class Provider {
    */
   getUsage() {
     return { ...this.lastUsage };
+  }
+
+  /**
+   * Get the cumulative usage across all LLM calls in this session/turn.
+   * This is the accurate total tokens consumed, used for credit billing.
+   * @returns {{prompt_tokens: number, completion_tokens: number, total_tokens: number}}
+   */
+  getSessionUsage() {
+    return { ...this._sessionUsage };
   }
 
   /**

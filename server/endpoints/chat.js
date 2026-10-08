@@ -14,6 +14,7 @@ const {
 const { writeResponseChunk } = require("../utils/helpers/chat/responses");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const { User } = require("../models/user");
+const { Credits } = require("../models/credits");
 const { getModelTag } = require("./utils");
 
 function chatEndpoints(app) {
@@ -38,6 +39,21 @@ function chatEndpoints(app) {
             error: "Message is empty.",
           });
           return;
+        }
+
+        // Credit gate: user must have > 0 credits to send a message.
+        // Admins are exempt. This check runs before flushHeaders so we can
+        // return a proper 402 HTTP status.
+        if (multiUserMode(response) && user.role !== ROLES.admin) {
+          const hasCredits = await Credits.hasCredits(user.id, 1, user.role);
+          if (!hasCredits) {
+            response.status(402).json({
+              id: uuidv4(),
+              message: "No credits remaining. Buy credits to keep chatting.",
+              action: "buy_credits",
+            });
+            return;
+          }
         }
 
         response.setHeader("Cache-Control", "no-cache");
@@ -116,6 +132,20 @@ function chatEndpoints(app) {
             error: "Message is empty.",
           });
           return;
+        }
+
+        // Credit gate: user must have > 0 credits to send a message.
+        // Admins are exempt.
+        if (multiUserMode(response) && user.role !== ROLES.admin) {
+          const hasCredits = await Credits.hasCredits(user.id, 1, user.role);
+          if (!hasCredits) {
+            response.status(402).json({
+              id: uuidv4(),
+              message: "No credits remaining. Buy credits to keep chatting.",
+              action: "buy_credits",
+            });
+            return;
+          }
         }
 
         response.setHeader("Cache-Control", "no-cache");
