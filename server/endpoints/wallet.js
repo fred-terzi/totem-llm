@@ -2,10 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const { ethers } = require("ethers");
 const { reqBody, makeJWT, userFromSession } = require("../utils/http");
 const { User } = require("../models/user");
-const {
-  totemConfig,
-  fetchTotemBalance,
-} = require("../utils/totemBalance");
+const { totemConfig, fetchTotemBalance } = require("../utils/totemBalance");
 const { Workspace } = require("../models/workspace");
 const { EventLogs } = require("../models/eventLogs");
 const prisma = require("../utils/prisma");
@@ -71,9 +68,11 @@ function walletEndpoints(app) {
     try {
       const user = await userFromSession(request, response);
       if (!user || !user.wallet_address) {
-        response
-          .status(200)
-          .json({ available: false, noWallet: true, error: "Not signed in with a wallet." });
+        response.status(200).json({
+          available: false,
+          noWallet: true,
+          error: "Not signed in with a wallet.",
+        });
         return;
       }
 
@@ -117,7 +116,11 @@ function walletEndpoints(app) {
       // Derive domain from origin or request host
       let domain;
       if (origin) {
-        try { domain = new URL(origin).hostname; } catch { domain = request.headers.host; }
+        try {
+          domain = new URL(origin).hostname;
+        } catch {
+          domain = request.headers.host;
+        }
       } else {
         domain = request.headers.host || "totem.local";
       }

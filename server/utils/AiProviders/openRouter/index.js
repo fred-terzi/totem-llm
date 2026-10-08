@@ -39,8 +39,8 @@ class OpenRouterLLM {
       baseURL: this.basePath,
       apiKey: process.env.OPENROUTER_API_KEY ?? null,
       defaultHeaders: {
-      "HTTP-Referer": "https://www.totemai.xyz/",
-      "X-Title": "Totem-LLM",
+        "HTTP-Referer": "https://www.totemai.xyz/",
+        "X-Title": "Totem-LLM",
       },
     });
     this.model =

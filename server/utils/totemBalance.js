@@ -29,7 +29,10 @@ function totemConfig() {
     chainId: Number(process.env.TOTEM_CHAIN_ID || DEFAULT_TOTEM_CHAIN_ID),
     rpcUrl: (process.env.TOTEM_RPC_URL || DEFAULT_TOTEM_RPC_URL).trim(),
     symbol: (process.env.TOTEM_SYMBOL || "TOTEM").trim(),
-    decimals: Number.isFinite(decimals) && decimals >= 0 ? decimals : DEFAULT_TOTEM_DECIMALS,
+    decimals:
+      Number.isFinite(decimals) && decimals >= 0
+        ? decimals
+        : DEFAULT_TOTEM_DECIMALS,
   };
 }
 
@@ -103,7 +106,8 @@ async function fetchTotemBalance({
   timeoutMs = 5000,
   fetchImpl = null,
 }) {
-  if (!rpcUrl || !tokenAddress) throw new Error("Missing RPC URL or token address.");
+  if (!rpcUrl || !tokenAddress)
+    throw new Error("Missing RPC URL or token address.");
   const data = encodeBalanceOfCall(ownerAddress);
   if (!data) throw new Error("Invalid owner address for balanceOf call.");
 
@@ -126,7 +130,8 @@ async function fetchTotemBalance({
       signal: controller.signal,
     });
 
-    if (!res.ok) throw new Error(`RPC endpoint responded with HTTP ${res.status}.`);
+    if (!res.ok)
+      throw new Error(`RPC endpoint responded with HTTP ${res.status}.`);
 
     const json = await res.json();
     if (json.error)
