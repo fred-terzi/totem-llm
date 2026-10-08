@@ -8,10 +8,16 @@ import { useTranslation } from "react-i18next";
  * The badge is always visible while the app is loaded. Its state is one of:
  *
  * - loading       → placeholder with a spinning refresh icon (first fetch)
- * - holder        → wallet holds $TOTEM: shows `amount SYMBOL`
+ * - holder        → wallet holds $TOTEM: shows a holding tier (see below)
  * - non-holder    → user isn't signed in with a wallet, the wallet holds 0
- *                   $TOTEM, or the server has no $TOTEM token configured
+ *                   $TOTEM, or the server has no $TOTEM token configured → 'NH'
  * - error         → on-chain read failed (shows retry affordance)
+ *
+ * Holding tiers (exact balance stays in the tooltip):
+ * - 0          → 'NH'   (not holding)
+ * - >0, <500k  → 'L1'
+ * - >500k      → 'L2'
+ * - >1M        → 'MAX'
  *
  * The balance is read from the server, which reads it on-chain (Base) for
  * the wallet address stored on the account at login time. The badge fetches
@@ -86,14 +92,14 @@ export default function TotemBalanceBadge() {
         </span>
       ) : isHolder ? (
         <span className="tabular-nums whitespace-nowrap" title={tooltip}>
-          {formatAmount(state.amount)} {symbol}
+          {holdingsTier(state.amount)}
         </span>
       ) : state.status === "non-holder" ? (
         <span
           className="tabular-nums text-white/60 light:text-slate-500 whitespace-nowrap"
           title={tooltip}
         >
-          0
+          NH
         </span>
       ) : (
         <span
@@ -138,13 +144,19 @@ function isZeroAmount(amount) {
 }
 
 /**
- * Compact display formatting — keeps the badge narrow while the tooltip
- * carries the full precision value.
- * @param {string} amount - decimal string, e.g. "1.23456789"
+ * Maps a decimal $TOTEM balance to its display tier.
+ * - 0 / non-positive / unparseable → 'L1' (a positive balance is required for
+ *   L2/MAX; zero-balance wallets never reach here — they render as non-holder)
+ * - >0, <500k  → 'L1'
+ * - >500k      → 'L2'
+ * - >1M        → 'MAX'
+ * @param {string|number|bigint} amount - decimal balance string, e.g. "1234.56"
+ * @returns {"L1"|"L2"|"MAX"}
  */
-function formatAmount(amount) {
-  const [whole, fraction = ""] = String(amount).split(".");
-  if (!fraction) return whole;
-  const short = fraction.slice(0, 4).replace(/0+$/, "") || "0";
-  return `${whole}.${short}`;
+function holdingsTier(amount) {
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return "L1";
+  if (n > 1_000_000) return "MAX";
+  if (n >= 500_000) return "L2";
+  return "L1";
 }
