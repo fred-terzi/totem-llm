@@ -198,10 +198,9 @@ export default function WalletConnectMobile() {
           type="button"
           onClick={startPairing}
           disabled={starting || phase === "signing"}
-          className="text-zinc-950 bg-white hover:bg-zinc-300 light:bg-sky-200 light:text-slate-950 light:hover:bg-sky-300 text-sm font-semibold rounded-lg border-primary-button h-[34px] w-full flex items-center justify-center gap-x-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="text-zinc-950 bg-white hover:bg-zinc-300 light:bg-sky-200 light:text-slate-950 light:hover:bg-sky-300 text-sm font-semibold rounded-lg border-primary-button h-[34px] w-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <MetaMaskIcon />
-          {starting
+            {starting
             ? "Starting…"
             : phase === "signing"
               ? "Waiting for signature…"
@@ -234,9 +233,8 @@ export default function WalletConnectMobile() {
         href={`https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-zinc-950 bg-white hover:bg-zinc-300 light:bg-sky-200 light:text-slate-950 light:hover:bg-sky-300 text-sm font-semibold rounded-lg border-primary-button h-[38px] w-full flex items-center justify-center gap-x-2 transition-colors"
+        className="text-zinc-950 bg-white hover:bg-zinc-300 light:bg-sky-200 light:text-slate-950 light:hover:bg-sky-300 text-sm font-semibold rounded-lg border-primary-button h-[38px] w-full flex items-center justify-center transition-colors"
       >
-        <MetaMaskIcon />
         Open in MetaMask
       </a>
 
@@ -278,52 +276,3 @@ export default function WalletConnectMobile() {
     </div>
   );
 }
-
-/* ── MetaMask fox icon (inline SVG, no extra dep) ─────────────────────────── */
-const MetaMaskIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 60 60"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden
-  >
-    <path
-      d="M57.556 8.802 31.01 1.349 4.464 8.802l10.144 9.457L4.464 27.716l26.546 7.453 26.546-7.453-10.144-9.457Z"
-      fill="#E2761B"
-    />
-    <path
-      d="m31.01 35.169 17.874 5.127-3.346-12.12ZM17.472 40.296l17.874-5.127-3.346-6.993Z"
-      fill="#F6851B"
-    />
-    <path
-      d="M31.01 35.169 48.884 28.173 37.41 1.349 31.01 35.169Z"
-      fill="#CD6116"
-    />
-    <path
-      d="M31.01 35.169 13.136 28.173 24.61 1.349 31.01 35.169Z"
-      fill="#E2761B"
-    />
-    <path
-      d="m31.01 35.169 17.874 5.127-3.346-12.123-14.528 6.996Z"
-      fill="#F6851B"
-    />
-    <path
-      d="m31.01 35.169-17.874 5.127 3.346-12.123 14.528 6.996Z"
-      fill="#F6851B"
-    />
-    <path
-      d="M31.01 35.169 13.136 28.173 24.61 1.349 31.01 35.169Z"
-      fill="#CD6116"
-    />
-    <path
-      d="m48.884 28.173 10.144-9.457L48.884 8.802l0 0-17.874 26.367Z"
-      fill="#CD6116"
-    />
-    <path
-      d="m13.136 28.173 10.144-9.457L13.136 8.802l0 0L4.464 18.716Z"
-      fill="#E2761B"
-    />
-  </svg>
-);
