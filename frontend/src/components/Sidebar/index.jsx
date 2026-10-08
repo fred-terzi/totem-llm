@@ -119,14 +119,7 @@ export function SidebarMobileHeader() {
         >
           <List className="h-6 w-6" />
         </button>
-        <div className="flex items-center justify-center flex-grow">
-          <img
-            src={logo}
-            alt="Logo"
-            className="block mx-auto h-6 w-auto"
-            style={{ maxHeight: "40px", objectFit: "contain" }}
-          />
-        </div>
+        <div className="flex items-center justify-center flex-grow" />
         <div className="w-12"></div>
       </div>
       <div

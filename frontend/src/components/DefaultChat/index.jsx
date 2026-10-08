@@ -77,7 +77,7 @@ export default function DefaultChatContainer() {
         <img
           src={logo}
           alt="Custom Logo"
-          className=" w-[200px] h-fit mb-5 rounded-lg"
+          className="hidden md:block w-[200px] h-fit mb-5 rounded-lg"
         />
         <h1 className="text-white text-2xl font-semibold">
           {t("home.welcome")}, {user.username}!
