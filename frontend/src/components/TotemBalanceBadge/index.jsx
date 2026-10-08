@@ -64,9 +64,12 @@ export default function TotemBalanceBadge() {
         });
 
   return (
+    // right offset must clear the ChatSettingsMenu button (text-size slider):
+    //   mobile: settings at right-[55px] + 35px wide = 90px -> badge at 100px (10px gap)
+    //   desktop: settings at right-[67px] + 35px wide = 102px -> badge at 120px (18px gap)
     <div
       data-testid="totem-balance-badge"
-      className="absolute top-3 right-[72px] md:top-9 md:right-[88px] z-40 flex items-center gap-x-1.5 h-[35px] px-3 rounded-full border border-white/10 bg-theme-bg-secondary/90 light:bg-white/80 text-white light:text-slate-800 text-xs font-medium shadow-sm"
+      className="absolute top-3 right-[100px] md:top-9 md:right-[120px] z-40 flex items-center gap-x-1.5 h-[35px] px-3 rounded-full border border-white/10 bg-theme-bg-secondary/90 light:bg-white/80 text-white light:text-slate-800 text-xs font-medium shadow-sm"
     >
       <Coins
         size={14}
