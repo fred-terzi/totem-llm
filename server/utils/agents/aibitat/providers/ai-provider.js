@@ -580,7 +580,11 @@ class Provider {
    * so this is a safety measure.
    */
   resetSessionUsage() {
-    this._sessionUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+    this._sessionUsage = {
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
+    };
   }
 
   /**

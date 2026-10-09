@@ -149,7 +149,11 @@ const chatHistory = {
         });
 
         // Debit credits: 1 credit = 1 token. Admins are exempt.
-        await this._debitCredits(invocation, metrics.total_tokens, aibitat.trackedChatId);
+        await this._debitCredits(
+          invocation,
+          metrics.total_tokens,
+          aibitat.trackedChatId
+        );
 
         if (!aibitat._threadRenamed) {
           aibitat._threadRenamed = await this._autoRenameThread(
@@ -215,7 +219,11 @@ const chatHistory = {
         });
 
         // Debit credits: 1 credit = 1 token. Admins are exempt.
-        await this._debitCredits(invocation, metrics.total_tokens, aibitat.trackedChatId);
+        await this._debitCredits(
+          invocation,
+          metrics.total_tokens,
+          aibitat.trackedChatId
+        );
 
         if (!aibitat._threadRenamed) {
           aibitat._threadRenamed = await this._autoRenameThread(
