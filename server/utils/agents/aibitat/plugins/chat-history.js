@@ -13,12 +13,9 @@ const chatHistory = {
     return {
       name: this.name,
       setup: function (aibitat) {
-        // If the agent is aborted (e.g. user sent /reset mid-response), skip
-        // the pending save so a completing in-flight response doesn't reappear.
-        aibitat.onAbort(() => {
-          aibitat._aborted = true;
-        });
-
+        // Note: `aibitat._aborted` is set centrally by AIbitat.abort()
+        // before the "abort" event fires, so we no longer need to set it
+        // here — the onMessage check below just reads that flag.
         // pre-register a workspace chat ID to secure it in the DB
         aibitat.onMessage(async (message) => {
           if (message.from !== "USER") return;

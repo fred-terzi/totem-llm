@@ -108,6 +108,24 @@ class Provider {
       return;
     }
     this._client = client;
+    this.abortSignal = null;
+  }
+
+  /**
+   * Optional AbortSignal for this provider instance.
+   * Set by AIbitat (from `aibitat.abortSignal`) right after instantiation so
+   * that aborting a run tears down any in-flight upstream LLM request
+   * (verified: openai SDK v4 throws `APIUserAbortError` and does NOT retry
+   * when the passed signal is aborted — no spurious retries on bail).
+   * Providers with a native-SDK client (e.g. Ollama) wire it in themselves.
+   * @type {AbortSignal|null}
+   */
+  get abortSignal() {
+    return this._abortSignal || null;
+  }
+
+  set abortSignal(signal) {
+    this._abortSignal = signal || null;
   }
 
   providerLog(text, ...args) {
@@ -663,14 +681,17 @@ class Provider {
     this.providerLog("Provider.stream - will process this chat completion.");
     const msgUUID = v4();
     const formattedMessages = this.formatMessagesWithAttachments(messages);
-    const stream = await this.client.chat.completions.create({
-      model: this.model,
-      stream: true,
-      messages: formattedMessages,
-      ...(Array.isArray(functions) && functions?.length > 0
-        ? { functions }
-        : {}),
-    });
+    const stream = await this.client.chat.completions.create(
+      {
+        model: this.model,
+        stream: true,
+        messages: formattedMessages,
+        ...(Array.isArray(functions) && functions?.length > 0
+          ? { functions }
+          : {}),
+      },
+      { signal: this.abortSignal || undefined }
+    );
 
     const result = {
       functionCall: null,

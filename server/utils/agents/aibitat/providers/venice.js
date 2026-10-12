@@ -69,10 +69,13 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
 
   async #handleFunctionCallChat({ messages = [] }) {
     return await this.client.chat.completions
-      .create({
-        model: this.model,
-        messages,
-      })
+      .create(
+        {
+          model: this.model,
+          messages,
+        },
+        { signal: this.abortSignal || undefined }
+      )
       .then((result) => {
         if (!result.hasOwnProperty("choices"))
           throw new Error("Venice chat: No results!");
@@ -86,11 +89,14 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
   }
 
   async #handleFunctionCallStream({ messages = [] }) {
-    return await this.client.chat.completions.create({
-      model: this.model,
-      stream: true,
-      messages,
-    });
+    return await this.client.chat.completions.create(
+      {
+        model: this.model,
+        stream: true,
+        messages,
+      },
+      { signal: this.abortSignal || undefined }
+    );
   }
 
   /**
@@ -122,9 +128,13 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
         messages,
         functions,
         eventHandler,
-        { provider: this }
+        { provider: this, signal: this.abortSignal }
       );
     } catch (error) {
+      // A user abort is not an upstream failure - re-throw it verbatim so
+      // the aibitat loop / websocket plugin handles it quietly instead of
+      // wrapping it as a scary "agent model failed to respond" APIError.
+      if (this.abortSignal?.aborted) throw error;
       if (error instanceof OpenAI.AuthenticationError) throw error;
       if (
         error instanceof OpenAI.RateLimitError ||
@@ -161,7 +171,7 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
         messages,
         functions,
         this.getCost.bind(this),
-        { provider: this }
+        { provider: this, signal: this.abortSignal }
       );
 
       if (result.retryWithError) {
@@ -170,6 +180,8 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
 
       return result;
     } catch (error) {
+      // A user abort is not an upstream failure - re-throw it verbatim.
+      if (this.abortSignal?.aborted) throw error;
       if (error instanceof OpenAI.AuthenticationError) throw error;
       if (
         error instanceof OpenAI.RateLimitError ||

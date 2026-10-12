@@ -109,6 +109,24 @@ class AIbitat {
     };
     this.provider = this.defaultProvider.provider;
     this.model = this.defaultProvider.model;
+
+    /**
+     * AbortController that lives for the duration of this AIbitat instance.
+     * AIbitat is instantiated fresh per invocation, so its lifetime matches
+     * the controller's perfectly. Aborting it cancels any in-flight upstream
+     * LLM call (plumbed into the provider via `abortSignal`) and is checked
+     * by the agent loop to stop recursing into further provider calls / tools.
+     * @type {AbortController}
+     */
+    this.abortController = new AbortController();
+
+    /**
+     * Central flag indicating this run has been aborted.
+     * Set by `abort()`. Previously only the chat-history plugin set this
+     * (to skip persisting); now it is the authoritative flag.
+     * @type {boolean}
+     */
+    this._aborted = false;
   }
 
   /**
@@ -390,6 +408,15 @@ class AIbitat {
   }
 
   /**
+   * The AbortSignal for this run. Pass this (or thread it into provider
+   * calls) so in-flight upstream LLM requests are torn down on abort.
+   * @returns {AbortSignal}
+   */
+  get abortSignal() {
+    return this.abortController.signal;
+  }
+
+  /**
    * Triggered when a plugin, socket, or command is aborted.
    *
    * @param listener
@@ -401,9 +428,19 @@ class AIbitat {
   }
 
   /**
-   * Abort the running of any plugins that may still be pending (Langchain summarize)
+   * Abort the current run.
+   * - Fires the `"abort"` emitter event so existing listeners keep working
+   *   (chat-history skips persisting; summarize / web-scraping cancel their
+   *   own in-flight work).
+   * - Aborts the instance's AbortController so any in-flight upstream LLM
+   *   call wired to `abortSignal` is torn down immediately.
+   * - Sets `_aborted` centrally so the agent loop can stop recursing
+   *   (no further provider calls or tool executions) even if no plugin
+   *   was attached to the `"abort"` event.
    */
   abort() {
+    this._aborted = true;
+    this.abortController.abort();
     this.emitter.emit("abort", null, this);
   }
 
@@ -576,6 +613,14 @@ class AIbitat {
    * @param keepAlive Whether to keep the chat alive.
    */
   async chat(route, keepAlive = true) {
+    // Aborted run: stop recursing (no further provider calls or tool
+    // executions) and unwind the pipeline through the terminate path so
+    // attached sockets/handlers close instead of hanging.
+    if (this.abortSignal.aborted) {
+      this.terminate(route.to || route.from);
+      return;
+    }
+
     // check if the message is for a group
     // if it is, select the next node to chat with from the group
     // and then ask them to reply.
@@ -589,6 +634,12 @@ class AIbitat {
           return this.newError({ from: route.from, to: route.to }, error);
         }
         throw error;
+      }
+
+      // An abort may have fired while awaiting the routing call.
+      if (this.abortSignal.aborted) {
+        this.terminate(route.from);
+        return;
       }
 
       if (!nextNode) {
@@ -718,6 +769,8 @@ class AIbitat {
       ...channelConfig,
     });
     provider.attachHandlerProps(this.handlerProps);
+    // Wire the run's abort signal so an abort tears down this routing LLM call.
+    provider.abortSignal = this.abortSignal;
 
     const history = this.getHistory({ to: channel });
 
@@ -851,6 +904,12 @@ ${this.getHistory({ to: route.to })
    * @param route.from The node that will reply to the chat.
    */
   async reply(route) {
+    // Aborted run: don't fire the provider call for this round. Returning
+    // empty unwinds the recursion in chat() (keepAlive is off on the abort
+    // path) without a scary error; the terminate() fired by the abort guard
+    // has already unwound the pipeline.
+    if (this.abortSignal.aborted) return "";
+
     const fromConfig = this.getAgentConfig(route.from);
     const chatHistory = this.getOrFormatNodeChatHistory(route);
 
@@ -924,6 +983,10 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       ...fromConfig,
     });
     this.providerInstance.attachHandlerProps(this.handlerProps);
+    // Wire the run's abort signal so an abort (Stop command, socket close,
+    // HTTP client disconnect) tears down the in-flight upstream LLM request
+    // instead of burning credits/GPU until the model finishes.
+    this.providerInstance.abortSignal = this.abortSignal;
 
     let content;
     if (this.providerInstance.supportsAgentStreaming) {
@@ -947,8 +1010,35 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
   }
 
   /**
+   * True if the error was caused by us aborting the run (user Stop, socket
+   * close, HTTP client disconnect) - NOT by an upstream provider failure.
+   * Aborts must never be wrapped into a scary "agent model failed to
+   * respond" APIError or converted into a RetryError: the pipeline has
+   * already started unwinding (terminate / socket close / partial output).
+   *
+   * `TimeoutError` qualifies because aborting a fetch/undici request can
+   * surface as a TimeoutError in some SDK paths.
+   *
+   * @param {Error|null} error
+   * @returns {boolean}
+   */
+  #isAbortError(error) {
+    if (this.abortSignal?.aborted && error instanceof Error) {
+      if (
+        error.name === "APIUserAbortError" ||
+        error.name === "AbortError" ||
+        error.name === "TimeoutError"
+      )
+        return true;
+    }
+    return false;
+  }
+
+  /**
    * Wrapper for provider calls that catches errors and converts them to APIError.
    * This ensures provider errors are properly surfaced to the user instead of crashing.
+   * User aborts are re-thrown verbatim (never wrapped) so plugins can treat
+   * them as a quiet unwind rather than a model failure.
    *
    * @param {Function} providerCall - Async function that calls the provider
    * @returns {Promise<any>} - The result of the provider call
@@ -958,6 +1048,12 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     try {
       return await providerCall();
     } catch (error) {
+      if (this.#isAbortError(error)) {
+        this.handlerProps?.log?.(
+          `[debug]: Provider call aborted - unwinding agent run quietly.`
+        );
+        throw error;
+      }
       console.error(`[AIbitat] Provider error: ${error.message}`, {
         hide_meta: true,
       });
@@ -981,6 +1077,10 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     byAgent = null,
     depth = 0
   ) {
+    // Aborted run: stop recursing instead of firing the next provider call
+    // or executing the next tool. Returning empty unwinds the recursion.
+    if (this.abortSignal.aborted) return "";
+
     const eventHandler = (type, data) => {
       this?.socket?.send(type, data);
     };
@@ -1042,6 +1142,15 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         arguments: args,
         result,
       });
+
+      // An abort may have fired while the tool was running. Don't start the
+      // next LLM round — return the tool result and let the recursion unwind.
+      if (this.abortSignal.aborted) {
+        this.handlerProps?.log?.(
+          `[debug]: Run aborted after tool \`${name}\` completed. Stopping agent loop.`
+        );
+        return result;
+      }
 
       /**
        * If the tool call has direct output enabled, return the result directly to the chat
@@ -1137,6 +1246,10 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     depth = 0,
     msgUUID = null
   ) {
+    // Aborted run: stop recursing instead of firing the next provider call
+    // or executing the next tool. Returning empty unwinds the recursion.
+    if (this.abortSignal.aborted) return "";
+
     // Create a stable UUID at the start of execution for event correlation
     if (!msgUUID) msgUUID = v4();
     const eventHandler = (type, data) => {
@@ -1201,6 +1314,15 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         arguments: args,
         result,
       });
+
+      // An abort may have fired while the tool was running. Don't start the
+      // next LLM round — return the tool result and let the recursion unwind.
+      if (this.abortSignal.aborted) {
+        this.handlerProps?.log?.(
+          `[debug]: Run aborted after tool \`${name}\` completed. Stopping agent loop.`
+        );
+        return result;
+      }
 
       if (this.skipHandleExecution) {
         this.skipHandleExecution = false;
