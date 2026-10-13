@@ -24,6 +24,4 @@ server/storage/chatgpt_import_example
 
 .agents/skills/venice_api
 
-# Local planning docs (not for git)
-planning/
 
