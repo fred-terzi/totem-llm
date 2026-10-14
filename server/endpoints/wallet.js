@@ -200,7 +200,9 @@ function walletEndpoints(app) {
       let user = await User._get({ wallet_address: normalizedAddress });
 
       if (!user) {
-        // New user: create account with 10 free credits
+        // New user: welcome bonus of 100,000 microdollars (~100k output tokens)
+        const WELCOME_BONUS = 100_000; // microdollars
+
         const placeholderPassword = uuidv4() + uuidv4();
         const username = `wallet_${normalizedAddress.slice(2, 8)}`;
 
@@ -210,7 +212,7 @@ function walletEndpoints(app) {
               username,
               password: placeholderPassword,
               wallet_address: normalizedAddress,
-              credits_balance: 10,
+              credits_balance: WELCOME_BONUS,
               role: "default",
             },
           });
@@ -219,7 +221,7 @@ function walletEndpoints(app) {
             data: {
               user_id: newUser.id,
               type: "credit",
-              amount: 10,
+              amount: WELCOME_BONUS,
               reference: `signup_${normalizedAddress}`,
             },
           });

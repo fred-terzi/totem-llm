@@ -460,13 +460,16 @@ model model_routers {
 }
 
 model credit_transactions {
-  id        Int      @id @default(autoincrement())
-  user_id   Int
-  amount    Int
-  type      String   // "purchase" | "debit" | "refund"
-  reference String?
-  createdAt DateTime @default(now())
-  user      users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  id            Int      @id @default(autoincrement())
+  user_id       Int
+  amount        Int      // cost in microdollars (1/1,000,000 of a dollar)
+  type          String   // "purchase" | "debit" | "refund"
+  reference     String?
+  model         String   @default("e2ee-glm-5-3-flash")
+  input_tokens  Int      @default(0)
+  output_tokens Int      @default(0)
+  createdAt     DateTime @default(now())
+  user          users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
 }

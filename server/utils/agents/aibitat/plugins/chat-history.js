@@ -145,10 +145,12 @@ const chatHistory = {
           include: true,
         });
 
-        // Debit credits: 1 credit = 1 token. Admins are exempt.
+        // Debit credits based on input/output token usage. Admins are exempt.
         await this._debitCredits(
           invocation,
-          metrics.total_tokens,
+          metrics.prompt_tokens,
+          metrics.completion_tokens,
+          metrics.model,
           aibitat.trackedChatId
         );
 
@@ -215,10 +217,12 @@ const chatHistory = {
           include: true,
         });
 
-        // Debit credits: 1 credit = 1 token. Admins are exempt.
+        // Debit credits based on input/output token usage. Admins are exempt.
         await this._debitCredits(
           invocation,
-          metrics.total_tokens,
+          metrics.prompt_tokens,
+          metrics.completion_tokens,
+          metrics.model,
           aibitat.trackedChatId
         );
 
@@ -234,15 +238,17 @@ const chatHistory = {
 
       /**
        * Debit credits from the user's balance based on actual token usage.
-       * 1 credit = 1 token. Admins are exempt. Failures are logged
-       * and do not block the chat save.
-       * @param {object} invocation
-       * @param {number} totalTokens
+       * Cost = ceil(input_tokens × 0.5) + ceil(output_tokens × 1.0)  [microdollars]
+       * Admins are exempt. Failures are logged and do not block the chat save.
+       * @param {object}   invocation
+       * @param {number}   inputTokens   — prompt tokens
+       * @param {number}   outputTokens  — completion tokens
+       * @param {string}   [model]
        * @param {number|null} chatId
        */
-      _debitCredits: async function (invocation, totalTokens, chatId = null) {
+      _debitCredits: async function (invocation, inputTokens, outputTokens, model, chatId = null) {
         const userId = invocation?.user_id;
-        if (!userId || !totalTokens || totalTokens <= 0) return;
+        if (!userId || (!inputTokens && !outputTokens)) return;
 
         try {
           const { Credits } = require("../../../../models/credits");
@@ -251,9 +257,15 @@ const chatHistory = {
           if (!user || user.role === "admin") return;
 
           const reference = chatId ? `chat_${chatId}` : null;
-          const result = await Credits.debit(userId, totalTokens, reference);
+          const result = await Credits.debitUsage(userId, {
+            inputTokens:  inputTokens  || 0,
+            outputTokens: outputTokens || 0,
+            model: model || undefined,
+            reference,
+          });
           console.log(
-            `\x1b[33m[Credits]\x1b[0m user_${userId} debited ${result.debited} / ${totalTokens} tokens (balance: ${result.newBalance})`
+            `\x1b[33m[Credits]\x1b[0m user_${userId} debited ${result.debited} microdollars ` +
+            `(${inputTokens} in / ${outputTokens} out, cost=${result.cost}) balance: ${result.newBalance}`
           );
         } catch (e) {
           // Credit debit failure should never block the chat save.
