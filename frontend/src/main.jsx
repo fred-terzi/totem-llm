@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import SimpleSSOPassthrough from "@/pages/Login/SSO/simple";
 import OnboardingFlow from "@/pages/OnboardingFlow";
 import { FeatureFlagProvider } from "@/context/FeatureFlagContext";
+import { CreditProvider } from "@/context/CreditContext";
 import useFeatureFlag from "@/hooks/useFeatureFlag";
 import "@/index.css";
 
@@ -458,7 +459,9 @@ const router = createBrowserRouter([
 ReactDOM.createRoot(document.getElementById("root")).render(
   <REACTWRAP>
     <FeatureFlagProvider>
-      <RouterProvider router={router} />
+      <CreditProvider>
+        <RouterProvider router={router} />
+      </CreditProvider>
     </FeatureFlagProvider>
   </REACTWRAP>
 );
