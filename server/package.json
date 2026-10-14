@@ -10,7 +10,7 @@
     "node": ">=18.12.1"
   },
   "scripts": {
-    "dev": "cross-env NODE_ENV=development nodemon --ignore documents --ignore vector-cache --ignore storage --ignore swagger --trace-warnings index.js",
+    "dev": "cross-env NODE_ENV=development DATABASE_URL=file:../storage/totem-llm.db prisma migrate reset --force && cross-env NODE_ENV=development DATABASE_URL=file:../storage/totem-llm.db nodemon --ignore documents --ignore vector-cache --ignore storage --ignore swagger --trace-warnings index.js",
     "start": "cross-env NODE_ENV=production node index.js",
     "lint": "eslint --fix .",
     "lint:check": "eslint .",
