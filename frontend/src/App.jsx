@@ -16,7 +16,6 @@ import ImageLightbox from "@/components/ImageLightbox";
 import { ErrorBoundary } from "react-error-boundary";
 import ErrorBoundaryFallback from "./components/ErrorBoundaryFallback";
 import useBackendOfflineNotifications from "@/hooks/useBackendOfflineNotifications";
-import { closeAllPersistedAgentSockets } from "@/utils/chat/agent";
 import useIOSPushPrompt from "@/hooks/useIOSPushPrompt";
 
 /**
@@ -48,14 +47,6 @@ export default function App() {
   useBackendOfflineNotifications();
   useAppBadgeListener();
   useIOSPushPrompt();
-
-  // Close all parked agent WebSocket sessions when the tab is closed so the
-  // server-side invocations are properly cleaned up.
-  useEffect(() => {
-    const handleUnload = () => closeAllPersistedAgentSockets();
-    window.addEventListener("beforeunload", handleUnload);
-    return () => window.removeEventListener("beforeunload", handleUnload);
-  }, []);
 
   return (
     <ErrorBoundary
