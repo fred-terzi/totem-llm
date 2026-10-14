@@ -7,8 +7,9 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { API_BASE, CONTEXT_USAGE_EVENT } from "@/utils/constants";
+import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
+import { ASSISTANT_MESSAGE_COMPLETE_EVENT } from "@/components/contexts/TTSProvider";
 
 /**
  * CreditContext
@@ -24,8 +25,10 @@ import { baseHeaders } from "@/utils/request";
  *   - `refresh()` re-fetches; it is exposed so other components can force a
  *     reload (e.g. after buying credits) and can be called concurrently
  *     without causing duplicate in-flight requests.
- *   - Subscribes to the existing `CONTEXT_USAGE_EVENT` (emitted after every
- *     chat turn) so the badge stays accurate as credits are spent.
+ *   - Re-fetches on every completed assistant response via the shared
+ *     `ASSISTANT_MESSAGE_COMPLETE_EVENT` (emitted at the end of every turn
+ *     across both the standard chat and agent/websocket flows), so the badge
+ *     stays accurate as credits are spent.
  *   - Never throws to the consumer; network/auth failures resolve to
  *     `error: true` with the last-known (or null) balance so the UI degrades
  *     gracefully rather than crashing.
@@ -88,17 +91,21 @@ export function CreditProvider({ children }) {
     }
   }, []);
 
-  // Initial load + keep the badge in sync after every chat turn.
+  // Initial load + keep the badge in sync after every completed assistant
+  // response (the canonical end-of-turn signal, fired for both chat and agent).
   useEffect(() => {
     mounted.current = true;
     fetchBalance();
 
-    const onUsage = () => fetchBalance();
-    window.addEventListener(CONTEXT_USAGE_EVENT, onUsage);
+    const onTurnComplete = () => fetchBalance();
+    window.addEventListener(ASSISTANT_MESSAGE_COMPLETE_EVENT, onTurnComplete);
 
     return () => {
       mounted.current = false;
-      window.removeEventListener(CONTEXT_USAGE_EVENT, onUsage);
+      window.removeEventListener(
+        ASSISTANT_MESSAGE_COMPLETE_EVENT,
+        onTurnComplete
+      );
     };
   }, [fetchBalance]);
 
