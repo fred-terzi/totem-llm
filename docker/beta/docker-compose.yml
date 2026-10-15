@@ -111,7 +111,7 @@ services:
       # ── $TOTEM on-chain token (Base) ───────────────────────────────────
       # Enables GET /wallet/balance — reads the user's TOTEM ERC-20 balance.
       # When unset the endpoint returns 204 and the UI hides the badge.
-      TOTEM_ADDRESS: "0x1234567890abcdef1234567890abcdef12345678"
+      TOTEM_ADDRESS: "0x0F8ac22B85076F9BfE0b93Cc49FB6426CB150F88"
 
       # ── Telemetry ───────────────────────────────────────────────────────
       DISABLE_TELEMETRY: "true"
