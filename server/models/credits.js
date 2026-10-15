@@ -13,9 +13,9 @@ const prisma = require("../utils/prisma");
 //   150 in + 320 out tokens =    75 + 320 = 395  (= $0.000395)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MODEL          = "e2ee-glm-5-3-flash";
-const INPUT_RATE     = 0.5; // microdollars per input  token
-const OUTPUT_RATE    = 1.0; // microdollars per output token
+const MODEL = "e2ee-glm-5-3-flash";
+const INPUT_RATE = 0.5; // microdollars per input  token
+const OUTPUT_RATE = 1.0; // microdollars per output token
 // TODO: per-model rates keyed on model (currently single-model pricing).
 
 /**
@@ -160,7 +160,10 @@ const Credits = {
    * @param {string|null} [usage.reference] — Venice response ID
    * @returns {Promise<{userId: number, debited: number, newBalance: number, cost: number}>}
    */
-  async debitUsage(userId, { inputTokens = 0, outputTokens = 0, model = MODEL, reference = null }) {
+  async debitUsage(
+    userId,
+    { inputTokens = 0, outputTokens = 0, model = MODEL, reference = null }
+  ) {
     const cost = calculateCost(inputTokens, outputTokens);
     if (cost <= 0) return { userId, debited: 0, newBalance: 0, cost: 0 };
 
@@ -237,7 +240,12 @@ const Credits = {
    */
   async getUsageStats(userId) {
     if (!userId) {
-      return { totalInputTokens: 0, totalOutputTokens: 0, totalCostMicro: 0, totalDebits: 0 };
+      return {
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCostMicro: 0,
+        totalDebits: 0,
+      };
     }
 
     const [sum] = await prisma.credit_transactions.groupBy({

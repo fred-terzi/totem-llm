@@ -246,7 +246,13 @@ const chatHistory = {
        * @param {string}   [model]
        * @param {number|null} chatId
        */
-      _debitCredits: async function (invocation, inputTokens, outputTokens, model, chatId = null) {
+      _debitCredits: async function (
+        invocation,
+        inputTokens,
+        outputTokens,
+        model,
+        chatId = null
+      ) {
         const userId = invocation?.user_id;
         if (!userId || (!inputTokens && !outputTokens)) return;
 
@@ -258,14 +264,14 @@ const chatHistory = {
 
           const reference = chatId ? `chat_${chatId}` : null;
           const result = await Credits.debitUsage(userId, {
-            inputTokens:  inputTokens  || 0,
+            inputTokens: inputTokens || 0,
             outputTokens: outputTokens || 0,
             model: model || undefined,
             reference,
           });
           console.log(
             `\x1b[33m[Credits]\x1b[0m user_${userId} debited ${result.debited} microdollars ` +
-            `(${inputTokens} in / ${outputTokens} out, cost=${result.cost}) balance: ${result.newBalance}`
+              `(${inputTokens} in / ${outputTokens} out, cost=${result.cost}) balance: ${result.newBalance}`
           );
         } catch (e) {
           // Credit debit failure should never block the chat save.
