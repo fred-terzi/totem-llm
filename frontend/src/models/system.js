@@ -129,17 +129,40 @@ const System = {
     }
   },
 
-  walletVerify: async function (body) {
-    try {
-      const res = await fetch(`${API_BASE}/auth/wallet/verify`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      return await res.json();
-    } catch (e) {
-      return { valid: false, user: null, token: null, message: e.message };
+  walletVerify: async function (body, maxRetries = 3) {
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/wallet/verify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        // Server received and responded (even 4xx/5xx) — return immediately.
+        // HTTP errors are not retried because the nonce is single-use and
+        // the server already consumed (or rejected) it.
+        return await res.json();
+      } catch (e) {
+        // Network-level failure (TypeError: "Failed to fetch").
+        // Typical cause on mobile: Android suspends the browser tab while
+        // the user is in the wallet app; on resume the network stack needs
+        // a moment to re-establish the LAN connection. The nonce is safe —
+        // it is only consumed server-side on a *successful* verify, so a
+        // request that never arrived does not invalidate it.
+        lastError = e;
+        if (attempt < maxRetries) {
+          // Linear back-off: 1.5 s, 3 s, 4.5 s
+          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          continue;
+        }
+      }
     }
+    return {
+      valid: false,
+      user: null,
+      token: null,
+      message: lastError?.message || "Network error",
+    };
   },
 
   /**
