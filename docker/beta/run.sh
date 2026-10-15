@@ -28,6 +28,19 @@ TUNNEL_TARGET="${TUNNEL_TARGET:-http://localhost:13000}"
 CF_LOG="/tmp/cloudflared.log"
 CF_PID=""
 
+# ── Cloudflared argument selection ───────────────────────────────────────────
+# If TUNNEL_TOKEN is set (docker/beta/.env via compose), run a NAMED tunnel →
+# permanent URL https://beta.totemai.xyz. Otherwise fall back to an
+# account-less QUICK tunnel (random *.trycloudflare.com URL, changes each run).
+CF_ARGS=(tunnel)
+CF_URL_PATTERN='https://[a-z0-9-]+\.trycloudflare\.com'
+TUNNEL_KIND="quick (temporary)"
+if [ -n "${TUNNEL_TOKEN:-}" ]; then
+    CF_ARGS=(tunnel run --token "$TUNNEL_TOKEN")
+    CF_URL_PATTERN='beta\.totemai\.xyz'
+    TUNNEL_KIND="named (permanent)"
+fi
+
 # ── Cleanup on exit ──────────────────────────────────────────────────────────
 cleanup() {
     echo ""
@@ -120,24 +133,35 @@ echo "  [5/5] Prisma: generate + migrate + seed…"
 yarn prisma:setup
 echo ""
 
-# ── Step 3: cloudflared quick tunnel ─────────────────────────────────────────
-# `cloudflared tunnel --url <target>` is a "quick tunnel" — no account, no
-# named tunnel, no config file. It prints a line like:
+# ── Step 3: cloudflared tunnel ───────────────────────────────────────────────
+# With TUNNEL_TOKEN:   `cloudflared tunnel --token <token>` — named tunnel.
+#   The ingress rules (beta.totemai.xyz → http://localhost:13000) live on the
+#   Cloudflare side (remotely-managed), so no config file is needed.
+# Without:             `cloudflared tunnel --url <target>` — "quick tunnel",
+#   no account needed. It prints a line like:
 #   INF | https://random-words.trycloudflare.com |
 #
-# We start it in the background, wait for the URL to appear in the log,
-# then print it. The process keeps running until we kill it in cleanup().
-echo "  Starting cloudflared quick tunnel → $TUNNEL_TARGET"
-cloudflared tunnel --url "$TUNNEL_TARGET" > "$CF_LOG" 2>&1 &
+# We start it in the background, wait for it to register, then announce it.
+echo "  Starting cloudflared $TUNNEL_KIND tunnel"
+echo "  (named → https://beta.totemai.xyz | quick → $TUNNEL_TARGET)"
+cloudflared "${CF_ARGS[@]}" > "$CF_LOG" 2>&1 &
 CF_PID=$!
 echo "  cloudflared PID: $CF_PID"
 
-# Wait up to 30 s for the URL to appear in the log.
+# Wait up to 45 s for the tunnel to register (registration log line or URL).
 CF_URL=""
-for i in $(seq 1 30); do
-    CF_URL=$(grep -oE 'https://[a-z0-9-]+\.trycloudflare\.com' "$CF_LOG" | head -n1 || true)
-    if [ -n "$CF_URL" ]; then
-        break
+for i in $(seq 1 45); do
+    # Named tunnel: wait for a successful "Registered tunnel connection" line.
+    if [ "$TUNNEL_KIND" != "quick (temporary)" ]; then
+        if grep -q 'Registered tunnel connection' "$CF_LOG" 2>/dev/null; then
+            CF_URL="https://beta.totemai.xyz"
+            break
+        fi
+    else
+        CF_URL=$(grep -oE "$CF_URL_PATTERN" "$CF_LOG" | head -n1 || true)
+        if [ -n "$CF_URL" ]; then
+            break
+        fi
     fi
     sleep 1
 done
@@ -145,7 +169,7 @@ done
 echo ""
 if [ -n "$CF_URL" ]; then
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  ✅  TEMP WEBSITE IS LIVE"
+    echo "  ✅  BETA WEBSITE IS LIVE ($TUNNEL_KIND tunnel)"
     echo ""
     echo "      $CF_URL"
     echo ""
@@ -153,7 +177,7 @@ if [ -n "$CF_URL" ]; then
     echo "  (tunnel log: $CF_LOG  — follow with: docker exec -it <ctr> tail -f $CF_LOG)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 else
-    echo "  ⚠️  cloudflared did not print a URL within 30 s."
+    echo "  ⚠️  cloudflared did not register within 45 s."
     echo "      Check logs: docker exec -it <ctr> cat $CF_LOG"
     echo "      (the tunnel may still be starting — give it another moment)"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

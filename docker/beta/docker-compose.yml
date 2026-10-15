@@ -1,28 +1,52 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Totem LLM — Beta (source) Docker Compose
+# Totem LLM — Beta Docker Compose
 #
 # Purpose:
 #   Build and serve the latest `dev-totem` branch from source (not the
-#   published npm package) for beta testing before publish. The container
-#   clones the repo at startup, runs `yarn setup` + `yarn dev:all`, and
-#   exposes a Cloudflare quick-tunnel URL.
+#   published npm package) for beta testing before publish.
+#
+# PERMANENT URL:
+#   The container runs a Cloudflare NAMED tunnel (token in docker/beta/.env)
+#   and serves:
+#
+#       https://beta.totemai.xyz        ← permanent URL
+#
+#   Tunnel:  "totem-beta" (f2d1f1e1-4be1-4248-9865-730d6c3da049)
+#   Ingress: beta.totemai.xyz → http://localhost:13000 (managed remotely on
+#            Cloudflare — change routing in the Zero Trust dashboard or via
+#            the API, no container rebuild needed)
+#   DNS:     beta.totemai.xyz CNAME f2d1f1e1-….cfargotunnel.com (proxied)
+#
+#   NOTE: The zone totemai.xyz is ACTIVE on Cloudflare only after the
+#   nameservers are switched at Namecheap to:
+#       dolly.ns.cloudflare.com
+#       malcolm.ns.cloudflare.com
+#   Until then the URL will not resolve publicly.
+#
+# FALLBACK (temporary URL):
+#   If TUNNEL_TOKEN is unset in docker/beta/.env, run.sh launches an
+#   account-less "quick tunnel" and the URL is a random
+#   https://<words>.trycloudflare.com printed to the container logs.
 #
 # Usage:
-#   docker compose -f docker/beta/docker-compose.yml up --build
+#   docker compose -f docker/beta/docker-compose.yml up --build -d
 #
-# Then watch the logs for the highlighted temp URL:
+# Then watch the logs for the highlighted URL banner:
 #   docker compose -f docker/beta/docker-compose.yml logs -f totem-beta
 #
-# The Cloudflare quick tunnel URL is printed to the container stdout and is
-# the only thing you need to open in a browser. The three local host ports
-# (default 31300, 32686, 32888) are for direct debugging if needed:
-#   http://localhost:31300   →  Vite dev server (UI + /api proxy)
+# The three local host ports (default 31300, 32686, 32888) are for direct
+# debugging if needed:
+#   http://localhost:31300   →  Vite dev server (UI + /api proxy)  ← tunnel target
 #   http://localhost:32686   →  Express API
 #   http://localhost:32888   →  Collector
 #
 # To use a different branch or fork, override the env vars:
 #   REPO_BRANCH=feature-xyz docker compose -f docker/beta/docker-compose.yml up
 #   REPO_URL=https://github.com/someone/totem-llm.git docker compose ... up
+#
+# Rotate the tunnel token (docker/beta/.env), e.g. via the Cloudflare API:
+#   GET /accounts/<account_id>/cfd_tunnel/f2d1f1e1-4be1-4248-9865-730d6c3da049/token
+#   → paste into docker/beta/.env as TUNNEL_TOKEN=… → docker compose up -d
 #
 # Tear down (keeps the volume so the clone + node_modules persist):
 #   docker compose -f docker/beta/docker-compose.yml down
@@ -115,6 +139,12 @@ services:
 
       # ── Telemetry ───────────────────────────────────────────────────────
       DISABLE_TELEMETRY: "true"
+
+      # ── Permanent URL ───────────────────────────────────────────────────
+      # Passed through to run.sh. Read from docker/beta/.env (same dir) so
+      # the secret never lives in this file. Rotate via the Cloudflare API:
+      #   GET /accounts/<account>/cfd_tunnel/<tunnel_id>/token
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN:-}"
 
     # Give the container extra time to: clone → yarn install → prisma →
     # start dev:all → serve the first request. 240 s covers a cold start
