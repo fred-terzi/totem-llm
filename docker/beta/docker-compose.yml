@@ -130,7 +130,9 @@ services:
       # ── WalletConnect (mobile wallet login) ────────────────────────────
       # Required for the "Start pairing" + "Open in MetaMask" flow.
       # Without this the component shows a fallback text instead of a button.
-      VITE_WC_PROJECT_ID: "ca76648c535069547e776b74caa06100"
+      # Value read from docker/beta/.env (same dir, gitignored) so the ID
+      # never lives in this file. Create at https://dashboard.reown.com.
+      VITE_WC_PROJECT_ID: "${VITE_WC_PROJECT_ID:-}"
 
       # ── $TOTEM on-chain token (Base) ───────────────────────────────────
       # Enables GET /wallet/balance — reads the user's TOTEM ERC-20 balance.
