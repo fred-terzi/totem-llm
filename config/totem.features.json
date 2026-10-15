@@ -164,8 +164,8 @@
     },
     "hosted": {
       "communityHub": false,
-      "modelRouter": true,
-      "llmProviders": ["venice"],
+      "modelRouter": false,
+      "llmProviders": ["ollama", "venice"],
       "brandingWhitelabel": false,
       "filesystemAgent": false,
       "documentationLink": false,
