@@ -108,6 +108,11 @@ services:
       # Without this the component shows a fallback text instead of a button.
       VITE_WC_PROJECT_ID: "ca76648c535069547e776b74caa06100"
 
+      # ── $TOTEM on-chain token (Base) ───────────────────────────────────
+      # Enables GET /wallet/balance — reads the user's TOTEM ERC-20 balance.
+      # When unset the endpoint returns 204 and the UI hides the badge.
+      TOTEM_ADDRESS: "0x1234567890abcdef1234567890abcdef12345678"
+
       # ── Telemetry ───────────────────────────────────────────────────────
       DISABLE_TELEMETRY: "true"
 
