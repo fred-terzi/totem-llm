@@ -49,6 +49,7 @@ function chatEndpoints(app) {
           if (!hasCredits) {
             response.status(402).json({
               id: uuidv4(),
+              type: "abort",
               message: "No credits remaining. Buy credits to keep chatting.",
               action: "buy_credits",
             });
@@ -141,6 +142,7 @@ function chatEndpoints(app) {
           if (!hasCredits) {
             response.status(402).json({
               id: uuidv4(),
+              type: "abort",
               message: "No credits remaining. Buy credits to keep chatting.",
               action: "buy_credits",
             });
