@@ -64,6 +64,11 @@ export default function UserRow({ currUser, user }) {
         </th>
         <td className="px-6">{titleCase(user.role)}</td>
         <td className="px-6">{user.createdAt}</td>
+        <td className="px-6 whitespace-nowrap">
+          {user.credits_balance != null
+            ? user.credits_balance.toLocaleString("en-US")
+            : "—"}
+        </td>
         <td className="px-6 flex items-center gap-x-6 h-full mt-2">
           {canModify && (
             <button

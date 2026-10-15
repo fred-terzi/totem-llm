@@ -97,6 +97,9 @@ function UsersContainer() {
           <th scope="col" className="px-6 py-3">
             Date Added
           </th>
+          <th scope="col" className="px-6 py-3">
+            Credits
+          </th>
           <th scope="col" className="px-6 py-3 rounded-tr-lg">
             {" "}
           </th>
