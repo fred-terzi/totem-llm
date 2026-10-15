@@ -54,8 +54,12 @@ echo ""
 if [ -d "$REPO_DIR/.git" ]; then
     echo "  Repo already present at $REPO_DIR — pulling latest $REPO_BRANCH"
     cd "$REPO_DIR"
-    git fetch origin
     git checkout "$REPO_BRANCH"
+    # Discard any local modifications (e.g. the vite.config.js sed patch from
+    # the previous run) so the pull can apply cleanly. The patch is
+    # re-applied in Step 2b below.
+    git checkout -- .
+    git fetch origin
     git pull origin "$REPO_BRANCH"
 else
     echo "  Cloning $REPO_URL (branch: $REPO_BRANCH) → $REPO_DIR"
