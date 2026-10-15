@@ -116,8 +116,9 @@ const System = {
    * Step 2: verify({ signature, nonce }) → { valid, user, token }
    */
   walletNonce: async function (origin) {
+    const url = `${API_BASE}/auth/wallet/nonce`;
     try {
-      const res = await fetch(`${API_BASE}/auth/wallet/nonce`, {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ origin: origin || window.location.origin }),
@@ -125,15 +126,17 @@ const System = {
       if (!res.ok) throw new Error("Could not get wallet nonce.");
       return await res.json();
     } catch (e) {
+      console.error("[wallet] nonce:", e.message);
       return { nonce: null, message: null, error: e.message };
     }
   },
 
   walletVerify: async function (body, maxRetries = 3) {
+    const url = `${API_BASE}/auth/wallet/verify`;
     let lastError = null;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
-        const res = await fetch(`${API_BASE}/auth/wallet/verify`, {
+        const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -151,12 +154,13 @@ const System = {
         // request that never arrived does not invalidate it.
         lastError = e;
         if (attempt < maxRetries) {
-          // Linear back-off: 1.5 s, 3 s, 4.5 s
-          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+          const delay = 1500 * (attempt + 1);
+          await new Promise((r) => setTimeout(r, delay));
           continue;
         }
       }
     }
+    console.error("[wallet] verify:", lastError?.message);
     return {
       valid: false,
       user: null,

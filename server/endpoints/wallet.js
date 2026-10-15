@@ -123,10 +123,8 @@ function walletEndpoints(app) {
    * Response: { nonce, message }
    */
   app.post("/auth/wallet/nonce", async (request, response) => {
-    console.log("[WALLET DEBUG SERVER] ===== NONCE REQUEST =====", "ip:", request.ip);
     try {
       const { origin } = reqBody(request);
-      console.log("[WALLET DEBUG SERVER] nonce: origin:", origin, "host header:", request.headers.host);
 
       // Derive domain from origin or request host
       let domain;
@@ -142,16 +140,13 @@ function walletEndpoints(app) {
 
       const nonce = uuidv4();
       const message = buildWalletMessage(domain, origin, nonce);
-      console.log("[WALLET DEBUG SERVER] nonce: domain:", domain, "nonce:", nonce);
-      console.log("[WALLET DEBUG SERVER] nonce: message:", JSON.stringify(message));
 
       // Store the exact message so verify can check against it.
       nonces.set(nonce, { message, createdAt: Date.now() });
-      console.log("[WALLET DEBUG SERVER] nonce: total nonces in store:", nonces.size);
 
       response.status(200).json({ nonce, message });
     } catch (e) {
-      console.error("[WALLET DEBUG SERVER] nonce ERROR:", e.message, "\n", e.stack);
+      console.error("[wallet] nonce error:", e.message);
       response.status(500).json({ error: "Failed to generate wallet nonce." });
     }
   });
@@ -167,15 +162,12 @@ function walletEndpoints(app) {
    * Response: { valid, user, token, message }  (same shape as /request-token)
    */
   app.post("/auth/wallet/verify", async (request, response) => {
-    console.log("[WALLET DEBUG SERVER] ===== VERIFY REQUEST =====", "ip:", request.ip);
     try {
       const { signature, nonce } = reqBody(request);
-      console.log("[WALLET DEBUG SERVER] verify: nonce:", nonce);
-      console.log("[WALLET DEBUG SERVER] verify: signature length:", signature?.length, "prefix:", signature?.slice(0, 30));
 
       // --- Input validation ---
       if (!signature || !nonce) {
-        console.error("[WALLET DEBUG SERVER] verify REJECT: missing fields — signature:", !!signature, "nonce:", !!nonce);
+        console.error("[wallet] verify: missing signature or nonce");
         response.status(400).json({
           valid: false,
           user: null,
@@ -196,12 +188,10 @@ function walletEndpoints(app) {
         if (consumed && Date.now() - consumed.consumedAt < CONSUMED_TTL_MS) {
           entry = consumed;
           isReplay = true;
-          console.log("[WALLET DEBUG SERVER] verify: REPLAY — nonce found in consumed store (age:", Date.now() - consumed.consumedAt, "ms)");
         }
       }
-      console.log("[WALLET DEBUG SERVER] verify: nonce in store:", !!entry, "replay:", isReplay, "active nonces:", nonces.size, "consumed nonces:", consumedNonces.size);
       if (!entry) {
-        console.error("[WALLET DEBUG SERVER] verify REJECT: nonce not found. active keys:", [...nonces.keys()], "consumed keys:", [...consumedNonces.keys()]);
+        console.error("[wallet] verify: invalid or expired nonce");
         response.status(401).json({
           valid: false,
           user: null,
@@ -212,14 +202,11 @@ function walletEndpoints(app) {
       }
 
       // --- Recover address from signature ---
-      console.log("[WALLET DEBUG SERVER] verify: stored message:", JSON.stringify(entry.message));
-      console.log("[WALLET DEBUG SERVER] verify: message from client matches stored:", entry.message === undefined ? "n/a" : "(comparing in ethers)");
       let recoveredAddress;
       try {
         recoveredAddress = ethers.verifyMessage(entry.message, signature);
-        console.log("[WALLET DEBUG SERVER] verify: recovered address:", recoveredAddress);
       } catch (e) {
-        console.error("[WALLET DEBUG SERVER] verify REJECT: ethers.verifyMessage failed:", e.message, "\n", e.stack);
+        console.error("[wallet] verify: invalid signature:", e.message);
         // Consume nonce even on failure to prevent replay of a bad sig
         nonces.delete(nonce);
         response.status(401).json({
@@ -232,26 +219,23 @@ function walletEndpoints(app) {
       }
 
       const normalizedAddress = recoveredAddress.toLowerCase();
-      console.log("[WALLET DEBUG SERVER] verify: normalized address:", normalizedAddress);
 
       // Consume the nonce: move from active store to consumed store (30 s replay window).
       nonces.delete(nonce);
-      consumedNonces.set(nonce, { message: entry.message, consumedAt: Date.now() });
-      console.log("[WALLET DEBUG SERVER] verify: nonce consumed → moved to replay store. active:", nonces.size, "consumed:", consumedNonces.size);
+      consumedNonces.set(nonce, {
+        message: entry.message,
+        consumedAt: Date.now(),
+      });
 
       // --- Find or create user ---
-      console.log("[WALLET DEBUG SERVER] verify: looking up user by wallet_address...");
       let user = await User._get({ wallet_address: normalizedAddress });
-      console.log("[WALLET DEBUG SERVER] verify: user found:", !!user, user?.username);
 
       if (!user) {
-        console.log("[WALLET DEBUG SERVER] verify: NEW USER — creating...");
         // New user: welcome bonus of 100,000 microdollars (~100k output tokens)
         const WELCOME_BONUS = 100_000; // microdollars
 
         const placeholderPassword = uuidv4() + uuidv4();
         const username = `wallet_${normalizedAddress.slice(2, 8)}`;
-        console.log("[WALLET DEBUG SERVER] verify: creating user:", username, "bonus:", WELCOME_BONUS);
 
         try {
           const newUser = await prisma.users.create({
@@ -263,7 +247,6 @@ function walletEndpoints(app) {
               role: "default",
             },
           });
-          console.log("[WALLET DEBUG SERVER] verify: user created id:", newUser.id);
 
           await prisma.credit_transactions.create({
             data: {
@@ -273,7 +256,6 @@ function walletEndpoints(app) {
               reference: `signup_${normalizedAddress}`,
             },
           });
-          console.log("[WALLET DEBUG SERVER] verify: credit_transactions row created");
 
           user = newUser;
 
@@ -284,13 +266,17 @@ function walletEndpoints(app) {
               user.id
             );
             if (wsError) {
-              console.error("[WALLET DEBUG SERVER] verify: workspace creation failed:", wsError);
-            } else {
-              console.log("[WALLET DEBUG SERVER] verify: workspace created:", workspace?.name, "slug:", workspace?.slug);
+              console.error(
+                "[wallet] default workspace creation failed:",
+                wsError
+              );
             }
           } catch (wsErr) {
             // Non-fatal: user can still log in and create a workspace manually.
-            console.error("[WALLET DEBUG SERVER] verify: workspace creation error:", wsErr.message);
+            console.error(
+              "[wallet] default workspace creation error:",
+              wsErr.message
+            );
           }
 
           await EventLogs.logEvent(
@@ -298,18 +284,19 @@ function walletEndpoints(app) {
             { wallet_address: normalizedAddress, ip: request.ip || "unknown" },
             user.id
           );
-          console.log("[WALLET DEBUG SERVER] verify: event logged: wallet_account_created");
         } catch (e) {
-          console.error("[WALLET DEBUG SERVER] verify: user creation failed, retrying lookup:", e.message);
+          console.error(
+            "[wallet] user creation failed, retrying lookup:",
+            e.message
+          );
           // Race condition: another request created the user concurrently. Re-fetch.
           user = await User._get({ wallet_address: normalizedAddress });
           if (!user) throw e;
-          console.log("[WALLET DEBUG SERVER] verify: re-fetched user (race condition):", user.username);
         }
       }
 
       if (user.suspended) {
-        console.error("[WALLET DEBUG SERVER] verify REJECT: user suspended");
+        console.error("[wallet] verify: user suspended");
         response.status(403).json({
           valid: false,
           user: null,
@@ -324,16 +311,17 @@ function walletEndpoints(app) {
         { id: user.id, username: user.username },
         process.env.JWT_EXPIRY || "30d"
       );
-      console.log("[WALLET DEBUG SERVER] verify: JWT issued. token prefix:", sessionToken.slice(0, 30));
 
       await EventLogs.logEvent(
         "wallet_login_event",
-        { wallet_address: normalizedAddress, ip: request.ip || "unknown" },
+        {
+          wallet_address: normalizedAddress,
+          ip: request.ip || "unknown",
+          isReplay,
+        },
         user.id
       );
-      console.log("[WALLET DEBUG SERVER] verify: event logged: wallet_login_event");
 
-      console.log("[WALLET DEBUG SERVER] verify: SENDING 200 — valid:true, user:", user.username, isReplay ? "(REPLAY)" : "");
       response.status(200).json({
         valid: true,
         user: User.filterFields(user),
@@ -341,7 +329,7 @@ function walletEndpoints(app) {
         message: null,
       });
     } catch (e) {
-      console.error("[WALLET DEBUG SERVER] verify UNCAUGHT ERROR:", e.name, e.message, "\n", e.stack);
+      console.error("[wallet] verify error:", e.message);
       response.status(500).json({
         valid: false,
         user: null,

@@ -41,7 +41,9 @@ const WalletConnectButton = () => {
 
       // Step 2: Get nonce + message from server
       const { nonce, message } = await System.walletNonce();
-      if (!nonce || !message) throw new Error("Could not get signing message.");
+      if (!nonce || !message) {
+        throw new Error("Could not get signing message.");
+      }
 
       // Step 3: Sign the message with the wallet
       const signature = await window.ethereum.request({
@@ -60,6 +62,7 @@ const WalletConnectButton = () => {
         throw new Error(result.message || "Wallet login failed.");
       }
     } catch (e) {
+      console.error("[wallet] login failed:", e.message);
       setError(e.message || "Wallet connection failed.");
       setLoading(false);
     }

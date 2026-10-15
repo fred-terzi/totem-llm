@@ -107,28 +107,22 @@ export default function WalletConnectMobile() {
   useEffect(() => {
     const pending = getPendingVerify();
     if (!pending) return;
-    console.log(
-      "[WALLET-MOBILE DEBUG] Recovering pending verify from sessionStorage — nonce:",
-      pending.nonce
-    );
     setPhase("signing");
     System.walletVerify({ signature: pending.signature, nonce: pending.nonce })
       .then((result) => {
         if (result.valid && result.token && result.user) {
-          console.log("[WALLET-MOBILE DEBUG] Recovery SUCCESS — user:", result.user.username);
           clearPendingVerify();
           window.localStorage.setItem(AUTH_USER, JSON.stringify(result.user));
           window.localStorage.setItem(AUTH_TOKEN, result.token);
           window.location = paths.home();
         } else {
-          console.error("[WALLET-MOBILE DEBUG] Recovery FAILED:", JSON.stringify(result));
           clearPendingVerify();
           setError(result.message || "Wallet login could not be completed. Please try again.");
           setPhase("idle");
         }
       })
       .catch((e) => {
-        console.error("[WALLET-MOBILE DEBUG] Recovery ERROR:", e.message);
+        console.error("[wallet] recovery failed:", e.message);
         clearPendingVerify();
         setError(e.message || "Wallet login failed. Please try again.");
         setPhase("idle");
@@ -151,17 +145,12 @@ export default function WalletConnectMobile() {
 
   /** After the wallet approves the session: sign, verify, log in. */
   const handleApproval = async (client, session) => {
-    console.log("[WALLET-MOBILE DEBUG] ===== handleApproval START =====");
-    console.log("[WALLET-MOBILE DEBUG] phase:", phase, "session topic:", session?.topic?.slice(0, 20));
     if (phase === "done") return;
     setPhase("signing");
 
     // Step 1: Get nonce + message from server
-    console.log("[WALLET-MOBILE DEBUG] Step 1: calling System.walletNonce()...");
-    const { nonce, message, error: nonceErr } = await System.walletNonce();
-    console.log("[WALLET-MOBILE DEBUG] Step 1 result — nonce:", nonce, "message length:", message?.length, "error:", nonceErr);
+    const { nonce, message } = await System.walletNonce();
     if (!nonce || !message) {
-      console.error("[WALLET-MOBILE DEBUG] ABORT: no nonce/message");
       throw new Error("Could not get signing message.");
     }
 
@@ -173,27 +162,17 @@ export default function WalletConnectMobile() {
       );
     const account = namespace?.accounts?.find((a) => a.startsWith("eip155:"));
     if (!account) {
-      console.error("[WALLET-MOBILE DEBUG] ABORT: no EVM account — namespaces:", JSON.stringify(session.namespaces));
       throw new Error("No EVM account available in wallet.");
     }
     const [, chainNum, address] = account.split(":");
-    console.log("[WALLET-MOBILE DEBUG] Step 2: account:", account, "chain:", chainNum, "address:", address);
 
     // Step 3: Sign via WalletConnect
-    console.log("[WALLET-MOBILE DEBUG] Step 3: calling client.request personal_sign...");
-    const t3 = performance.now();
     const signature = await client.request({
       topic: session.topic,
       request: { method: "personal_sign", params: [message, address] },
       chainId: `eip155:${chainNum}`,
     });
-    console.log(
-      "[WALLET-MOBILE DEBUG] Step 3 DONE in", Math.round(performance.now() - t3), "ms",
-      "— signature:", signature ? signature.slice(0, 20) + "..." : null,
-      "length:", signature?.length
-    );
     if (!signature || signature === "0x") {
-      console.error("[WALLET-MOBILE DEBUG] ABORT: signature rejected/empty");
       throw new Error("Signature was rejected.");
     }
 
@@ -201,19 +180,9 @@ export default function WalletConnectMobile() {
     // Persist the pending state BEFORE the verify call so it survives a
     // page reload (MetaMask Android universal-link redirect).
     savePendingVerify(nonce, signature);
-    console.log("[WALLET-MOBILE DEBUG] Step 4: calling System.walletVerify()...");
-    const t4 = performance.now();
     const result = await System.walletVerify({ signature, nonce });
-    console.log(
-      "[WALLET-MOBILE DEBUG] Step 4 DONE in", Math.round(performance.now() - t4), "ms",
-      "— valid:", result.valid,
-      "token:", result.token ? result.token.slice(0, 20) + "..." : null,
-      "user:", result.user?.username,
-      "message:", result.message
-    );
 
     if (!result.valid || !result.token || !result.user) {
-      console.error("[WALLET-MOBILE DEBUG] VERIFY REJECTED:", JSON.stringify(result));
       // Keep the pending state if the nonce might still be valid (network error).
       // Clear it if the server explicitly rejected (invalid nonce, bad sig).
       if (/invalid or expired nonce/i.test(result.message || "")) {
@@ -223,7 +192,6 @@ export default function WalletConnectMobile() {
     }
     clearPendingVerify();
 
-    console.log("[WALLET-MOBILE DEBUG] SUCCESS — storing auth, redirecting to home");
     window.localStorage.setItem(AUTH_USER, JSON.stringify(result.user));
     window.localStorage.setItem(AUTH_TOKEN, result.token);
     setPhase("done");
@@ -237,22 +205,14 @@ export default function WalletConnectMobile() {
    * the "Open in MetaMask" anchor immediately.
    */
   const startPairing = async () => {
-    console.log("[WALLET-MOBILE DEBUG] ===== startPairing ===== phase:", phase, "starting:", starting);
-    if (phase === "pairing" || phase === "signing") {
-      console.log("[WALLET-MOBILE DEBUG] startPairing: already in progress, returning existing URI");
-      return uri;
-    }
+    if (phase === "pairing" || phase === "signing") return uri;
     if (starting) return uri;
     try {
       setError(null);
       setStarting(true);
       setPhase("starting");
-      console.log("[WALLET-MOBILE DEBUG] startPairing: calling getSignClient()...");
-      const client = await getSignClient();
-      console.log("[WALLET-MOBILE DEBUG] startPairing: client acquired");
 
-      console.log("[WALLET-MOBILE DEBUG] startPairing: calling client.connect()...");
-      const tConnect = performance.now();
+      const client = await getSignClient();
       const { uri: pairingUri, approval } = await client.connect({
         optionalNamespaces: {
           eip155: {
@@ -262,29 +222,18 @@ export default function WalletConnectMobile() {
           },
         },
       });
-      console.log(
-        "[WALLET-MOBILE DEBUG] startPairing: client.connect DONE in", Math.round(performance.now() - tConnect), "ms",
-        "— URI:", pairingUri?.slice(0, 50) + "..."
-      );
 
       setUri(pairingUri);
       setPhase("pairing");
-      console.log("[WALLET-MOBILE DEBUG] startPairing: awaiting approval() in background...");
 
       // Approve → sign → login, in the background (does not block this fn).
       approval()
-        .then((session) => {
-          console.log("[WALLET-MOBILE DEBUG] approval RESOLVED — calling handleApproval");
-          return handleApproval(client, session);
-        })
-        .catch((e) => {
-          console.error("[WALLET-MOBILE DEBUG] approval REJECTED:", e.name, e.message, "\nstack:", e.stack);
-          handleConnError(e);
-        });
+        .then((session) => handleApproval(client, session))
+        .catch((e) => handleConnError(e));
 
       return pairingUri;
     } catch (e) {
-      console.error("[WALLET-MOBILE DEBUG] startPairing ERROR:", e.name, e.message, "\nstack:", e.stack);
+      console.error("[wallet] pairing failed:", e.message);
       handleConnError(e);
       return null;
     } finally {
