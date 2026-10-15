@@ -202,6 +202,82 @@ Declarative workflows — ordered sequences of steps (llm-instruction, web-scrap
 - **Multi-user mode** (enabled via `system_settings` table): JWT-based login with bcrypt password verification. Roles: admin / default. API keys and session tokens for stateless auth.
 - **Single-user mode**: Password stored as `AUTH_TOKEN` env var, JWT payload encrypted with PEM key (`EncryptionManager`). Bypassed in dev or when no AUTH_TOKEN is set.
 - **API keys**: Stateless `api_keys` table — bearer token validation via `validApiKey` middleware.
+- **Wallet login (SIWE)**: Primary login method — see [Wallet Login (SIWE)](#wallet-login-siwe) below.
+
+### Wallet Login (SIWE)
+
+Sign-In with Ethereum (SIWE) is the **primary login method**. Users sign a server-generated message with their EVM wallet; the server recovers the address from the signature and issues a JWT. **The address is never trusted from the client** — it is always derived via `ethers.verifyMessage()`, so the user cannot impersonate a different address.
+
+**Two-step flow:**
+
+1. `POST /auth/wallet/nonce` → server returns `{ nonce, message }`.
+   - The nonce is a UUID stored in an **in-memory `Map`** with a **5-minute TTL** (expired entries cleaned up every 60 s). The nonce is **single-use** — deleted immediately on consumption, even if the signature is invalid.
+   - The message is a SIWE-style string. Example:
+   ```
+   totem.example.com wants you to sign in with your Ethereum account:
+
+   (your wallet address will be derived from the signature)
+
+   Sign this message to authenticate with Totem LLM.
+   This request will not trigger a blockchain transaction or cost any gas fees.
+
+   URI: https://totem.example.com
+   Version: 1
+   Chain ID: 1
+   Nonce: 550e8400-e29b-41d4-a716-446655440000
+   Issued At: 2026-01-01T12:00:00.000Z
+   ```
+   > **Note:** `Chain ID: 1` in the message is informational only — `personal_sign` has no chain parameter, so the signature is valid on any EVM chain. The on-chain $TOTEM balance is read from **Base (8453)** independently.
+
+2. `POST /auth/wallet/verify` with `{ signature, nonce }` → server:
+   - Looks up the nonce (replays and expired nonces are rejected with 401)
+   - Recovers the address: `ethers.verifyMessage(storedMessage, signature)`
+   - Normalises to lowercase
+   - **Existing user**: looks up by `wallet_address` → checks `suspended` (403 if suspended) → issues JWT (30 d default)
+   - **New user**: creates a `users` row:
+     - `username`: `wallet_<first 6 hex chars of address>`
+     - `password`: `uuidv4() + uuidv4()` (64-char placeholder — no one knows it; wallet-only account)
+     - `wallet_address`: the recovered address
+     - `credits_balance`: **100 000 µ$** welcome bonus
+     - `role`: `default`
+     - Records a `credit_transactions` row (`type: "credit"`, `reference: signup_<address>`)
+     - Auto-creates a **"My Workspace"** (non-fatal on failure — user can create one manually)
+     - Logs `wallet_account_created` event
+   - Logs `wallet_login_event` on every successful login
+   - Returns `{ valid: true, user: User.filterFields(user), token: <JWT> }`
+   - **Race-condition safe**: concurrent first-login attempts for the same address catch the Prisma `P2002` unique constraint error and re-fetch the existing user
+
+**Frontend — two wallet paths** (both in the login modal, rendered above the password form):
+
+| Path | Component | How it works |
+|---|---|---|
+| **Desktop (EIP-1193)** | `WalletConnectButton` (inline in `MultiUserAuth.jsx`) | `window.ethereum.request({ method: "eth_requestAccounts" })` → `System.walletNonce()` → `window.ethereum.request({ method: "personal_sign", params: [message, address] })` → `System.walletVerify({ signature, nonce })` → store JWT + user in `localStorage` → redirect to home. Works with MetaMask, Rainbow, and any wallet that injects `window.ethereum`. |
+| **Mobile (WalletConnect v2)** | `WalletConnectMobile.jsx` | Two-tap flow (gesture-safe on mobile browsers): **Tap 1** "Start pairing" → `SignClient.connect()` creates a WalletConnect session → renders a **QR code** (for Trust, Rainbow, SafePal, Base, etc.) + an **`<a href="https://metamask.app.link/wc?uri=…">`** "Open in MetaMask" deep-link. **Tap 2** (the `<a>` link, a genuine user gesture) → MetaMask app opens → user approves → `personal_sign` over the session → `System.walletVerify()` → JWT → redirect. Requires `VITE_WC_PROJECT_ID` env var. EVM-only (Phantom/Solana not supported). |
+
+> **Why an `<a>` and not `window.open()`?** A programmatic `window.open()` called after an `await` is outside the user-gesture window and is silently blocked on mobile (Safari/Chrome). A rendered `<a target="_blank">` is a genuine user gesture on Tap 2 and is never blocked. This is the standard WalletConnect v2 mobile pattern.
+
+**On-chain $TOTEM balance** (`GET /wallet/balance`):
+
+Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `eth_call` (no transaction is created). Feature-gated by the `TOTEM_ADDRESS` env var — when unset the endpoint returns `204 No Content` and the UI hides the badge. The wallet address used is the one stored on the user's account at login time.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `TOTEM_ADDRESS` | *(unset — feature off)* | ERC-20 contract address (enables the balance endpoint) |
+| `TOTEM_RPC_URL` | `https://mainnet.base.org` | JSON-RPC endpoint |
+| `TOTEM_CHAIN_ID` | `8453` | Base mainnet |
+| `TOTEM_DECIMALS` | `18` | Token decimals |
+| `TOTEM_SYMBOL` | `TOTEM` | Display symbol |
+| `VITE_WC_PROJECT_ID` | *(unset — mobile wallet off)* | WalletConnect project ID (required for the mobile path) |
+
+**Key files:**
+
+| File | Role |
+|---|---|
+| `server/endpoints/wallet.js` | Nonce + verify + balance endpoints; in-memory nonce store |
+| `server/utils/totemBalance.js` | $TOTEM config resolution, `eth_call` balance reader, amount formatting (pure — no server deps) |
+| `frontend/src/components/Modals/Password/MultiUserAuth.jsx` | Login modal — desktop EIP-1193 wallet button + password form |
+| `frontend/src/components/Modals/Password/WalletConnectMobile.jsx` | Mobile WalletConnect v2 flow (QR + MetaMask deep-link) |
+| `frontend/src/models/system.js` | `System.walletNonce()`, `System.walletVerify()`, `System.totemBalance()` API methods |
 
 ### Credits & Billing
 
