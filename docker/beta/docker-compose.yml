@@ -103,6 +103,11 @@ services:
       # (default — see Dockerfile ENV)
       # TOTEM_BUILD_PROFILE: source
 
+      # ── WalletConnect (mobile wallet login) ────────────────────────────
+      # Required for the "Start pairing" + "Open in MetaMask" flow.
+      # Without this the component shows a fallback text instead of a button.
+      VITE_WC_PROJECT_ID: "ca76648c535069547e776b74caa06100"
+
       # ── Telemetry ───────────────────────────────────────────────────────
       DISABLE_TELEMETRY: "true"
 
