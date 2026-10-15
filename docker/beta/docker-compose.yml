@@ -125,7 +125,7 @@ services:
       # ── Feature flags (baked into the Vite bundle at dev-server start) ──
       # "source" profile enables terminal access, agent mode, etc.
       # (default — see Dockerfile ENV)
-      # TOTEM_BUILD_PROFILE: source
+      TOTEM_BUILD_PROFILE: hosted
 
       # ── WalletConnect (mobile wallet login) ────────────────────────────
       # Required for the "Start pairing" + "Open in MetaMask" flow.
