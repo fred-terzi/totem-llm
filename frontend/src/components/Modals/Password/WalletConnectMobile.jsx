@@ -38,11 +38,17 @@ function savePendingVerify(nonce, signature) {
       PENDING_KEY,
       JSON.stringify({ nonce, signature, ts: Date.now() })
     );
-  } catch { /* sessionStorage unavailable — non-fatal */ }
+  } catch {
+    /* sessionStorage unavailable — non-fatal */
+  }
 }
 
 function clearPendingVerify() {
-  try { sessionStorage.removeItem(PENDING_KEY); } catch { /* noop */ }
+  try {
+    sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    /* noop */
+  }
 }
 
 function getPendingVerify() {
@@ -117,7 +123,10 @@ export default function WalletConnectMobile() {
           window.location = paths.home();
         } else {
           clearPendingVerify();
-          setError(result.message || "Wallet login could not be completed. Please try again.");
+          setError(
+            result.message ||
+              "Wallet login could not be completed. Please try again."
+          );
           setPhase("idle");
         }
       })
@@ -167,6 +176,13 @@ export default function WalletConnectMobile() {
     const [, chainNum, address] = account.split(":");
 
     // Step 3: Sign via WalletConnect
+    console.log(
+      "[wallet-mobile] sign request (personal_sign) sent to wallet — nonce:",
+      nonce,
+      "address:",
+      address,
+      new Date().toISOString()
+    );
     const signature = await client.request({
       topic: session.topic,
       request: { method: "personal_sign", params: [message, address] },
@@ -175,6 +191,13 @@ export default function WalletConnectMobile() {
     if (!signature || signature === "0x") {
       throw new Error("Signature was rejected.");
     }
+    console.log(
+      "[wallet-mobile] signature received from wallet — nonce:",
+      nonce,
+      "sig prefix:",
+      String(signature).slice(0, 10) + "…",
+      new Date().toISOString()
+    );
 
     // Step 4: Verify on server
     // Persist the pending state BEFORE the verify call so it survives a
@@ -205,6 +228,10 @@ export default function WalletConnectMobile() {
    * the "Open in MetaMask" anchor immediately.
    */
   const startPairing = async () => {
+    console.log(
+      "[wallet-mobile] Connect with Mobile Wallet pressed",
+      new Date().toISOString()
+    );
     if (phase === "pairing" || phase === "signing") return uri;
     if (starting) return uri;
     try {
@@ -225,10 +252,21 @@ export default function WalletConnectMobile() {
 
       setUri(pairingUri);
       setPhase("pairing");
+      console.log(
+        "[wallet-mobile] pairing URI ready, waiting for wallet approval"
+      );
 
       // Approve → sign → login, in the background (does not block this fn).
       approval()
-        .then((session) => handleApproval(client, session))
+        .then((session) => {
+          console.log(
+            "[wallet-mobile] confirmation received — wallet approved the session",
+            "topic:",
+            session.topic,
+            new Date().toISOString()
+          );
+          return handleApproval(client, session);
+        })
         .catch((e) => handleConnError(e));
 
       return pairingUri;
@@ -284,7 +322,7 @@ export default function WalletConnectMobile() {
           disabled={starting || phase === "signing"}
           className="text-zinc-950 bg-white hover:bg-zinc-300 light:bg-sky-200 light:text-slate-950 light:hover:bg-sky-300 text-sm font-semibold rounded-lg border-primary-button h-[34px] w-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-            {starting
+          {starting
             ? "Starting…"
             : phase === "signing"
               ? "Waiting for signature…"
@@ -317,6 +355,12 @@ export default function WalletConnectMobile() {
         href={`https://metamask.app.link/wc?uri=${encodeURIComponent(uri)}`}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={() =>
+          console.log(
+            "[wallet-mobile] Open in MetaMask pressed — universal link navigating",
+            new Date().toISOString()
+          )
+        }
         className="text-zinc-950 bg-white hover:bg-zinc-300 light:bg-sky-200 light:text-slate-950 light:hover:bg-sky-300 text-sm font-semibold rounded-lg border-primary-button h-[38px] w-full flex items-center justify-center transition-colors"
       >
         Open in MetaMask
