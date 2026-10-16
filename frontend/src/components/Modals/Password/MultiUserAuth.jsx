@@ -415,9 +415,13 @@ export default function MultiUserAuth() {
                 name="username"
                 type="text"
                 className="border-none bg-zinc-800 light:bg-slate-200 text-zinc-200 light:text-zinc-600 text-sm rounded-lg p-2.5 w-[300px] h-[34px] focus:outline-none focus:ring-1 focus:ring-sky-300"
+                placeholder="Username or email"
                 required={true}
-                autoComplete="off"
+                autoComplete="username"
               />
+              <p className="text-zinc-500 light:text-slate-400 text-xs">
+                You can log in with your username or your account email.
+              </p>
             </div>
             <div className="w-full px-0 flex flex-col gap-y-2">
               <label className="text-zinc-300 light:text-slate-800 text-sm">

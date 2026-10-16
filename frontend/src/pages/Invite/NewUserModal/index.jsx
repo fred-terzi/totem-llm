@@ -10,6 +10,7 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_PATTERN,
 } from "@/utils/username";
+import { isValidEmail } from "@/utils/email";
 
 export default function NewUserModal() {
   const { code } = useParams();
@@ -22,6 +23,10 @@ export default function NewUserModal() {
     const data = {};
     const form = new FormData(e.target);
     for (var [key, value] of form.entries()) data[key] = value;
+    if (data.email !== undefined && !isValidEmail(data.email)) {
+      setError("A valid email address is required");
+      return;
+    }
     const { success, error } = await Invite.acceptInvite(code, data);
     if (success) {
       const { valid, user, token, message } = await System.requestToken(data);
@@ -72,6 +77,24 @@ export default function NewUserModal() {
               </div>
               <div>
                 <label
+                  htmlFor="email"
+                  className="block mb-2 text-sm font-medium text-theme-text-primary"
+                >
+                  Email <span className="opacity-60">(optional)</span>
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  className="border-none bg-theme-settings-input-bg text-theme-text-primary placeholder:text-theme-settings-input-placeholder text-sm rounded-lg focus:outline-primary-button active:outline-primary-button outline-none block w-full p-2.5"
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                />
+                <p className="mt-2 text-xs text-theme-text-secondary">
+                  If set, you can also use your email to log in.
+                </p>
+              </div>
+              <div>
+                <label
                   htmlFor="password"
                   className="block mb-2 text-sm font-medium text-theme-text-primary"
                 >
@@ -89,8 +112,8 @@ export default function NewUserModal() {
               </div>
               {error && <p className="text-red-400 text-sm">Error: {error}</p>}
               <p className="text-theme-text-secondary text-xs md:text-sm">
-                After creating your account you will be able to login with these
-                credentials and start using workspaces.
+                After creating your account you will be able to login with your
+                username or email and start using workspaces.
               </p>
             </div>
           </div>

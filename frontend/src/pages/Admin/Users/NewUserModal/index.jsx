@@ -9,6 +9,7 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_PATTERN,
 } from "@/utils/username";
+import { isValidEmail } from "@/utils/email";
 
 export default function NewUserModal({ closeModal }) {
   const [error, setError] = useState(null);
@@ -25,6 +26,10 @@ export default function NewUserModal({ closeModal }) {
     const data = {};
     const form = new FormData(e.target);
     for (var [key, value] of form.entries()) data[key] = value;
+    if (data.email !== undefined && !isValidEmail(data.email)) {
+      setError("A valid email address is required");
+      return;
+    }
     data.dailyMessageLimit = messageLimit.enabled ? messageLimit.limit : null;
 
     const { user, error } = await Admin.newUser(data);
@@ -94,6 +99,24 @@ export default function NewUserModal({ closeModal }) {
                 />
                 <p className="mt-2 text-xs text-white/60">
                   Password must be at least 8 characters long
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block mb-2 text-sm font-medium text-white"
+                >
+                  Email <span className="text-white/60">(optional)</span>
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  className="border-none bg-theme-settings-input-bg w-full text-white placeholder:text-theme-settings-input-placeholder text-sm rounded-lg focus:outline-primary-button active:outline-primary-button outline-none block w-full p-2.5"
+                  placeholder="user@example.com"
+                  autoComplete="email"
+                />
+                <p className="mt-2 text-xs text-white/60">
+                  If set, the user can also log in with this email.
                 </p>
               </div>
               <div>
