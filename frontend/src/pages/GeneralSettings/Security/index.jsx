@@ -20,6 +20,17 @@ import useFeatureFlag from "@/hooks/useFeatureFlag";
 export default function GeneralSecurity() {
   const { t } = useTranslation();
   const { enabled: multiUserEnabled } = useFeatureFlag("multiUser");
+  // Whether multi-user mode has actually been enabled on this instance (as
+  // opposed to merely being available via the build profile). Drives the
+  // visibility of the one-way Multi-User / Password Protection sections.
+  const [multiUserModeActive, setMultiUserModeActive] = useState(false);
+
+  useEffect(() => {
+    async function checkMultiUserMode() {
+      setMultiUserModeActive(await System.isMultiUserMode());
+    }
+    checkMultiUserMode();
+  }, []);
   return (
     <div className="w-screen h-screen overflow-hidden bg-theme-bg-container flex">
       <Sidebar />
@@ -32,9 +43,12 @@ export default function GeneralSecurity() {
             {t("security.title")}
           </p>
         </div>
-        {multiUserEnabled && <MultiUserMode />}
+        {/* Multi-User mode and instance Password Protection are one-way
+        switches (they cannot be disabled once enabled), so they are hidden in
+        multi-user mode — only the settings that remain actionable are shown. */}
+        {multiUserEnabled && !multiUserModeActive && <MultiUserMode />}
         {multiUserEnabled && <PublicRegistration />}
-        <PasswordProtection />
+        {!multiUserModeActive && <PasswordProtection />}
       </div>
     </div>
   );

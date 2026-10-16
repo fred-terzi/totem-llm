@@ -515,7 +515,6 @@ const SidebarOptions = ({ user = null, t }) => {
             user={user}
             flex={true}
             roles={["admin", "manager"]}
-            hidden={user?.role}
           />
           <HoldToReveal key="exp_features">
             <Option
