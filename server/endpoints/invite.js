@@ -40,7 +40,7 @@ function inviteEndpoints(app) {
     async (request, response) => {
       try {
         const { code } = request.params;
-        const { username, password } = reqBody(request);
+        const { username, password, email } = reqBody(request);
         const invite = await Invite.get({ code });
         if (!invite || invite.status !== "pending") {
           response
@@ -53,6 +53,7 @@ function inviteEndpoints(app) {
           username,
           password,
           role: "default",
+          email,
         });
         if (!user) {
           console.error("Accepting invite:", error);
