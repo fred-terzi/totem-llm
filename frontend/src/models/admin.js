@@ -50,6 +50,24 @@ const Admin = {
         return { success: false, error: e.message };
       });
   },
+  grantCredits: async (userId, amount) => {
+    const headers = { ...baseHeaders(), "Content-Type": "application/json" };
+    return await fetch(`${API_BASE}/credits/grant-test`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ userId, amount }),
+    })
+      .then((res) =>
+        res.json().then((data) => ({
+          success: Boolean(data?.success),
+          error: data?.error || data?.message || undefined,
+        }))
+      )
+      .catch((e) => {
+        console.error(e);
+        return { success: false, error: e.message };
+      });
+  },
 
   // Invitations
   invites: async () => {

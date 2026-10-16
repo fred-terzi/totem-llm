@@ -1,6 +1,5 @@
-const prisma = require("../utils/prisma");
 const { v4: uuidv4 } = require("uuid");
-const { userFromSession, multiUserMode } = require("../utils/http");
+const { userFromSession, reqBody } = require("../utils/http");
 const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { Credits } = require("../models/credits");
 
@@ -46,7 +45,7 @@ function creditEndpoints(app) {
           return response.status(403).json({ message: "Admin only" });
         }
 
-        const { userId, amount = 100, reference = null } = request.body;
+        const { userId, amount = 100, reference = null } = reqBody(request);
         if (!userId || !amount || amount <= 0) {
           return response
             .status(400)
@@ -84,7 +83,7 @@ function creditEndpoints(app) {
           amount = 100,
           type = "credit",
           reference = null,
-        } = request.body;
+        } = reqBody(request);
         if (!userId || !amount || amount <= 0) {
           return response
             .status(400)
