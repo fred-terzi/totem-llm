@@ -3,6 +3,7 @@ import Sidebar from "@/components/SettingsSidebar";
 import { isMobile } from "react-device-detect";
 import showToast from "@/utils/toast";
 import System from "@/models/system";
+import Admin from "@/models/admin";
 import paths from "@/utils/paths";
 import { AUTH_TIMESTAMP, AUTH_TOKEN, AUTH_USER } from "@/utils/constants";
 import PreLoader from "@/components/Preloader";
@@ -32,6 +33,7 @@ export default function GeneralSecurity() {
           </p>
         </div>
         {multiUserEnabled && <MultiUserMode />}
+        {multiUserEnabled && <PublicRegistration />}
         <PasswordProtection />
       </div>
     </div>
@@ -198,6 +200,88 @@ function MultiUserMode() {
         </div>
       </div>
     </form>
+  );
+}
+
+// Admin toggle for public email registration (allow_public_registration).
+// Persisted via the standard admin system-preferences endpoint; the login
+// screen reads it through the unauthenticated /system/public-registration
+// endpoint to decide whether to show the sign-up option.
+function PublicRegistration() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    async function fetchPublicRegistration() {
+      setLoading(true);
+      const { settings } = await Admin.systemPreferencesByFields([
+        "allow_public_registration",
+      ]);
+      const value = settings?.allow_public_registration;
+      setEnabled(value === true || value === "true");
+      setLoading(false);
+    }
+    fetchPublicRegistration();
+  }, []);
+
+  const handleToggle = async (checked) => {
+    setSaving(true);
+    setEnabled(checked);
+    const { success, error } = await Admin.updateSystemPreferences({
+      allow_public_registration: checked,
+    });
+    if (success) {
+      showToast(
+        checked
+          ? t("security.public_registration.toast-enabled")
+          : t("security.public_registration.toast-disabled"),
+        "success"
+      );
+    } else {
+      showToast(
+        t("security.public_registration.toast-failed", { error }),
+        "error"
+      );
+      setEnabled(!checked);
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="h-1/2 transition-all duration-500 relative md:ml-[2px] md:mr-[8px] md:my-[16px] md:rounded-[26px] p-[18px] h-full overflow-y-scroll">
+        <div className="w-full h-full flex justify-center items-center">
+          <PreLoader />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col w-full px-1 md:pl-6 md:pr-[50px] pb-6 border-white light:border-theme-sidebar-border border-b-2 border-opacity-10">
+      <div className="w-full flex flex-col gap-y-1">
+        <div className="items-center flex gap-x-4">
+          <p className="text-base font-bold text-white mt-6">
+            {t("security.public_registration.title")}
+          </p>
+        </div>
+        <p className="text-xs leading-[18px] font-base text-white text-opacity-60">
+          {t("security.public_registration.description")}
+        </p>
+      </div>
+      <div className="my-4 w-full max-w-[640px]">
+        <Toggle
+          size="lg"
+          disabled={saving}
+          label={t("security.public_registration.toggle-label")}
+          description={t("security.public_registration.toggle-description")}
+          enabled={enabled}
+          onChange={handleToggle}
+        />
+      </div>
+    </div>
   );
 }
 

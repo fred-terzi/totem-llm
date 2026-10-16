@@ -1304,6 +1304,19 @@ const TRANSLATIONS = {
         password: "Admin account password",
       },
     },
+    public_registration: {
+      title: "Public Email Registration",
+      description:
+        "Allow anyone to create their own account with a username, email and password — no invite required.",
+      "toggle-label": "Allow public email registration",
+      "toggle-description":
+        "When enabled, a sign-up option appears on the login screen. Each new account requires a valid email address and receives the standard welcome credit. Sign-up attempts are rate-limited.",
+      "toast-enabled":
+        "Public email registration enabled — sign-up is now available on the login screen.",
+      "toast-disabled":
+        "Public email registration disabled — sign-up is hidden from the login screen.",
+      "toast-failed": "Failed to update public registration: {{error}}",
+    },
     password: {
       title: "Password Protection",
       description:
