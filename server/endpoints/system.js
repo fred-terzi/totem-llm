@@ -645,6 +645,21 @@ function systemEndpoints(app) {
     }
   });
 
+  // Unauthenticated: the login page needs to know whether to render a
+  // public sign-up option. Exposes nothing beyond the two boolean flags.
+  app.get("/system/public-registration", async (_, response) => {
+    try {
+      const multiUserMode = await SystemSettings.isMultiUserMode();
+      const publicRegistration = multiUserMode
+        ? await SystemSettings.isPublicRegistrationEnabled()
+        : false;
+      response.status(200).json({ multiUserMode, publicRegistration });
+    } catch (e) {
+      console.error(e.message, e);
+      response.sendStatus(500).end();
+    }
+  });
+
   app.get("/system/logo", async function (request, response) {
     try {
       const darkMode =
