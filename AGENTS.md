@@ -252,9 +252,9 @@ Sign-In with Ethereum (SIWE) is the **primary login method**. Users sign a serve
 | Path | Component | How it works |
 |---|---|---|
 | **Desktop (EIP-1193)** | `WalletConnectButton` (inline in `MultiUserAuth.jsx`) | `window.ethereum.request({ method: "eth_requestAccounts" })` → `System.walletNonce()` → `window.ethereum.request({ method: "personal_sign", params: [message, address] })` → `System.walletVerify({ signature, nonce })` → store JWT + user in `localStorage` → redirect to home. Works with MetaMask, Rainbow, and any wallet that injects `window.ethereum`. |
-| **Mobile (WalletConnect v2)** | `WalletConnectMobile.jsx` | Two-tap flow (gesture-safe on mobile browsers): **Tap 1** "Start pairing" → `SignClient.connect()` creates a WalletConnect session → renders a **QR code** (for Trust, Rainbow, SafePal, Base, etc.) + an **`<a href="https://metamask.app.link/wc?uri=…">`** "Open in MetaMask" deep-link. **Tap 2** (the `<a>` link, a genuine user gesture) → MetaMask app opens → user approves → `personal_sign` over the session → `System.walletVerify()` → JWT → redirect. Requires `VITE_WC_PROJECT_ID` env var. EVM-only (Phantom/Solana not supported). |
+| **Mobile (Reown AppKit)** | `WalletConnectMobile.jsx` | Uses **Reown AppKit** (`@reown/appkit` + `@reown/appkit-adapter-ethers`, ethers v6) instead of hand-rolled WalletConnect. `createAppKit()` is called once at module scope; the component uses `useAppKit`/`useAppKitAccount`/`useAppKitProvider` hooks. Tap "Connect Mobile Wallet" → AppKit's wallet picker modal handles wallet discovery, deep links/universal links (incl. cold-start retries), QR fallback, and session persistence across page reloads. Once connected, SIWE runs over the AppKit-provided EIP-1193 provider: `System.walletNonce()` → `personal_sign` → `System.walletVerify()` → JWT → redirect. Replaces the earlier raw `@walletconnect/sign-client` two-tap flow, whose MetaMask cold-start deep-link drops and Android hand-back reloads made login unreliable. Requires `VITE_WC_PROJECT_ID`. EVM-only (Phantom/Solana not supported). |
 
-> **Why an `<a>` and not `window.open()`?** A programmatic `window.open()` called after an `await` is outside the user-gesture window and is silently blocked on mobile (Safari/Chrome). A rendered `<a target="_blank">` is a genuine user gesture on Tap 2 and is never blocked. This is the standard WalletConnect v2 mobile pattern.
+> **Mobile wallet connection:** the mobile path uses **Reown AppKit**, which handles wallet discovery, deep linking, cold-start retries, and session persistence internally — do not hand-roll `@walletconnect/sign-client` deep-link flows for mobile login; they break on MetaMask cold launches and Android universal-link hand-backs.
 
 **On-chain $TOTEM balance** (`GET /wallet/balance`):
 
@@ -269,6 +269,8 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 | `TOTEM_SYMBOL` | `TOTEM` | Display symbol |
 | `VITE_WC_PROJECT_ID` | *(unset — mobile wallet off)* | WalletConnect project ID (required for the mobile path) |
 
+> **Frontend/Vite version note:** `@reown/appkit-utils` → `@base-org/account` ships `import … with { type: 'json' }` (import attributes) in its dist. esbuild <0.20 cannot parse this, so the frontend was upgraded **Vite 4 → Vite 5** (esbuild ≥0.21) when AppKit was adopted. Don't downgrade Vite below 5.
+
 **Key files:**
 
 | File | Role |
@@ -276,7 +278,7 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 | `server/endpoints/wallet.js` | Nonce + verify + balance endpoints; in-memory nonce store |
 | `server/utils/totemBalance.js` | $TOTEM config resolution, `eth_call` balance reader, amount formatting (pure — no server deps) |
 | `frontend/src/components/Modals/Password/MultiUserAuth.jsx` | Login modal — desktop EIP-1193 wallet button + password form |
-| `frontend/src/components/Modals/Password/WalletConnectMobile.jsx` | Mobile WalletConnect v2 flow (QR + MetaMask deep-link) |
+| `frontend/src/components/Modals/Password/WalletConnectMobile.jsx` | Mobile Reown AppKit flow (wallet picker modal + SIWE over EIP-1193 provider) |
 | `frontend/src/models/system.js` | `System.walletNonce()`, `System.walletVerify()`, `System.totemBalance()` API methods |
 
 ### Credits & Billing

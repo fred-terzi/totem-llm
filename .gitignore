@@ -22,6 +22,6 @@ server/__tests__/utils/agents/models
 
 server/storage/chatgpt_import_example
 
-.agents/skills/venice_api
+.agents/
 
 

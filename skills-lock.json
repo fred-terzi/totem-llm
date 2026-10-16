@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "appkit": {
+      "source": "reown-com/skills",
+      "sourceType": "github",
+      "skillPath": "skills/appkit/SKILL.md",
+      "computedHash": "da138387a82d54bb1c354ec4c347033ea86b91b2c71d9f839218b21941a29c08"
+    },
     "git-commit": {
       "source": "github/awesome-copilot",
       "sourceType": "github",

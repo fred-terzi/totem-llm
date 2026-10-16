@@ -5,32 +5,47 @@ const { User } = require("../models/user");
 const { totemConfig, fetchTotemBalance } = require("../utils/totemBalance");
 const { Workspace } = require("../models/workspace");
 const { EventLogs } = require("../models/eventLogs");
+const { CacheData } = require("../models/cacheData");
 const prisma = require("../utils/prisma");
 
-// In-memory nonce store with 5-minute TTL.
-// Key: nonce (uuid), Value: { message, createdAt }
-const nonces = new Map();
-const NONCE_TTL_MS = 5 * 60 * 1000;
+// Nonce + replay state is persisted in the DB (cache_data table) instead of an
+// in-memory Map. Why: the store was previously a module-level Map, which
+// silently vanished whenever the server restarted (nodemon reload, crash,
+// deploy) — or after the TTL sweep — leaving the frontend holding a nonce the
+// server no longer knows. The user signs, verify then rejects with
+// "invalid-or-expired", and the login dies AFTER the signature was approved.
+// DB-backed rows survive restarts and carry their own expiry.
+const NONCE_TTL_MS = 10 * 60 * 1000; // 10 min — generous for slow mobile flows
+const CONSUMED_TTL_MS = 30 * 1000; // 30 s replay window for reload recovery
 
-// Recently-consumed nonce store with a 30-second replay window.
-// On Android, MetaMask's universal-link "hand-back" redirect causes a page
-// reload that destroys the JS context before the verify response is consumed.
-// The recovery useEffect on the next page load retries the verify with the
-// same nonce + signature. This window allows that retry to succeed: the
-// signature is re-verified against the stored message, the user is found
-// (already created), and a fresh JWT is issued.
-const consumedNonces = new Map(); // nonce → { message, consumedAt }
-const CONSUMED_TTL_MS = 30 * 1000;
+const nonceKey = (nonce) => `wallet:nonce:${nonce}`;
+const consumedKey = (nonce) => `wallet:consumed:${nonce}`;
 
-// Periodically clean up expired nonces and consumed nonces (every 60s).
+async function readWalletState(key) {
+  const row = await CacheData.get({ name: key });
+  if (!row) return null;
+  if (
+    row.expiresAt &&
+    new Date(row.expiresAt).getTime() < Date.now()
+  ) {
+    await CacheData.delete({ name: key });
+    return null;
+  }
+  try {
+    return JSON.parse(row.data);
+  } catch {
+    return null;
+  }
+}
+
+// Periodic sweep of expired wallet:* rows (housekeeping only — reads already
+// treat expired rows as absent). Scoped to the wallet: name prefix so rows
+// belonging to other cache_data consumers are never touched.
 setInterval(() => {
-  const now = Date.now();
-  for (const [key, val] of nonces) {
-    if (now - val.createdAt > NONCE_TTL_MS) nonces.delete(key);
-  }
-  for (const [key, val] of consumedNonces) {
-    if (now - val.consumedAt > CONSUMED_TTL_MS) consumedNonces.delete(key);
-  }
+  CacheData.delete({
+    name: { startsWith: "wallet:" },
+    expiresAt: { lt: new Date() },
+  }).catch(() => {});
 }, 60_000);
 
 /**
@@ -57,6 +72,22 @@ function buildWalletMessage(domain, origin, nonce) {
 
 function walletEndpoints(app) {
   if (!app) return;
+
+  /**
+   * POST /api/auth/wallet/ping
+   *
+   * Sanity check only: the frontend calls this when the "Connect Mobile
+   * Wallet" button is tapped, so the server log proves the frontend and
+   * backend are talking — completely independent of the wallet/relay flow.
+   * No state, no auth, no side effects.
+   */
+  app.post("/auth/wallet/ping", async (request, response) => {
+    const { origin } = reqBody(request);
+    console.log(
+      `[wallet:ping] BUTTON PRESSED — frontend reached the server. ip=${request.ip} host=${request.headers.host} origin=${origin || "(none)"}`
+    );
+    response.status(200).json({ ok: true, ts: Date.now() });
+  });
 
   /**
    * GET /api/wallet/balance
@@ -125,6 +156,9 @@ function walletEndpoints(app) {
   app.post("/auth/wallet/nonce", async (request, response) => {
     try {
       const { origin } = reqBody(request);
+      console.log(
+        `[wallet:nonce] request from ip=${request.ip} host=${request.headers.host} origin=${origin || "(none)"}`
+      );
 
       // Derive domain from origin or request host
       let domain;
@@ -141,8 +175,19 @@ function walletEndpoints(app) {
       const nonce = uuidv4();
       const message = buildWalletMessage(domain, origin, nonce);
 
-      // Store the exact message so verify can check against it.
-      nonces.set(nonce, { message, createdAt: Date.now() });
+      // Persist the exact message so verify can check against it. Stored in
+      // the DB (cache_data) so it survives server restarts during the flow.
+      await CacheData.new({
+        name: nonceKey(nonce),
+        data: JSON.stringify({ message }),
+        expiresAt: new Date(Date.now() + NONCE_TTL_MS),
+      });
+      const activeCount = await CacheData.count({
+        name: { startsWith: "wallet:nonce:" },
+      });
+      console.log(
+        `[wallet:nonce] issued nonce=${nonce} for domain=${domain} (active nonces: ${activeCount})`
+      );
 
       response.status(200).json({ nonce, message });
     } catch (e) {
@@ -176,22 +221,30 @@ function walletEndpoints(app) {
         });
         return;
       }
+      console.log(
+        `[wallet:verify] attempt nonce=${String(nonce).slice(0, 8)}… sigLen=${String(signature).length} ip=${request.ip}`
+      );
 
-      // --- Nonce lookup (single-use, with 30 s replay window for recovery) ---
-      let entry = nonces.get(nonce);
+      // --- Nonce lookup (single-use, DB-backed, with 30 s replay window) ---
+      let entry = await readWalletState(nonceKey(nonce));
       let isReplay = false;
       if (!entry) {
-        // Check the consumed store — this is the Android recovery path:
-        // the first verify succeeded server-side but the response was lost
-        // to a page reload. Allow a retry within the replay window.
-        const consumed = consumedNonces.get(nonce);
-        if (consumed && Date.now() - consumed.consumedAt < CONSUMED_TTL_MS) {
+        const consumed = await readWalletState(consumedKey(nonce));
+        if (consumed) {
           entry = consumed;
           isReplay = true;
         }
       }
       if (!entry) {
-        console.error("[wallet] verify: invalid or expired nonce");
+        const activeCount = await CacheData.count({
+          name: { startsWith: "wallet:nonce:" },
+        });
+        const consumedCount = await CacheData.count({
+          name: { startsWith: "wallet:consumed:" },
+        });
+        console.error(
+          `[wallet:verify] REJECTED nonce=${String(nonce).slice(0, 8)}… reason=invalid-or-expired (active: ${activeCount}, recently-consumed: ${consumedCount})`
+        );
         response.status(401).json({
           valid: false,
           user: null,
@@ -206,9 +259,11 @@ function walletEndpoints(app) {
       try {
         recoveredAddress = ethers.verifyMessage(entry.message, signature);
       } catch (e) {
-        console.error("[wallet] verify: invalid signature:", e.message);
+        console.error(
+          `[wallet:verify] REJECTED nonce=${String(nonce).slice(0, 8)}… reason=bad-signature (${e.message})`
+        );
         // Consume nonce even on failure to prevent replay of a bad sig
-        nonces.delete(nonce);
+        await CacheData.delete({ name: nonceKey(nonce) });
         response.status(401).json({
           valid: false,
           user: null,
@@ -220,15 +275,23 @@ function walletEndpoints(app) {
 
       const normalizedAddress = recoveredAddress.toLowerCase();
 
-      // Consume the nonce: move from active store to consumed store (30 s replay window).
-      nonces.delete(nonce);
-      consumedNonces.set(nonce, {
-        message: entry.message,
-        consumedAt: Date.now(),
+      // Consume the nonce: move from the active store to the consumed store
+      // (30 s replay window so a post-reload recovery re-verify succeeds).
+      await CacheData.delete({ name: nonceKey(nonce) });
+      await CacheData.new({
+        name: consumedKey(nonce),
+        data: JSON.stringify({ message: entry.message }),
+        expiresAt: new Date(Date.now() + CONSUMED_TTL_MS),
       });
+      console.log(
+        `[wallet:verify] signature valid → address=${normalizedAddress}${isReplay ? " (REPLAY within 30s window)" : ""}`
+      );
 
       // --- Find or create user ---
       let user = await User._get({ wallet_address: normalizedAddress });
+      console.log(
+        `[wallet:verify] user lookup: ${user ? `existing user id=${user.id} username=${user.username}` : "NEW wallet — creating account"}`
+      );
 
       if (!user) {
         // New user: welcome bonus of 100,000 microdollars (~100k output tokens)
@@ -310,6 +373,9 @@ function walletEndpoints(app) {
       const sessionToken = makeJWT(
         { id: user.id, username: user.username },
         process.env.JWT_EXPIRY || "30d"
+      );
+      console.log(
+        `[wallet:verify] SUCCESS user=${user.username} userId=${user.id} isReplay=${isReplay} — issuing JWT`
       );
 
       await EventLogs.logEvent(

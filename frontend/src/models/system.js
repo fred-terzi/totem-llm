@@ -131,6 +131,26 @@ const System = {
     }
   },
 
+  /**
+   * Sanity check for the mobile wallet flow: called when the "Connect
+   * Mobile Wallet" button is tapped. If this reaches the server, the
+   * server log shows "[wallet:ping] BUTTON PRESSED" — proving the
+   * frontend↔backend path works, independent of the wallet/relay flow.
+   */
+  walletPing: async function () {
+    try {
+      const res = await fetch(`${API_BASE}/auth/wallet/ping`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: window.location.origin }),
+      });
+      if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
   walletVerify: async function (body, maxRetries = 3) {
     const url = `${API_BASE}/auth/wallet/verify`;
     let lastError = null;
