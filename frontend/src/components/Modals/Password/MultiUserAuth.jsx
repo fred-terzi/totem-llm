@@ -7,6 +7,7 @@ import ModalWrapper from "@/components/ModalWrapper";
 import { useModal } from "@/hooks/useModal";
 import RecoveryCodeModal from "@/components/Modals/DisplayRecoveryCodeModal";
 import WalletConnectMobile from "@/components/Modals/Password/WalletConnectMobile";
+import SignUpModal from "@/components/Modals/Password/SignUpModal";
 import { useTranslation } from "react-i18next";
 import { t } from "i18next";
 
@@ -268,6 +269,8 @@ export default function MultiUserAuth() {
   const [token, setToken] = useState(null);
   const [showRecoveryForm, setShowRecoveryForm] = useState(false);
   const [showResetPasswordForm, setShowResetPasswordForm] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);
+  const [canSignUp, setCanSignUp] = useState(false);
   const [customAppName, setCustomAppName] = useState(null);
 
   const {
@@ -358,6 +361,12 @@ export default function MultiUserAuth() {
       setLoading(false);
     };
     fetchCustomAppName();
+    // Sign-up option is only offered when the admin has opened the door.
+    const fetchPublicRegistration = async () => {
+      const { publicRegistration } = await System.publicRegistration();
+      setCanSignUp(publicRegistration);
+    };
+    fetchPublicRegistration();
   }, []);
 
   if (showRecoveryForm) {
@@ -371,6 +380,17 @@ export default function MultiUserAuth() {
 
   if (showResetPasswordForm)
     return <ResetPasswordForm onSubmit={handleResetSubmit} />;
+
+  if (showSignUp)
+    return (
+      <SignUpModal
+        onBackToLogin={() => {
+          setShowSignUp(false);
+          setError(null);
+        }}
+      />
+    );
+
   return (
     <>
       <form
@@ -459,6 +479,21 @@ export default function MultiUserAuth() {
               {t("login.multi-user.reset")}
             </b>
           </button>
+          {canSignUp && (
+            <button
+              type="button"
+              className="text-zinc-200 light:text-zinc-600 hover:text-sky-300 light:hover:text-sky-600 hover:underline text-sm"
+              onClick={() => {
+                setError(null);
+                setShowSignUp(true);
+              }}
+            >
+              No account?{" "}
+              <b className="font-semibold text-sky-300 light:text-sky-600">
+                Sign up
+              </b>
+            </button>
+          )}
         </div>
       </form>
 

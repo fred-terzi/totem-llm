@@ -298,6 +298,47 @@ const System = {
         return { success: false, error: e.message };
       });
   },
+  /**
+   * Reads the public registration flags (unauthenticated endpoint).
+   * Used by the login screen to decide whether to show a Sign Up option.
+   * @returns {Promise<{multiUserMode: boolean, publicRegistration: boolean}>}
+   */
+  publicRegistration: async function () {
+    return await fetch(`${API_BASE}/system/public-registration`, {
+      method: "GET",
+    })
+      .then((res) => res.json())
+      .then((res) => ({
+        multiUserMode: !!res?.multiUserMode,
+        publicRegistration: !!res?.publicRegistration,
+      }))
+      .catch(() => ({ multiUserMode: false, publicRegistration: false }));
+  },
+
+  /**
+   * Public email registration (multi-user mode + admin toggle only).
+   * Creates an account with a required username + email + password and
+   * applies the standard welcome bonus. The user then logs in normally.
+   * @param {{username: string, email: string, password: string}} body
+   * @returns {Promise<{success: boolean, error: string | null}>}
+   */
+  registerUser: async function (body) {
+    return await fetch(`${API_BASE}/system/new-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Registration failed.");
+        return data;
+      })
+      .catch((e) => ({
+        success: false,
+        error: e.message,
+      }));
+  },
+
   isMultiUserMode: async () => {
     return await fetch(`${API_BASE}/system/multi-user-mode`, {
       method: "GET",
