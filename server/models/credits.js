@@ -19,6 +19,13 @@ const OUTPUT_RATE = 1.0; // microdollars per output token
 // TODO: per-model rates keyed on model (currently single-model pricing).
 
 /**
+ * Welcome bonus for newly created accounts (microdollars).
+ * Shared by every signup flow (wallet SIWE, public email registration) so the
+ * amount cannot drift between them.
+ */
+const WELCOME_BONUS = 100_000;
+
+/**
  * Calculate the cost in microdollars for a given token usage.
  * Rounds up so we never undercharge.
  *
@@ -63,6 +70,7 @@ const Credits = {
   calculateCost,
   dollarsToMicro,
   microToDisplay,
+  WELCOME_BONUS,
 
   // ── balance ────────────────────────────────────────────────────────────────
 
