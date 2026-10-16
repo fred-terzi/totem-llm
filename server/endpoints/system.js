@@ -198,7 +198,8 @@ function systemEndpoints(app) {
         }
 
         const { username, password } = reqBody(request);
-        const existingUser = await User._get({ username: String(username) });
+        // The identifier field accepts a username OR an email address
+        const existingUser = await User.getByUsernameOrEmail(username);
 
         if (!existingUser) {
           await EventLogs.logEvent(
