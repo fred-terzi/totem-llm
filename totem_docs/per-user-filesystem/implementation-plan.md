@@ -5,15 +5,22 @@ All paths relative to repo root `totem-llm/`.
 
 ---
 
-## Step 0 — Verify the user-identity chain (investigation, no code)
+## Step 0 — Verify the user-identity chain (investigation, no code) ✅ DONE
 
 Goal: know exactly how to get the authenticated user into `aibitat.handlerProps`.
 
-1. Trace the WS auth path in `server/index.js` — confirm what the auth middleware attaches to the socket (expected: `socket.data.user` or similar) on chat/agent connections.
-2. Trace the endpoint that runs a workspace agent (`server/endpoints/` + `server/utils/agents/index.js` `WorkspaceAgent`) and confirm the socket/user is in scope at `createAIbitat()` (`server/utils/agents/index.js:~790`), which is where `handlerProps` is assembled (`invocation`, `log`, `routingMetadata`).
-3. Confirm the same is true for ephemeral agents (`server/utils/agents/ephemeral.js:~510`) and job-based aibitat instances (`server/jobs/helpers/memory-extraction-utils.js`) — decide whether those run "as a user" at all (likely no user → must fall back to single-user mode per F5).
+**Findings (verified 2026-10-16):**
 
-**Output:** one-sentence answer per entry point: *who is the user, and where do we read them from*.
+| Entry point | User source | Notes |
+|---|---|---|
+| WS agent (`AgentHandler.createAIbitat()`) | `this.invocation.user_id` | Stamped at chat time by `WorkspaceAgentInvocation.new()` from `userFromSession()`. Already used at `index.js:81,506,701,736,846` — consistent pattern. No `this.user` property on `AgentHandler`. |
+| Ephemeral agent | `this.#userId` (constructor param, optional → defaults `null`) | Developer-API workspace-thread endpoints. Pass `this.#userId ?? null` at `ephemeral.js:~514`. |
+| Job-based aibitat (memory extraction) | **none** | Observer/Reflector construct `AIbitat` directly; no filesystem plugin attached. No action needed. |
+
+**Key facts:**
+- `invocation.user_id` is a Prisma `Int` (nullable) → registry key is numeric; use `String(userId)` for map key.
+- F5 (single-user) holds: `user_id` is nullable in schema; falsy → `getFilesystem()` fallback.
+- **Correction to Step 2:** source is `this.invocation.user_id ?? null` (not `this.user?.id`).
 
 ## Step 1 — Per-user registry in `lib.js`
 
@@ -28,17 +35,19 @@ File: `server/utils/agents/aibitat/plugins/filesystem/lib.js`
    ```
 2. Add a **registry** (module-level, process-lifetime — users are bounded, no eviction needed):
    ```js
-   const #perUser = new Map(); // key: userId -> FilesystemManager
+   const #perUser = new Map(); // key: String(userId) -> FilesystemManager
    function getFilesystemFor(userId) {
      if (!userId) return getFilesystem();          // F5: single-user fallback
-     if (!#perUser.has(userId)) {
-       const dir = userFsRoot(userId);
+     const key = String(userId);                    // numeric Prisma Int → stable string key
+     if (!#perUser.has(key)) {
+       const dir = userFsRoot(key);                 // $STORAGE_DIR/totemllm-fs/users/<slug>
        fs.mkdirSync(dir, { recursive: true });      // N4: lazy, cheap, idempotent
-       #perUser.set(userId, new FilesystemManager({ allowedDirectories: [dir] }));
+       #perUser.set(key, new FilesystemManager({ allowedDirectories: [dir] }));
      }
-     return #perUser.get(userId);
+     return #perUser.get(key);
    }
    ```
+   (Slug: use `user-<id>` by default; resolve to actual username via DB only if a display-name preference is added later. Avoids a hot-path DB query per first access.)
    Reuse the existing `FilesystemManager` constructor/`setAllowedDirectories` — do **not** fork the class. Keep `getFilesystem()` untouched for backwards compat (N5).
 3. Keep `validatePath()` exactly as-is — it already enforces against `this.#allowedDirectories` per manager instance, including the realpath/symlink check (N2). No changes to the security core.
 
@@ -50,11 +59,12 @@ File: `server/utils/agents/aibitat/plugins/filesystem/lib.js`
      invocation: this.invocation,
      log: this.log,
      routingMetadata: this.routingMetadata || null,
-     userId: this.user?.id ?? null,   // from Step 0's verified source
+     userId: this.invocation.user_id ?? null,   // verified Step 0: Prisma Int, nullable
    }
    ```
-   (Ensure `this.user` is populated wherever `WorkspaceAgent` is constructed — add it to the constructor opts if needed.)
-2. Ephemeral agent (`ephemeral.js`) and job helpers: pass `userId` **only if** a real end-user is attributable; otherwise leave `undefined` so Step 1's fallback applies (F5).
+   Note: `this.invocation.user_id` is already the established pattern in this file (see lines 81, 506, 701, 736, 846). No constructor changes needed.
+2. Ephemeral agent (`ephemeral.js:~514`): add `userId: this.#userId ?? null` to `handlerProps`. When `null`, Step 1's fallback applies (F5).
+3. Job-based aibitat: **no change** — filesystem plugin is not attached to those clusters.
 
 ## Step 3 — Point all 10 tools at the per-user manager
 
