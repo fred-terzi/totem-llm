@@ -24,10 +24,7 @@ const consumedKey = (nonce) => `wallet:consumed:${nonce}`;
 async function readWalletState(key) {
   const row = await CacheData.get({ name: key });
   if (!row) return null;
-  if (
-    row.expiresAt &&
-    new Date(row.expiresAt).getTime() < Date.now()
-  ) {
+  if (row.expiresAt && new Date(row.expiresAt).getTime() < Date.now()) {
     await CacheData.delete({ name: key });
     return null;
   }
