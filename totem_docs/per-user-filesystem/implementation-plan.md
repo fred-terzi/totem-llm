@@ -151,11 +151,12 @@ Time:        0.83 s
 ```
 ESLint clean.
 
-## Step 7 — Docs & release
+## Step 7 — Docs & release ✅ DONE
 
-1. `totem_docs/per-user-filesystem/README.md`: layout diagram, migration runbook, pointer to the terminal workstream.
-2. `totem_docs/README.md`: add a row/link to this workstream.
-3. `RELEASE.md`: one bullet — "Filesystem tools are now per-user sandboxes in multiuser mode; legacy shared files require optional migration script."
+1. ✅ `totem_docs/per-user-filesystem/README.md` — written (layout diagram, migration runbook, test instructions, related workstreams table).
+2. ✅ `totem_docs/README.md` — status updated to "✅ Implemented".
+3. ✅ `RELEASE.md` — added bullet under "Upcoming / Unreleased".
+4. ✅ `requirement-spec.md` status → "Implemented".
 
 ---
 
@@ -172,4 +173,4 @@ ESLint clean.
 | 6 | — | gate for merge |
 | 7 | — | docs only |
 
-Suggested PR split: **PR1** = Steps 0–4 + 6 (the feature) ✅ complete. **PR2** = Step 5 + 7 (migration & docs). This keeps the security-relevant change testable and reviewable in isolation.
+**Status: All steps complete.** PR1 (Steps 0–4 + 6) and PR2 (Step 5 + 7) both delivered. Bugfix commit (`9f70fd2c`) addressed a missed `userId` in the WebSocket agent `handlerProps` found during manual testing.

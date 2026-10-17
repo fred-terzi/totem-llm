@@ -1,6 +1,6 @@
 # Per-User Filesystem — Requirement Spec
 
-**Status:** Draft
+**Status:** Implemented
 **Scope:** Filesystem agent only (terminal tool is a separate workstream)
 **Depends on:** Multiuser mode (`User` model, workspace membership)
 
