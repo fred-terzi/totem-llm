@@ -3,7 +3,6 @@ import {
   createAppKit,
   useAppKit,
   useAppKitAccount,
-  useAppKitEvents,
   useAppKitProvider,
 } from "@reown/appkit/react";
 import { EthersAdapter } from "@reown/appkit-adapter-ethers";
@@ -201,80 +200,6 @@ function runSIWE({ walletProvider, providerType, onDone, onError }) {
   return inflightSIWE;
 }
 
-/**
- * DEBUG AID (temporary): surfaces [wallet:fe] console logs and uncaught
- * errors in an on-page box so testers on real phones can screenshot them —
- * no remote debugging required. Persists to sessionStorage so the Android
- * universal-link hand-back reload doesn't wipe the evidence.
- * Remove once the mobile flow is confirmed working.
- */
-function OnScreenDebug() {
-  const [lines, setLines] = useState(() =>
-    JSON.parse(sessionStorage.getItem("wallet:fe:debug") || "[]")
-  );
-  const push = (line) =>
-    setLines((prev) => {
-      const next = [...prev.slice(-50), line];
-      sessionStorage.setItem("wallet:fe:debug", JSON.stringify(next));
-      return next;
-    });
-
-  useEffect(() => {
-    const nav = performance.getEntriesByType("navigation")[0];
-    push(
-      `[page] mounted — nav type=${nav?.type || "unknown"} ua=${navigator.userAgent.slice(0, 80)}`
-    );
-
-    const orig = {
-      log: console.log,
-      warn: console.warn,
-      error: console.error,
-    };
-    const tap =
-      (lvl) =>
-      (...args) => {
-        const msg = args
-          .map((a) =>
-            typeof a === "string" ? a : JSON.stringify(a)?.slice(0, 300)
-          )
-          .join(" ");
-        if (
-          /wallet|appkit|walletconnect|reown|relay|siwe|nonce|signature/i.test(
-            msg
-          )
-        )
-          push(`[${lvl}] ${msg}`);
-        orig[lvl](...args);
-      };
-    console.log = tap("log");
-    console.warn = tap("warn");
-    console.error = tap("error");
-    const onErr = (e) => push(`[uncaught] ${e.message}`);
-    const onRej = (e) =>
-      push(`[unhandledrej] ${e.reason?.message || e.reason}`);
-    window.addEventListener("error", onErr);
-    window.addEventListener("unhandledrejection", onRej);
-    return () => {
-      console.log = orig.log;
-      console.warn = orig.warn;
-      console.error = orig.error;
-      window.removeEventListener("error", onErr);
-      window.removeEventListener("unhandledrejection", onRej);
-    };
-  }, []);
-
-  return (
-    <details className="mt-2">
-      <summary className="text-zinc-500 light:text-slate-400 text-xs cursor-pointer">
-        debug log
-      </summary>
-      <pre className="text-[10px] text-zinc-400 light:text-slate-500 max-h-48 overflow-auto whitespace-pre-wrap">
-        {lines.join("\n") || "(empty)"}
-      </pre>
-    </details>
-  );
-}
-
 export default function WalletConnectMobile() {
   // Android: don't offer cross-app WalletConnect as the primary path — it
   // loses the signature on the hand-back reload every time (see the platform
@@ -393,14 +318,6 @@ function AppKitWalletLogin() {
   const resumedRef = useRef(false); // only auto-resume once per page load
 
   const walletDeepLink = getWalletDeepLink(walletProvider);
-
-  // DEBUG AID (temporary): AppKit's own event stream — the most useful signal
-  // for "MetaMask approved but nothing happened". Remove once confirmed working.
-  useAppKitEvents((event) => {
-    console.log(
-      `[wallet:fe] appkit event: ${event?.event} — ${JSON.stringify(event ?? {}).slice(0, 300)}`
-    );
-  });
 
   // Diagnostic aid: confirm the peer redirect is being read off the session.
   useEffect(() => {
@@ -542,8 +459,6 @@ function AppKitWalletLogin() {
       {error && (
         <p className="text-red-400 text-xs mt-2 text-center">{error}</p>
       )}
-
-      <OnScreenDebug />
     </div>
   );
 }
