@@ -58,7 +58,8 @@
     "translations:create": "cd extras/translator && node index.mjs --all && cd ../../frontend && yarn lint && cd ../..",
     "prepublishOnly": "node scripts/build-frontend.mjs",
     "postinstall": "node scripts/postinstall.mjs",
-    "test:install": "node scripts/test-install.mjs"
+    "test:install": "node scripts/test-install.mjs",
+    "fs:migrate": "node scripts/migrate-fs-to-users.mjs"
   },
   "private": false,
   "devDependencies": {

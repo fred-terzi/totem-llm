@@ -111,12 +111,20 @@ In each plugin file under `server/utils/agents/aibitat/plugins/filesystem/`, rep
 
 All pass `e.message` through unchanged. A cross-user denial renders identically to a legacy sandbox escape (e.g. `Error reading file: Access denied - path outside allowed directories.`) — F4 satisfied with no code changes required.
 
-## Step 5 — Optional one-time migration (N3)
+## Step 5 — Optional one-time migration (N3) ✅ DONE
 
-1. Add a script `scripts/migrate-fs-to-users.js` (or a server-side endpoint behind admin):
-   - For the admin user (or a chosen `OWNER`), copy `totemllm-fs/*` → `totemllm-fs/users/admin/*` (excluding the new `users/` dir itself).
-   - Keep the old top-level files **read-only in place** or delete after confirmation — do not move silently.
-2. Document in `totem_docs/per-user-filesystem/README.md` how to run it. Mark "not required" in RELEASE notes.
+1. `scripts/migrate-fs-to-users.mjs` (ESM, matching repo `scripts/*.mjs` convention — deviation: plan said `.js`, repo standard is `.mjs`):
+   - Copies top-level entries from `$STORAGE_DIR/totemllm-fs/` → `$STORAGE_DIR/totemllm-fs/users/<userId>/`.
+   - **Copy, never move** — originals stay in place. Operator reviews and removes duplicates manually.
+   - **Idempotent** — entries already present at the destination are skipped on re-run.
+   - Skips `users/`, `sessions/`, and any `.git*` entry at the source root.
+   - `--dry-run` flag for a read-only preview.
+   - `--userId N` selects the destination (default `1` = admin).
+   - `--storage-dir P` overrides `$STORAGE_DIR` for testing.
+   - Exit 0 on success/no-op, 1 on error (bad args, I/O failure).
+2. `package.json` — added `"fs:migrate": "node scripts/migrate-fs-to-users.mjs"` for ergonomic invocation (`yarn fs:migrate`).
+
+**Verified:** syntax check, dry-run listing, real copy (3 items + nested dirs), second-run idempotency (0 copied / 3 skipped), bad `--userId` rejection (exit 1).
 
 ## Step 6 — Tests
 
