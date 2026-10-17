@@ -2,6 +2,116 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.19.0](https://github.com/fred-terzi//compare/v0.18.0...v0.19.0) (2026-10-17)
+
+
+### Features
+
+* **admin:** add credits grant action to user management ([f7fd877](https://github.com/fred-terzi//commit/f7fd877639dc017c5082e6f7c8b15a4bd22f62bb))
+* **admin:** show user credits balance in admin users table ([55f05d8](https://github.com/fred-terzi//commit/55f05d892ce2663e5f9981ac442234d478f79f2d))
+* **admin:** support email on user create and update ([17c283f](https://github.com/fred-terzi//commit/17c283f15d4726c854f855f117ba4d4fe4fe7a5c))
+* **admin:** toggle for public email registration ([683970f](https://github.com/fred-terzi//commit/683970f46dd19d96bd95fe85c2aa36e8f6d451ea))
+* **aibitat:** abort in-flight LLM calls on user Stop ([40aeb23](https://github.com/fred-terzi//commit/40aeb23f186c2da20aade12219af91e5bb202181))
+* **auth:** add wallet login (SIWE) endpoints and frontend flow ([403de19](https://github.com/fred-terzi//commit/403de195eb0cd8e5d1354a56baf992faeb29e4b3))
+* **auth:** add WalletConnect v2 mobile wallet login (Open in MetaMask + QR) ([7fef13a](https://github.com/fred-terzi//commit/7fef13af923aadfda7f4fe45552442f1ed988bee))
+* auto-create default workspace on first wallet login ([9b2cb60](https://github.com/fred-terzi//commit/9b2cb60362e34a39de3043b5651fb6589aa87b87))
+* **credits:** token-based credit debit for agent mode ([23772c8](https://github.com/fred-terzi//commit/23772c8eb8a157d317cbf5f3075d77a98459abef))
+* **credits:** token-priced microdollar billing with per-model usage tracking ([eadda2a](https://github.com/fred-terzi//commit/eadda2a0f5e46a68f64b641b17f6c7d9c0167a3f))
+* **docker:** add beta container — clone repo, run yarn dev:all, cloudflared tunnel ([d905b2e](https://github.com/fred-terzi//commit/d905b2e245d7e6ec77a29a12208870db7e3d7776))
+* **docker:** add hosted multi-user Docker build workflow ([5e08e33](https://github.com/fred-terzi//commit/5e08e33e181ac73af2850d8023a85a6d951088d8))
+* **docker:** add TOTEM_ADDRESS env for on-chain token balance ([c2d405a](https://github.com/fred-terzi//commit/c2d405a4d221b693061492402ee203b01ccf8a6e))
+* **docker:** serve beta from permanent URL beta.totemai.xyz via named tunnel ([dab3c92](https://github.com/fred-terzi//commit/dab3c92575eb1d75a6ef89102c1c2a88dc0c5a95))
+* **filesystem:** add per-user FilesystemManager registry (step 1) ([0b1df3d](https://github.com/fred-terzi//commit/0b1df3d3a50d57597314b90c6e48ceaf02526b07))
+* **filesystem:** scope agent filesystem tools per user (steps 2 + 3) ([f6882e2](https://github.com/fred-terzi//commit/f6882e2edd7617b8115aca09d5b4f6d1ecf7b07a))
+* **frontend:** $TOTEM badge shows holding tier (NH/L1/L2/MAX) instead of exact amount ([dc6d976](https://github.com/fred-terzi//commit/dc6d9763a979f62362b2b8f984f004a317298372))
+* **frontend:** public sign-up flow for email registration ([03d75c8](https://github.com/fred-terzi//commit/03d75c818ad3638ca85af3df49bb0ee30764ff03))
+* **frontend:** restructure multi-user login — wallet login as primary, password under 'Totem Official Installs' ([e808fbb](https://github.com/fred-terzi//commit/e808fbbb93b32d9951972649f058f0f7e03558ec))
+* **per-user-filesystem:** add migration script (Step 5, N3) ([7ab3678](https://github.com/fred-terzi//commit/7ab3678608bbd9115b863bb8e8f8cdf16a69acab))
+* **server:** add allow_public_registration setting with public flag endpoint ([56e5938](https://github.com/fred-terzi//commit/56e5938df25b160a30fb2355bde93e3c86608617))
+* **server:** add optional unique email column to users schema ([d30d03e](https://github.com/fred-terzi//commit/d30d03ec77e96f401a5cea86ef71998060c6ad29))
+* **server:** allow email as login identifier in multi-user mode ([286add9](https://github.com/fred-terzi//commit/286add99d3d8d001bb3912910c9cf13771928d67))
+* **server:** allow optional email when accepting an invite ([f4ddf88](https://github.com/fred-terzi//commit/f4ddf885e7a7b4676ef6a2ae16c98891e303476a))
+* **server:** per-IP rate limiter middleware for public endpoints ([bb4ad8b](https://github.com/fred-terzi//commit/bb4ad8b970d7aba0d6a4ad5e241e1a4d8e6f63d9))
+* **server:** public email registration endpoint with welcome bonus ([5988f74](https://github.com/fred-terzi//commit/5988f747c998073e95b7c13691578b075bae954e))
+* **server:** support optional email in user model with username-or-email lookup ([430cd21](https://github.com/fred-terzi//commit/430cd21ce94c967c0ddcb455f106854184de6eb5))
+* **ui:** add optional email to invite and admin user forms, note email login ([5920936](https://github.com/fred-terzi//commit/59209368d21aff2d75960b563fc5994fd4db4949))
+* **ui:** live per-account credit balance in CreditBadge ([96a4280](https://github.com/fred-terzi//commit/96a4280858d44180603233d1d813257a96d8727f))
+* **ui:** update main page greeting to 'TOTEM - Your Mind Leads.' ([14ebf38](https://github.com/fred-terzi//commit/14ebf38d9ebb1f5145bd24c8b5c925631bed809c))
+* **user-menu:** add CreditBadge component ([cd1d35b](https://github.com/fred-terzi//commit/cd1d35beb3c836f56163da39286a89c71149a2b7))
+* **user-menu:** add CreditBadge component to user menu bar ([12758ff](https://github.com/fred-terzi//commit/12758ff69d6c464a27fabad542b9016d8ac40da7))
+* **wallet:** $TOTEM balance badge — holder / non-holder / error states ([893be8e](https://github.com/fred-terzi//commit/893be8e9f5fce68e07ed6f3b1e884a537757d721))
+* **wallet:** add ethers dependency and wallet/credit schema fields ([6f671e9](https://github.com/fred-terzi//commit/6f671e9014c2f0d3b7d99e0d4909f03999cb1107))
+* **wallet:** replace hand-rolled WalletConnect mobile flow with Reown AppKit ([a8527ee](https://github.com/fred-terzi//commit/a8527ee76d9461b4a50b5cea80bd92d4828b070a))
+
+
+### Bug Fixes
+
+* Add ollama as provider for hosted package, and changed modelRouter to false ([e5bc3df](https://github.com/fred-terzi//commit/e5bc3df8d6316bcf494a384a7cf1160232009312))
+* **chat:** abort upstream LLM stream on user Stop to stop billing ([80e802b](https://github.com/fred-terzi//commit/80e802baf77a352930498fe3663b74640e111301))
+* **chat:** let Enter insert a newline on mobile instead of sending ([35d282a](https://github.com/fred-terzi//commit/35d282ad7a22b1f44c0be8b8bd4dec901a09dd8b))
+* **credits:** surface 402 buy-credits message in chat UI ([5bbf808](https://github.com/fred-terzi//commit/5bbf808419fe6cecd337dd047e4f9809124f0960))
+* **docker/beta:** change build profile to hosted ([5c6ef32](https://github.com/fred-terzi//commit/5c6ef322416f98ced8cbb56b32b582cbe76dca29))
+* **docker/beta:** discard local patches before pull so container always tracks latest dev-totem ([50f3e5d](https://github.com/fred-terzi//commit/50f3e5d9fde949829cf5942e6155d3e497f2e907))
+* **docker/beta:** move WC project ID out of tracked compose file ([40afb07](https://github.com/fred-terzi//commit/40afb075453167833b5731c971b6b6d4e8b48ba2))
+* **docker/beta:** replace placeholder TOTEM_ADDRESS with real contract ([41c751c](https://github.com/fred-terzi//commit/41c751c07395f24dbf5010ead01c1363544f90ca))
+* **docker:** add VITE_WC_PROJECT_ID to beta container env ([7c0f287](https://github.com/fred-terzi//commit/7c0f2879035d920113a7ee8985eee7b6a07e9dd0))
+* **frontend:** allow proxy/tunnel hostnames + add mobile wallet debug traces ([4c1d9dc](https://github.com/fred-terzi//commit/4c1d9dc38ed39209da3034a18c04c6099557eb2b))
+* **frontend:** always show Security tab, hide one-way sections in multi-user mode ([88b3e08](https://github.com/fred-terzi//commit/88b3e08f4773ce68f348df9eaa70fd1c11cd6ed8))
+* **frontend:** make login page scrollable on mobile so sign-up link is reachable ([9a4ce9c](https://github.com/fred-terzi//commit/9a4ce9c0fd0b53345e576bd82af5fd0b5a8c1ee1))
+* **frontend:** move $TOTEM badge clear of the text-size menu button ([3c41c5f](https://github.com/fred-terzi//commit/3c41c5f78aec9b60b252b394f8c159388f9ccb45))
+* **gitignore:** Add back in a planning folder that will be in git control ([67cd73e](https://github.com/fred-terzi//commit/67cd73e3667d1088df01293c7b1b81691e263bf1))
+* **mobile:** hide centered logos on mobile to unblock top-right badges ([2fc02f1](https://github.com/fred-terzi//commit/2fc02f1d0ae3be77b2978758744e5f5a4d7a317a))
+* **per-user-filesystem:** add userId to AIbitat handlerProps (WS agent path) ([9f70fd2](https://github.com/fred-terzi//commit/9f70fd2c51b50e50e9d29556b446f35177297170))
+* **ui:** refresh credit badge on every completed assistant response ([27d72c6](https://github.com/fred-terzi//commit/27d72c6266a26cfe1a97c5c86bc8d9cc823b4bdd))
+* **wallet:** recover Android login interrupted by MetaMask page reload ([4c23c84](https://github.com/fred-terzi//commit/4c23c84d1b8e49d328bd6062f67b40f3161bd859))
+* **wallet:** retry walletVerify on network failure (Android tab-resume) ([de20792](https://github.com/fred-terzi//commit/de2079204998e855b943ddbdd7abb0a6119dcb8e))
+* **wallet:** show 0 instead of 'non-holder' in $TOTEM balance badge ([eaffe30](https://github.com/fred-terzi//commit/eaffe308d835029372f934024c10fe3dcd4e3649))
+
+
+### Code Refactoring
+
+* **frontend:** consolidate user menu, $TOTEM badge, and chat settings into one row ([b071466](https://github.com/fred-terzi//commit/b0714667d385cf389e24e615a972b7c756b05a83))
+* **frontend:** hoist ChatSidebarProvider to UserMenu, fix prettier formatting ([a64cbed](https://github.com/fred-terzi//commit/a64cbed7ba6ae2f99f6555d3ada5e1bde78570a3))
+* **frontend:** simplify $TOTEM badge to a plain level pill ([5e0bf05](https://github.com/fred-terzi//commit/5e0bf0587f3f521b888b98f6c32f8265ba8b0222))
+* remove persisted agent socket mechanism ([3e992c5](https://github.com/fred-terzi//commit/3e992c5de8b4e10eed37354b1d8f20fcf3925125))
+
+
+### Styles
+
+* **server:** apply prettier formatting to wallet, AiProviders, totemBalance ([582d539](https://github.com/fred-terzi//commit/582d53915d0bfe858975216ffe3b794f77484110))
+* **server:** prettier formatting in credits.js and chat-history.js ([9aef8d8](https://github.com/fred-terzi//commit/9aef8d87a508cc13c631c3e4d94893f5b21b8768))
+
+
+### Tests
+
+* **per-user-filesystem:** add AC1-AC6 isolation tests (Step 6) ([f52915e](https://github.com/fred-terzi//commit/f52915ea3544635bfadc0b40763c0af4ddb0d514))
+
+
+### Documentation Changes
+
+* add per-user filesystem isolation spec + implementation plan ([0445678](https://github.com/fred-terzi//commit/044567875861040288cba09caf5aa2e73f017429))
+* add Wallet Login (SIWE) section to AGENTS.md ([ae8dfe7](https://github.com/fred-terzi//commit/ae8dfe7a29582a5436cb81b0ca02abcf1a05edf1))
+* **agents:** document credits & billing system ([57c2500](https://github.com/fred-terzi//commit/57c2500cccbb6fce488b2ade1a922c82801d0b8c))
+* complete step 0 identity-chain investigation in per-user-fs plan ([97da6f6](https://github.com/fred-terzi//commit/97da6f6eb9e5690ab6aa4631aee002d6efa4234e))
+* **per-user-filesystem:** complete Step 7 — README, release notes, status updates ([06b2344](https://github.com/fred-terzi//commit/06b2344a70ae38a66eb50da7286f88e3cc40358b))
+* **per-user-filesystem:** mark Step 4 done and fix N3 cross-ref ([18dedd0](https://github.com/fred-terzi//commit/18dedd09352bdbc9c6fb2271c5c2ffef3228ea82))
+* rewrite CONTRIBUTING.md for Totem LLM branding ([46fd0be](https://github.com/fred-terzi//commit/46fd0be3e95439b29b9a00a863a43cea2f433c5c))
+* **server:** document $TOTEM token badge env vars in .env.example ([3fe5349](https://github.com/fred-terzi//commit/3fe5349e4da6336969ec1228ec0f727d8f8728e7))
+
+
+### Miscellaneous Chores
+
+* bump version to 0.19.0 ([382460c](https://github.com/fred-terzi//commit/382460c19fa4f97588b0a97e7ee49bc34a18bb89))
+* change support email address ([a2b3ff4](https://github.com/fred-terzi//commit/a2b3ff4917dca1a6bc021f5b9259aab61a14c46b))
+* **dev:** make npm run dev boot a fresh, isolated instance ([2b01871](https://github.com/fred-terzi//commit/2b01871d989d653b22f55ad6237823f424a1c084))
+* **dev:** run dev:all on alternate ports to coexist with a live instance ([3c628f4](https://github.com/fred-terzi//commit/3c628f4192049656304a23f60fe27c6272f3b27c))
+* **dev:** split dev into persistent-start and explicit reset ([6a3b2c3](https://github.com/fred-terzi//commit/6a3b2c3fbdbfc7a853cfff120c1e39f461624e81))
+* Fix dev ports for yarn dev:all - add deno for Coingecko MCP server ([4f97c0e](https://github.com/fred-terzi//commit/4f97c0e1e57944f193536db5ecc06f77d6fe4ee2))
+* **frontend:** remove inline MetaMask fox SVG from wallet connect buttons ([d418c81](https://github.com/fred-terzi//commit/d418c81fd8e18f0dbf94165c4aab46dfd5326a3e))
+* **server:** fix prettier formatting in wallet.js ([c06231f](https://github.com/fred-terzi//commit/c06231ff99298516ec62a93cd4cd7473116b8b5b))
+* **version:** sync dev-totem root to 0.18.0 to match main-totem baseline ([b1986a6](https://github.com/fred-terzi//commit/b1986a6736d3951e18170961d1350bbcc971d066))
+* **wallet:** strip verbose debug logging, match codebase convention ([624c131](https://github.com/fred-terzi//commit/624c131b38ffa91d66954cb9158fe5ff5f4a065f))
+
 ## [0.18.0](https://github.com/fred-terzi//compare/v0.17.0...v0.18.0) (2026-10-04)
 
 
