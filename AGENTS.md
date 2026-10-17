@@ -73,7 +73,7 @@ yarn dev:frontend     # Vite on :3000 (proxies /api → server :8686)
 
 - **Development**: `server/.env.development` loaded by `dotenv` in `server/index.js:1` (when `NODE_ENV=development`). The root `.env.example` is copied to both `server/.env` and `server/.env.development` by `scripts/setup-envs.mjs`.
 - **Production**: `~/totem-llm/.env` generated on first launch by `lib/setup.js`. This file contains auto-generated JWT/SIG secrets. Never commit it.
-- **Key env vars**: `STORAGE_DIR` (defaults to `~/totem-llm/`), `COLLECTOR_PORT` (default 8888), `SERVER_PORT` (default 8686). Storage subdirs auto-created: `documents/`, `vector-cache/`, `models/`, `direct-uploads/`, `generated-files/`, `comkey/`, `tmp/`, `assets/`.
+- **Key env vars**: `STORAGE_DIR` (defaults to `~/totem-llm/`), `COLLECTOR_PORT` (default 8888), `SERVER_PORT` (default 8686). Storage subdirs auto-created: `documents/`, `vector-cache/`, `models/`, `direct-uploads/`, `generated-files/`, `comkey/`, `tmp/`, `assets/`, `totemllm-fs/` (per-user agent sandbox — see Agent System → Per-user filesystem sandbox).
 
 ## Database — Prisma ORM
 
@@ -183,6 +183,7 @@ A workspace is a self-contained knowledge base with:
 The "Aibitat" framework — a custom multi-step agent execution engine:
 - **Plugin system** (~35+ plugins): filesystem, terminal-access, gmail, google-calendar, outlook, sql-agent, web-scraping, create-files (docx/pptx/xlsx/pdf), websocket, memory, router-classifier, summarize, CLI, rechart
 - **Terminal access** (`plugins/terminal-access.js`): shell execution with layered safety — availability gate (dev/Docker/feature flag) → admin opt-in via `default_agent_skills` → per-command approval for dangerous patterns (`rm -rf /`, `dd of=/dev/…`, fork bombs, etc.) → process-group timeout kill + output truncation.
+- **Per-user filesystem sandbox** (v0.19.0+): filesystem tools operate on a per-user directory at `$STORAGE_DIR/totemllm-fs/users/<userId>/` (multi-user) or `$STORAGE_DIR/totemllm-fs` (single-user, `userId == null`). Resolved per-call via `getFilesystemFor(userId)` in `server/utils/agents/aibitat/plugins/filesystem/lib.js`. `validatePath()` enforces isolation — cross-user access, symlink escapes, and path traversal are all denied. `module.exports` is the shared default instance (backwards compat); new code should use `getFilesystemFor(userId)`. See `totem_docs/per-user-filesystem/` for spec, threat model, and AC1–AC6.
 - **Provider abstraction**: Each LLM provider has an agent wrapper in `aibitat/providers/` that handles tool-calling format adaptation (Anthropic uses tool_use, OpenAI uses function_calling patterns)
 - **Execution**: Agent session runs server-side, streams tool calls + results via WebSocket to frontend for real-time visibility
 - **Agent invocation lifecycle**: `workspace_agent_invocations` tracks each run; closed flag marks completion
@@ -433,6 +434,7 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 - **Body limit is 3GB** across all services — allows large document uploads but means body-parser buffers huge payloads into memory.
 - **No relation on `workspace_agent_invocations.thread_id`**: Intentional — SQLite migration would lock the entire `workspace_threads` table, causing cascading timeouts. Same pattern on `workspace_chats.thread_id`.
 - **Credits ≠ microdollars, and ≠ wallet token**: `server/models/credits.js` + `credit_transactions` work in **microdollars**; the frontend `CreditContext`/`CreditBadge` show an opaque integer. `microToDisplay()` is `@internal` — never render it to end users. `wallet.js` ($TOTEM on-chain token + SIWE login) is a *different* balance entirely.
+- **Per-user filesystem** (v0.19.0+): the agent's filesystem tools are scoped to `$STORAGE_DIR/totemllm-fs/users/<userId>/`. In single-user mode (`userId == null`) they use the shared `$STORAGE_DIR/totemllm-fs` root. `getFilesystemFor()` is the only resolution point — do NOT `require` the default `module.exports` directly in new code (kept for backwards compat with existing require sites). The migration script (`yarn fs:migrate`, `scripts/migrate-fs-to-users.mjs`) copies old shared files into the correct user dirs — idempotent, run it when upgrading from pre-v0.19.0 builds.
 
 ## Security Notes
 

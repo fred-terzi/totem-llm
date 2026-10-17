@@ -58,14 +58,7 @@ export default function SettingsSidebar() {
           >
             <List className="h-6 w-6" />
           </button>
-          <div className="flex items-center justify-center flex-grow">
-            <img
-              src={logo}
-              alt="Logo"
-              className="block mx-auto h-6 w-auto"
-              style={{ maxHeight: "40px", objectFit: "contain" }}
-            />
-          </div>
+          <div className="flex-grow"></div>
           <div className="w-12"></div>
         </div>
         <div
@@ -467,6 +460,12 @@ const SidebarOptions = ({ user = null, t }) => {
               {
                 btnText: t("settings.import-data", "Import Data"),
                 href: paths.settings.importData(),
+                flex: true,
+                roles: ["admin", "manager", "default"],
+              },
+              {
+                btnText: t("settings.files", "Files"),
+                href: paths.settings.files(),
                 flex: true,
                 roles: ["admin", "manager", "default"],
               },

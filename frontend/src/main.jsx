@@ -444,6 +444,14 @@ const router = createBrowserRouter([
           return { element: <PrivateRoute Component={ImportData} /> };
         },
       },
+      {
+        path: "/settings/files",
+        lazy: async () => {
+          const { default: FileExplorer } =
+            await import("@/components/FileExplorer");
+          return { element: <PrivateRoute Component={FileExplorer} /> };
+        },
+      },
       // Catch-all route for 404s
       {
         path: "*",

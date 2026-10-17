@@ -34,7 +34,7 @@ export default function Sidebar() {
           width: showSidebar ? "292px" : "0px",
           paddingLeft: showSidebar ? "0px" : "16px",
         }}
-        className="relative transition-all duration-500"
+        className="relative z-99 transition-all duration-500"
       >
         {canToggleSidebar && (
           <ToggleSidebarButton
