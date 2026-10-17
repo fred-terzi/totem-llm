@@ -127,8 +127,8 @@ export default function FileExplorer() {
       <Sidebar />
 
       <div
-        style={{ height: isMobile ? "100%" : "calc(100% - 32px)" }}
-        className="relative md:ml-[2px] md:mr-[16px] md:my-[16px] md:rounded-[16px] bg-theme-bg-secondary w-full h-full overflow-hidden p-4 md:p-0 flex flex-col"
+        style={{ height: isMobile ? "calc(100% - 32px)" : "calc(100% - 32px)" }}
+        className="relative mt-8 md:mt-0 md:ml-[2px] md:mr-[16px] md:my-[16px] md:rounded-[16px] bg-theme-bg-secondary w-full overflow-hidden p-4 md:p-0 flex flex-col"
       >
         {/* ---------- Header ---------- */}
         <div className="w-full flex flex-col gap-y-2 px-4 md:pl-6 md:pr-[50px] md:pt-6 pt-12 pb-4 border-b border-white/10 light:border-slate-300">
