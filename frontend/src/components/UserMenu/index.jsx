@@ -1,6 +1,7 @@
 import UserButton from "./UserButton";
 import TotemBalanceBadge from "@/components/TotemBalanceBadge";
 import CreditBadge from "@/components/CreditBadge";
+import FileExplorerButton from "@/components/FileExplorerButton";
 import ChatSettingsMenu from "@/components/WorkspaceChat/ChatContainer/ChatSettingsMenu";
 import { ChatSidebarProvider } from "@/components/WorkspaceChat/ChatContainer/ChatSidebar";
 
@@ -11,6 +12,7 @@ export default function UserMenu({ children }) {
         <ChatSettingsMenu />
         <TotemBalanceBadge />
         <CreditBadge />
+        <FileExplorerButton />
         <UserButton />
       </div>
       {children}
