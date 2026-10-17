@@ -1,5 +1,5 @@
 const fs = require("fs/promises");
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 module.exports.FilesystemMoveFile = {
   name: "filesystem-move-file",
@@ -50,6 +50,9 @@ module.exports.FilesystemMoveFile = {
           },
           handler: async function ({ source = "", destination = "" }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-move-file tool.`
               );

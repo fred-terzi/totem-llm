@@ -518,6 +518,7 @@ class EphemeralAgentHandler extends AgentHandler {
         },
         log: this.log,
         routingMetadata: this.routingMetadata || null,
+        userId: this.#userId ?? null,
       },
     });
 

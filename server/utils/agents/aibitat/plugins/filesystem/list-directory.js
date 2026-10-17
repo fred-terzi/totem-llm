@@ -1,6 +1,6 @@
 const fs = require("fs/promises");
 const path = require("path");
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 const { humanFileSize } = require("../../../../helpers");
 
 module.exports.FilesystemListDirectory = {
@@ -65,6 +65,9 @@ module.exports.FilesystemListDirectory = {
             sortBy = "name",
           }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-list-directory tool.`
               );

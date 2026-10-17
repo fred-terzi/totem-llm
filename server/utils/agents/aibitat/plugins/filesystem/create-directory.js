@@ -1,5 +1,5 @@
 const fs = require("fs/promises");
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 module.exports.FilesystemCreateDirectory = {
   name: "filesystem-create-directory",
@@ -40,6 +40,9 @@ module.exports.FilesystemCreateDirectory = {
           },
           handler: async function ({ path: dirPath = "" }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-create-directory tool.`
               );

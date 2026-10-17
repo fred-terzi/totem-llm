@@ -47,7 +47,7 @@ File: `server/utils/agents/aibitat/plugins/filesystem/lib.js`
 
 **Smoke-tested:** default identity, F5 fallback (null/undefined), cache hit, cross-user denial (F4 message verbatim), relative path resolution into `users/<id>/`, lazy creation confirmed. ESLint clean.
 
-## Step 2 — Pipe `userId` into `handlerProps`
+## Step 2 — Pipe `userId` into `handlerProps` ✅ DONE
 
 1. In `server/utils/agents/index.js` `createAIbitat()`, add to the `handlerProps` object:
    ```js
@@ -62,28 +62,33 @@ File: `server/utils/agents/aibitat/plugins/filesystem/lib.js`
 2. Ephemeral agent (`ephemeral.js:~514`): add `userId: this.#userId ?? null` to `handlerProps`. When `null`, Step 1's fallback applies (F5).
 3. Job-based aibitat: **no change** — filesystem plugin is not attached to those clusters.
 
-## Step 3 — Point all 10 tools at the per-user manager
+## Step 3 — Point all 10 tools at the per-user manager ✅ DONE
 
-In each plugin file under `server/utils/agents/aibitat/plugins/filesystem/`, replace the singleton lookup:
+In each plugin file under `server/utils/agents/aibitat/plugins/filesystem/`, replaced the module-level singleton lookup with a per-request, per-user lookup.
 
-| File | Change |
-|---|---|
-| `read-text-file.js` | `getFilesystem()` → `getFilesystemFor(this.super.handlerProps?.userId)` |
-| `read-multiple-files.js` | same |
-| `write-text-file.js` | same |
-| `edit-file.js` | same |
-| `create-directory.js` | same |
-| `list-directory.js` | same |
-| `move-file.js` | same (source **and** destination validate against the same per-user manager — cross-user moves denied automatically) |
-| `copy-file.js` | same |
-| `search-files.js` | same (its `getAllowedDirectories()` loop at lines ~130/202 then naturally scans only the user's dir — F7) |
-| `get-file-info.js` | same |
+**What was implemented:**
 
-To keep the diff small and consistent, add a one-line helper in each file (or import from `lib.js`):
-```js
-const fsMgr = () => getFilesystemFor(this.super.handlerProps?.userId);
-```
-No other logic changes: citations, image attachments, head/tail, truncation all operate on the validated path and keep working (F6).
+1. In all 10 plugin files, the top-level `const filesystem = require("./lib.js")` was changed to `const { getFilesystemFor } = require("./lib.js")`, and inside each tool's `handler` (first line of the `try` block) the manager is now resolved per-invocation:
+   ```js
+   const filesystem = getFilesystemFor(
+     this.super.handlerProps?.userId
+   );
+   ```
+   All subsequent calls in that handler (`filesystem.validatePath`, `filesystem.readFileContent`, `filesystem.getAllowedDirectories()`, etc.) now operate against the invoking user's sandbox. `userId == null` (single-user mode, F5) transparently falls back to the shared default instance — no branching in the plugins.
+
+2. `search-files.js` had a second, module-level reference: the standalone `readMatchingFileContents()` helper (called via `.call(this, …)`) also resolved its manager per-invocation with the same one-liner, so `includeFileContents: true` reads are scoped to the same user's sandbox.
+
+**Deviations from the original draft:**
+- No shared `fsMgr()` helper was added — instead the one-line lookup is inlined in each handler (11 total sites: 10 handlers + `search-files.js`'s `readMatchingFileContents`), keeping the change fully self-contained per file and identical in shape to the existing `this.super.*` usage.
+- `move-file.js` / `copy-file.js`: both `source` and `destination` are validated against the *same* per-user manager, so cross-user moves/copies are denied automatically (as planned).
+
+**Smoke-tested (end-to-end, via the real plugin handlers):**
+- User 42 writes `notes.txt` → lands in `users/42/`; user 7's same relative write → lands in `users/7/`; both files intact.
+- User 7 reads user 42's absolute path → `Access denied - path outside allowed directories.` (verbatim F4 message, surfaced to the LLM).
+- `userId: null` → writes land in the legacy shared `totemllm-fs/` root (F5 regression guard).
+- All 10 files pass `node --check`; ESLint clean across the whole `plugins/filesystem/` directory.
+
+`validatePath()` in `lib.js` was left untouched — per-user isolation is entirely enforced at the allow-list layer (N1), and the symlink/realpath defense (N2) is inherited unchanged by every per-user instance.
 
 ## Step 4 — Error-message consistency (F4)
 

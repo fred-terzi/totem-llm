@@ -1,4 +1,4 @@
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 module.exports.FilesystemEditFile = {
   name: "filesystem-edit-file",
@@ -78,6 +78,9 @@ module.exports.FilesystemEditFile = {
             dryRun = false,
           }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-edit-file tool.`
               );

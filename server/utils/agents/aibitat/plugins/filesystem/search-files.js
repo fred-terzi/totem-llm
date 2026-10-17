@@ -1,5 +1,5 @@
 const path = require("path");
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 const { safeJsonParse } = require("../../../../http/index.js");
 
 module.exports.FilesystemSearchFiles = {
@@ -122,6 +122,9 @@ module.exports.FilesystemSearchFiles = {
             maxFilesToRead = 5,
           }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-search-files tool.`
               );
@@ -404,6 +407,7 @@ function formatSearchResults(results, maxResults) {
  * @returns {Promise<string>} Combined file contents
  */
 async function readMatchingFileContents(filePaths, maxFiles) {
+  const filesystem = getFilesystemFor(this.super.handlerProps?.userId);
   const filesToRead = filePaths.slice(0, maxFiles);
   const skippedCount = filePaths.length - filesToRead.length;
 
