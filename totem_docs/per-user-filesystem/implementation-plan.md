@@ -90,9 +90,26 @@ In each plugin file under `server/utils/agents/aibitat/plugins/filesystem/`, rep
 
 `validatePath()` in `lib.js` was left untouched — per-user isolation is entirely enforced at the allow-list layer (N1), and the symlink/realpath defense (N2) is inherited unchanged by every per-user instance.
 
-## Step 4 — Error-message consistency (F4)
+## Step 4 — Error-message consistency check (F4) ✅ DONE
 
-`validatePath` already throws/logs `Access denied - path outside allowed directories: ...`. Verify the 10 plugins surface that message verbatim to the LLM (no new wording), so a cross-user attempt looks identical to any sandbox escape.
+`validatePath` throws three `Access denied` variants (`path outside allowed directories`, `symlink target outside allowed directories`, `parent directory outside allowed directories`). Verified all 10 plugins surface the thrown `e.message` verbatim to the LLM — no new wording introduced.
+
+**Findings (verified 2026-10-16):**
+
+| Plugin | Error surface | Pattern |
+|---|---|---|
+| `read-text-file` | handler catch | `Error reading file: ${e.message}` |
+| `read-multiple-files` | handler catch + inner per-file catch | `Error reading files: ${e.message}` / `Error - ${error.message}` per item |
+| `write-text-file` | handler catch | `Error writing file: ${e.message}` |
+| `edit-file` | handler catch | `Error editing file: ${e.message}` |
+| `create-directory` | handler catch | `Error creating directory: ${e.message}` |
+| `list-directory` | handler catch | `Error listing directory: ${e.message}` |
+| `move-file` | handler catch | `Error moving file: ${e.message}` |
+| `copy-file` | handler catch | `Error copying file: ${e.message}` |
+| `get-file-info` | handler catch | `Error getting file info: ${e.message}` |
+| `search-files` | handler catch + `readMatchingFileContents` helper | `Error searching files: ${e.message}` / `Error reading file: ${error.message}` |
+
+All pass `e.message` through unchanged. A cross-user denial renders identically to a legacy sandbox escape (e.g. `Error reading file: Access denied - path outside allowed directories.`) — F4 satisfied with no code changes required.
 
 ## Step 5 — Optional one-time migration (N3)
 

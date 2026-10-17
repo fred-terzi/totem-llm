@@ -34,7 +34,7 @@ In multiuser mode, each user gets a dedicated directory that **only their** agen
 |---|-------------|
 | N1 | Enforce at the same layer as today: `validatePath()` in `FilesystemManager`. No new security surface, no new network path, no new process. |
 | N2 | Symlink defense (realpath re-check) must apply to per-user directories too — a symlink inside user A's dir pointing at user B's dir must be rejected. (Already implemented; must not regress.) |
-| N3 | No data migration of existing files is mandatory for this change, but a **one-time optional migration** (Step 7) may move legacy shared files into an admin-owned directory. |
+| N3 | No data migration of existing files is mandatory for this change, but a **one-time optional migration** (Step 5) may move legacy shared files into an admin-owned directory. |
 | N4 | No per-invocation directory creation cost on the hot path: create lazily, cache the resolved path per user in-process. |
 | N5 | Backwards compatible: `FilesystemManager` public API (`readFile`, `writeFile`, etc.) keeps its signatures; only the allow-list source changes. |
 
