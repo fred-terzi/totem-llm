@@ -29,6 +29,7 @@ Planning and design documents for features live in subdirectories:
 | Topic | Files | Status |
 |-------|-------|--------|
 | Per-user filesystem isolation | [per-user-filesystem/](per-user-filesystem/) | ✅ Implemented |
+| File Explorer & Viewer | [file-explorer/](file-explorer/) | ✅ Implemented |
 
 Each topic directory holds a `requirement-spec.md` (what & why, threat model,
 acceptance criteria) and an `implementation-plan.md` (step-by-step, against the

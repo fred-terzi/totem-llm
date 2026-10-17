@@ -1,6 +1,6 @@
 # File Explorer & Viewer — Requirement Spec
 
-**Status:** Planned
+**Status:** ✅ Implemented
 **Scope:** Read-only file browser + viewer for the `totemllm-fs` sandbox directory
 **Depends on:** Per-user filesystem isolation (implemented, v0.2.x)
 

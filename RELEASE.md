@@ -2,7 +2,10 @@
 
 ## Unreleased (pending next version bump)
 
-_No pending changes yet. Add new `feat:` / `fix:` / `chore:` items here as they land on `dev-totem` before the next release._
+- `feat(file-explorer)`: File Explorer & Viewer — read-only sandbox browser at `/settings/files` (dir listing, breadcrumb navigation, inline viewers for text/Markdown/image/PDF/audio/video, download for binary), powered by `GET /api/filesystem/list` + `GET /api/filesystem/read`
+  - Lightweight Markdown renderer (`markdown-it` + `highlight.js` + `DOMPurify`) with Rendered/Raw toggle
+  - Topbar `Files` button (all roles) in the user menu for direct access on mobile/desktop
+  - Reuses existing `getFilesystemFor`/`validatePath` authz — zero new attack surface
 
 ---
 
