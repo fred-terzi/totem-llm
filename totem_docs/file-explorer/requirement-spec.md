@@ -29,7 +29,8 @@ A lightweight, read-only file explorer and viewer accessible from the Totem LLM 
 | F1 | User can list the contents of any directory within their sandbox. Default view is the sandbox root. |
 | F2 | User can navigate into a subdirectory by clicking it. Breadcrumb shows the full path; clicking any segment navigates back. |
 | F3 | User can click a file to view its content in an inline viewer panel. |
-| F4 | Text files (`.md`, `.txt`, `.js`, `.ts`, `.json`, `.yaml`, `.yml`, `.csv`, `.html`, `.css`, `.py`, `.sh`, `.toml`, `.ini`, `.xml`, and any `text/*` MIME) render as plain text in a scrollable, monospace `<pre>` block with line numbers. |
+| F4 | Text files (`.txt`, `.js`, `.ts`, `.json`, `.yaml`, `.yml`, `.csv`, `.html`, `.css`, `.py`, `.sh`, `.toml`, `.ini`, `.xml`, and any `text/*` MIME except Markdown) render as plain text in a scrollable, monospace `<pre>` block with line numbers. |
+| F4b | Markdown files (`.md`, `.markdown`, `.mdown`) render in a lightweight Markdown viewer with syntax-highlighted code blocks (via `highlight.js`). Users can toggle between **Rendered** (HTML) and **Raw** (source) views. Inline HTML in the source is disabled (`html: false`) and sanitized via `DOMPurify` before injection. No new dependencies added (`markdown-it`, `highlight.js`, `dompurify` are already in `package.json`). |
 | F5 | Image files (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`) render inline as a centered image. |
 | F6 | PDF files render in a native `<embed>` / `<iframe>` viewer. |
 | F7 | Audio and video files render in native `<audio>` / `<video>` players. |

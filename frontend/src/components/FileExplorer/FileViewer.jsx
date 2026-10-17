@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import {
   ArrowDown,
   FileText,
@@ -10,6 +10,10 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { API_BASE } from "@/utils/constants";
+import MarkdownIt from "markdown-it";
+import hljs from "highlight.js";
+import "highlight.js/styles/github-dark.css";
+import DOMPurify from "@/utils/chat/purify";
 
 /**
  * Build the raw-bytes URL for a file, honoring the configured `API_BASE`
@@ -40,9 +44,93 @@ function isTextLike(mime) {
   );
 }
 
+function isMarkdown(mime) {
+  return (
+    mime === "text/markdown" ||
+    mime === "text/x-markdown" ||
+    mime === "text/vnd.github.markdown"
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  Sub-renderers (kept in the same file per plan §3.4)                 */
 /* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/*  Markdown viewer (rendered + raw toggle)                            */
+/* ------------------------------------------------------------------ */
+
+const md = new MarkdownIt({
+  html: false,
+  breaks: true,
+  linkify: true,
+  highlight: function (str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return hljs.highlight(str, { language: lang }).value;
+      } catch {}
+    }
+    return ""; // markdown-it will escape and wrap in <code>
+  },
+});
+
+function MarkdownViewer({ content, truncated }) {
+  const [mode, setMode] = useState("rendered"); // "rendered" | "raw"
+
+  const html = useMemo(
+    () => (mode === "rendered" && content ? DOMPurify.sanitize(md.render(content)) : null),
+    [mode, content]
+  );
+
+  return (
+    <div className="flex flex-col gap-y-2">
+      {truncated && (
+        <div className="flex items-center gap-2 rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+          <Warning className="h-4 w-4 shrink-0 text-amber-400" />
+          <span className="text-xs leading-[18px] text-amber-300">
+            File truncated — showing first 1 MB
+          </span>
+        </div>
+      )}
+
+      {/* Toggle pill */}
+      <div className="flex items-center gap-x-1 self-start rounded-full bg-black/20 light:bg-slate-100 border border-white/10 light:border-slate-300 p-0.5">
+        {[
+          { key: "rendered", label: "Rendered" },
+          { key: "raw", label: "Raw" },
+        ].map((opt) => (
+          <button
+            key={opt.key}
+            type="button"
+            onClick={() => setMode(opt.key)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              mode === opt.key
+                ? "bg-theme-accent/20 text-theme-accent"
+                : "text-theme-text-secondary hover:text-theme-text-primary"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Body */}
+      {mode === "rendered" ? (
+        <div
+          className="max-h-[60vh] overflow-auto rounded-md bg-black/20 light:bg-slate-100 border border-white/10 light:border-slate-300 px-4 py-3 text-sm leading-6 text-theme-text-primary prose prose-invert light:prose max-w-none"
+          dangerouslySetInnerHTML={{ __html: html || "" }}
+        />
+      ) : (
+        <pre
+          className="max-h-[60vh] overflow-auto rounded-md bg-black/20 light:bg-slate-100 border border-white/10 light:border-slate-300 px-3 py-2 text-xs leading-[18px] font-mono whitespace-pre-wrap break-words text-theme-text-primary"
+          aria-label="Raw Markdown source"
+        >
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
 
 function TextViewer({ content, truncated }) {
   return (
@@ -191,7 +279,11 @@ export default function FileViewer({ data, onClose }) {
   const url = rawUrl(data.path);
 
   let body;
-  if (isTextLike(data.mime)) {
+  if (isMarkdown(data.mime)) {
+    body = (
+      <MarkdownViewer content={data.content || ""} truncated={!!data.truncated} />
+    );
+  } else if (isTextLike(data.mime)) {
     body = (
       <TextViewer content={data.content || ""} truncated={!!data.truncated} />
     );
