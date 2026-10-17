@@ -2,7 +2,7 @@
 
 ## Unreleased (pending next version bump)
 
-- **Per-user filesystem isolation** (`feat(per-user-filesystem)`): Filesystem tools are now per-user sandboxes in multiuser mode. Each user's agent is scoped to `$STORAGE_DIR/totemllm-fs/users/<id>/`. Legacy shared files require the optional migration script (`yarn fs:migrate`).
+_No pending changes yet. Add new `feat:` / `fix:` / `chore:` items here as they land on `dev-totem` before the next release._
 
 ---
 
@@ -59,6 +59,22 @@ git push && git push --tags
 
 ```bash
 npm publish
+```
+
+### 5. Sync dev-totem back with main-totem (REQUIRED)
+
+> **Why:** The version bump (step 2) is committed *only* on `main-totem`. If it is never merged back, `dev-totem`'s `package.json` version field drifts behind by one release per cycle. The next PR then hits a `package.json` version conflict and the next `standard-version` bump can collide with an already-published tag. Merging main back keeps both branches on the same version so the next release is clean.
+
+```bash
+git checkout dev-totem
+git merge main-totem   # usually a fast-forward; no merge commit needed
+git push
+```
+
+After this, `dev-totem` and `main-totem` point at the same commit and share the latest published version. Verify with:
+
+```bash
+git diff --stat dev-totem main-totem   # should be empty
 ```
 
 ## Version Bump Rules (SemVer)
