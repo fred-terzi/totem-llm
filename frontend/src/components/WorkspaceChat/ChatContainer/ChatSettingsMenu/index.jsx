@@ -49,7 +49,7 @@ export default function ChatSettingsMenu() {
       {showMenu && (
         <div
           ref={menuRef}
-          className="absolute right-0 top-[42px] bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-3.5 w-[226px] flex flex-col gap-1.5 shadow-lg"
+          className="absolute right-0 top-[42px] bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-2 w-auto whitespace-nowrap flex flex-col gap-1 shadow-lg"
         >
           <TextSizeRow />
           <MemoriesRow onClose={() => setShowMenu(false)} />

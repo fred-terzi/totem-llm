@@ -61,7 +61,7 @@ function TextSizeSubmenu({ selectedSize, onSizeChange }) {
 
   return (
     <div className="absolute right-full top-0 -mr-2 pr-2 pt-0">
-      <div className="bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-3.5 w-[98px] flex flex-col gap-1.5 shadow-lg">
+      <div className="bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-1.5 w-auto whitespace-nowrap flex flex-col gap-1 shadow-lg">
         {textSizes.map(({ key, label }) => (
           <div
             key={key}
