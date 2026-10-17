@@ -22,34 +22,30 @@ Goal: know exactly how to get the authenticated user into `aibitat.handlerProps`
 - F5 (single-user) holds: `user_id` is nullable in schema; falsy → `getFilesystem()` fallback.
 - **Correction to Step 2:** source is `this.invocation.user_id ?? null` (not `this.user?.id`).
 
-## Step 1 — Per-user registry in `lib.js`
+## Step 1 — Per-user registry in `lib.js` ✅ DONE
 
 File: `server/utils/agents/aibitat/plugins/filesystem/lib.js`
 
-1. Add a user-dir resolver:
-   ```js
-   function userFsRoot(userIdOrName) {
-     // $STORAGE_DIR/totemllm-fs/users/<slug>
-     // slug = sanitized username (lowercase, [a-z0-9._-]); fall back to `user-<id>`
-   }
-   ```
-2. Add a **registry** (module-level, process-lifetime — users are bounded, no eviction needed):
-   ```js
-   const #perUser = new Map(); // key: String(userId) -> FilesystemManager
-   function getFilesystemFor(userId) {
-     if (!userId) return getFilesystem();          // F5: single-user fallback
-     const key = String(userId);                    // numeric Prisma Int → stable string key
-     if (!#perUser.has(key)) {
-       const dir = userFsRoot(key);                 // $STORAGE_DIR/totemllm-fs/users/<slug>
-       fs.mkdirSync(dir, { recursive: true });      // N4: lazy, cheap, idempotent
-       #perUser.set(key, new FilesystemManager({ allowedDirectories: [dir] }));
-     }
-     return #perUser.get(key);
-   }
-   ```
-   (Slug: use `user-<id>` by default; resolve to actual username via DB only if a display-name preference is added later. Avoids a hot-path DB query per first access.)
-   Reuse the existing `FilesystemManager` constructor/`setAllowedDirectories` — do **not** fork the class. Keep `getFilesystem()` untouched for backwards compat (N5).
-3. Keep `validatePath()` exactly as-is — it already enforces against `this.#allowedDirectories` per manager instance, including the realpath/symlink check (N2). No changes to the security core.
+**What was implemented:**
+
+1. `FilesystemManager` now accepts an optional `constructor(initialDirectories)` param. When provided, `ensureInitialized()` seeds `#allowedDirectories` from that list instead of the legacy `totemllm-fs` root. Zero behavioural change when omitted (the default instance).
+2. Module-level `perUserRegistry` Map (key = `String(userId)`, value = `FilesystemManager`). `getFilesystemFor(userId)`:
+   - `userId == null` → returns the shared default instance (F5).
+   - `userId` is numeric → returns (or creates + caches) a `FilesystemManager` rooted at `$STORAGE_DIR/totemllm-fs/users/<userId>/`.
+   - Directory is **not** created at lookup time — it's created lazily by the existing `#initializeFilesystem()` → `fs.mkdir(recursive)` on first `validatePath()` call (N4).
+3. `validatePath()` untouched (N2 — symlink/realpath defense preserved as-is).
+4. Backwards-compatible `module.exports`:
+   - `module.exports` is the default `FilesystemManager` instance (existing `require("./lib.js")` call sites still work).
+   - `module.exports.getFilesystem()` → default instance (no-op, kept for clarity).
+   - `module.exports.getFilesystemFor(userId)` → per-user or default instance.
+   - `module.exports.defaultFs` → alias to the default instance.
+
+**Deviations from the original draft:**
+- No separate `userFsRoot()` helper — the path is inlined in `getFilesystemFor()` (simpler, one call site).
+- Constructor param instead of a `setAllowedDirectories()` setter (no new public API surface; `#initializeFilesystem` already handled the `directories` argument).
+- Directory creation stays lazy (on first `validatePath()`), not eager `mkdirSync` at lookup. Matches the existing `#initializeFilesystem` contract.
+
+**Smoke-tested:** default identity, F5 fallback (null/undefined), cache hit, cross-user denial (F4 message verbatim), relative path resolution into `users/<id>/`, lazy creation confirmed. ESLint clean.
 
 ## Step 2 — Pipe `userId` into `handlerProps`
 
