@@ -26,7 +26,7 @@ Goal: confirm the exact auth middleware pattern, endpoint registration pattern, 
 
 ---
 
-## Step 1 — Server: Create `server/endpoints/filesystem.js`
+## Step 1 — Server: Create `server/endpoints/filesystem.js` ✅ DONE
 
 **New file:** `server/endpoints/filesystem.js` (CJS, matching all other `server/endpoints/*.js`)
 
@@ -673,3 +673,58 @@ Step 1.2 signature confirmed correct as written. (OQ7 closed.)
 
 **Unresolved / accepted defaults:**
 - **OQ5 (dotfiles):** keep default — `readdir` with no filter, dotfiles visible (they're the user's files). No `?includeHidden=true` flag.
+
+---
+
+## Step 1 — Findings (completed)
+
+**Deliverable:** `server/endpoints/filesystem.js` (CJS, ~380 lines).
+
+### What was built
+
+| Plan item | Status | Notes |
+|-----------|--------|-------|
+| 1.1 `MIME_MAP` + `mimeFor()` | ✅ | Copied from plan. Exported for tests. |
+| 1.2 `resolveFsForUser` | ✅ → `resolveFsForRequest(request, response)` | **Refactored:** takes `(request, response)` and calls `userFromSession` internally, so handlers don't call it separately (matches `credits.js`). |
+| 1.3 error→status mapping | ✅ → `classifyValidationError(error)` | **Refactored:** takes the caught error, returns `{ status, message }` (403 / 404 / 500) — used in both handlers' `try/catch`. |
+| 1.4 `GET /filesystem/list` | ✅ | Dirs-first, case-insensitive alpha sort. Each entry: `{ name, type, size, sizeFormatted, modified, mime }`. Parallel per-entry `fs.stat`; broken symlinks still listed (size/mtime omitted). |
+| 1.5 `GET /filesystem/read` | ✅ | JSON + raw modes. 1 MiB truncation via `fs.open`+`fh.read` (range read). Binary → `content:null` + `downloadUrl`. `Cache-Control: no-store` on raw only. `Content-Disposition` filename quote-escaped. |
+| 1.6 Export | ✅ → `{ filesystemEndpoints, handleList, handleRead, mimeFor, isTextMime, MAX_TEXT_BYTES }` | **Extended** to export `filesystemEndpoints` (Step 2) + helpers (Step 4). |
+
+### Extras (not in original plan, all additive)
+
+- `isTextMime(mime)` — single source of truth for text-vs-binary (replaces inline check in §1.5.8).
+- `MAX_TEXT_BYTES` exported so tests can assert the exact cap.
+- Explicit null-byte fast-fail (400) in both handlers, before `validatePath`.
+
+### Smoke test — 43 / 43 passed
+
+Ran a 15-case script against a real `os.tmpdir()` sandbox (root `package.json` is ESM, so it's a `.cjs` run):
+
+- **list:** root (3 entries, dirs first, size/mtime/mime), subdir, `../../etc`→403, `/etc`→403, null-byte→400, missing→404, on-file→404 ✅
+- **read:** text JSON (content/mime/truncated=false), 1.28 MB text→truncated=true at exactly 1 MiB, PNG JSON→`content:null`+`downloadUrl`, PNG raw→correct headers + 10 bytes streamed, missing→404, no-path→400, on-dir→400, `../../etc/passwd`→403 ✅
+
+### Deviations from plan (all improvements, no scope change)
+
+1. `resolveFsForRequest(request, response)` instead of `resolveFsForUser(user)` — pulls the user internally; cleaner handlers.
+2. `classifyValidationError(error)` returns `{status,message}` instead of throwing a typed error.
+3. `isTextMime` + `MAX_TEXT_BYTES` exported for isolated testing.
+4. `handleList` stats each entry in parallel and tolerates broken symlinks.
+5. `Content-Disposition` filename escaped against header injection.
+6. Null-byte fast-fail before `validatePath` for a clearer 400 message.
+
+### Files changed
+
+| File | Change |
+|------|--------|
+| `server/endpoints/filesystem.js` | **new** (Step 1 deliverable) |
+| `totem_docs/file-explorer/implementation-plan.md` | Step 1 marked ✅ DONE + this findings section |
+
+### Ready for Step 2
+
+`server/index.js` needs:
+```js
+const { filesystemEndpoints } = require("./endpoints/filesystem");
+// alongside the other endpoint registrations:
+filesystemEndpoints(apiRouter);
+```
