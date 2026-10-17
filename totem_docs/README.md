@@ -22,6 +22,18 @@ purpose, parameters, return format, usage examples, and gotchas.
 | 12 | `terminal-access` | [tools/terminal-access.md](tools/terminal-access.md) | Shell Execution |
 | 13 | `web-browsing` | [tools/web-browsing.md](tools/web-browsing.md) | Web / Search |
 
+## Design & Spec Documents
+
+Planning and design documents for features live in subdirectories:
+
+| Topic | Files | Status |
+|-------|-------|--------|
+| Per-user filesystem isolation | [per-user-filesystem/](per-user-filesystem/) | Planned |
+
+Each topic directory holds a `requirement-spec.md` (what & why, threat model,
+acceptance criteria) and an `implementation-plan.md` (step-by-step, against the
+current code). See `AGENTS.md` §5 for the doc-first workflow.
+
 ## Conventions Used in These Docs
 
 Each tool document follows this structure:
