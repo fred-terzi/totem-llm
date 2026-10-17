@@ -126,18 +126,30 @@ All pass `e.message` through unchanged. A cross-user denial renders identically 
 
 **Verified:** syntax check, dry-run listing, real copy (3 items + nested dirs), second-run idempotency (0 copied / 3 skipped), bad `--userId` rejection (exit 1).
 
-## Step 6 — Tests
+## Step 6 — Tests ✅ DONE
 
-Add `server/__tests__/utils/agents/aibitat/plugins/filesystem/per-user.test.js` covering the acceptance criteria in the spec:
+**What was implemented:**
 
-1. Two fake users → A writes `notes.md`; B's `list-directory` of its root does not show it.
-2. B reads A's absolute path → `Access denied`.
-3. A creates symlink → B's dir; A's `list-directory` on it → `Access denied` (N2).
-4. `handlerProps.userId` undefined → global default manager used (F5 regression guard).
-5. Relative write lands under `users/<user>/` (AC5).
-6. `search-files` content hit in A's dir is invisible to B (F7).
+`server/__tests__/utils/agents/aibitat/plugins/filesystem/per-user.test.js` — 6 tests covering all acceptance criteria, testing the security boundary in `lib.js` directly (no AIbitat instance, no provider mock, no fake `super` objects). All plugin handlers delegate to `validatePath()` / `getAllowedDirectories()`, so testing those methods covers the same guarantee.
 
-Run the existing aibitat test suite (`yarn test` scoped to `server/__tests__/utils/agents/aibitat`) to confirm no regressions in citation/attachment paths.
+**Storage isolation:** `process.env.STORAGE_DIR` is set to a unique `os.tmpdir()` path (`/tmp/totem-fs-test-<pid>/`) **before** the first `require()` of `lib.js`, so every filesystem operation lands under the temp dir — never `~/totem-llm/`. Jest's per-file module registry prevents the `perUserRegistry` singleton from leaking across test files. `afterAll` removes the temp dir.
+
+| # | AC | Test |
+|---|-----|------|
+| 1 | AC1 | A writes `notes.md`; B's `validatePath` on A's file → `Access denied` |
+| 2 | AC2 | B reads A's absolute path → exact `Access denied - path outside allowed directories.` message |
+| 3 | AC3 | A creates symlink → B's dir; A validates symlink → `Access denied` (N2) |
+| 4 | AC4 | `userId=null` → default root is `<storage>/totemllm-fs` (not `users/`); write+read works |
+| 5 | AC5 | Root is `<storage>/totemllm-fs/users/42`; file accessible via absolute path + `getFileStats` |
+| 6 | AC6 | B's allowed dirs exclude A's; A's file invisible to B; A can still access own file |
+
+**Suite run (2026-10-16):**
+```
+Test Suites: 5 passed, 5 total   (incl. abort.test.js, untooled, ollama, abortSignal)
+Tests:       29 passed, 29 total
+Time:        0.83 s
+```
+ESLint clean.
 
 ## Step 7 — Docs & release
 
@@ -160,4 +172,4 @@ Run the existing aibitat test suite (`yarn test` scoped to `server/__tests__/uti
 | 6 | — | gate for merge |
 | 7 | — | docs only |
 
-Suggested PR split: **PR1** = Steps 0–4 + 6 (the feature). **PR2** = Step 5 + 7 (migration & docs). This keeps the security-relevant change testable and reviewable in isolation.
+Suggested PR split: **PR1** = Steps 0–4 + 6 (the feature) ✅ complete. **PR2** = Step 5 + 7 (migration & docs). This keeps the security-relevant change testable and reviewable in isolation.
