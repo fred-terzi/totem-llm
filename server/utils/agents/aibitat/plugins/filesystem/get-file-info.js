@@ -1,4 +1,4 @@
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 module.exports.FilesystemGetFileInfo = {
   name: "filesystem-get-file-info",
@@ -39,6 +39,9 @@ module.exports.FilesystemGetFileInfo = {
           },
           handler: async function ({ path: filePath = "" }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-get-file-info tool.`
               );

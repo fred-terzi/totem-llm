@@ -62,6 +62,9 @@ const { SystemPromptVariables } = require("../models/systemPromptVariables");
 const { VALID_COMMANDS } = require("../utils/chats");
 const { AgentSkillWhitelist } = require("../models/agentSkillWhitelist");
 const { Memory } = require("../models/memory");
+const { Credits } = require("../models/credits");
+const { Workspace } = require("../models/workspace");
+const { rateLimiter } = require("../utils/middleware/rateLimiter");
 
 function systemEndpoints(app) {
   if (!app) return;
@@ -198,7 +201,8 @@ function systemEndpoints(app) {
         }
 
         const { username, password } = reqBody(request);
-        const existingUser = await User._get({ username: String(username) });
+        // The identifier field accepts a username OR an email address
+        const existingUser = await User.getByUsernameOrEmail(username);
 
         if (!existingUser) {
           await EventLogs.logEvent(
@@ -643,6 +647,159 @@ function systemEndpoints(app) {
       response.sendStatus(500).end();
     }
   });
+
+  // Unauthenticated: the login page needs to know whether to render a
+  // public sign-up option. Exposes nothing beyond the two boolean flags.
+  app.get("/system/public-registration", async (_, response) => {
+    try {
+      const multiUserMode = await SystemSettings.isMultiUserMode();
+      const publicRegistration = multiUserMode
+        ? await SystemSettings.isPublicRegistrationEnabled()
+        : false;
+      response.status(200).json({ multiUserMode, publicRegistration });
+    } catch (e) {
+      console.error(e.message, e);
+      response.sendStatus(500).end();
+    }
+  });
+
+  // Public email registration (multi-user mode + admin toggle only).
+  // Rate limited per-IP as the first abuse-deterrence layer; a required,
+  // validated email address acts as the accountability handle. Email
+  // *verification* (click a link before the account is usable) is deferred
+  // to the email-delivery effort.
+  app.post(
+    "/system/new-user",
+    [
+      rateLimiter({
+        message: "Too many sign-up attempts. Please try again later.",
+      }),
+    ],
+    async (request, response) => {
+      try {
+        // Silently refuse when the door is not open — mirrors how other
+        // gated endpoints avoid revealing feature state to probing.
+        const multiUserMode = await SystemSettings.isMultiUserMode();
+        const publicRegistration = multiUserMode
+          ? await SystemSettings.isPublicRegistrationEnabled()
+          : false;
+        if (!multiUserMode || !publicRegistration) {
+          response
+            .status(403)
+            .json({ success: false, error: "Registration is not available." });
+          return;
+        }
+
+        const { username, password, email } = reqBody(request);
+
+        // All three fields are required in this flow. The User model keeps
+        // email optional (wallet accounts legitimately have none) — the
+        // requirement is enforced here, at the public boundary.
+        if (!username || !String(username).trim()) {
+          response
+            .status(400)
+            .json({ success: false, error: "A username is required." });
+          return;
+        }
+        if (!password || !String(password)) {
+          response
+            .status(400)
+            .json({ success: false, error: "A password is required." });
+          return;
+        }
+        if (!email || !String(email).trim()) {
+          response.status(400).json({
+            success: false,
+            error: "A valid email address is required to register.",
+          });
+          return;
+        }
+
+        // Friendly pre-flight duplicate checks (the P2002 handler on the
+        // model remains as the race-condition backstop).
+        const normalizedEmail = String(email).trim().toLowerCase();
+        const existing = await User.getByUsernameOrEmail(username);
+        const existingByEmail =
+          await User.getByUsernameOrEmail(normalizedEmail);
+        if (existing?.username === String(username).trim()) {
+          response.status(400).json({
+            success: false,
+            error: "A user with that username already exists",
+          });
+          return;
+        }
+        if (existingByEmail?.email === normalizedEmail) {
+          response.status(400).json({
+            success: false,
+            error: "A user with that email already exists",
+          });
+          return;
+        }
+
+        const { user, error } = await User.create({
+          username,
+          password,
+          email,
+          role: "default",
+        });
+        if (!user) {
+          console.error("Public registration:", error);
+          response.status(400).json({ success: false, error });
+          return;
+        }
+
+        // Welcome bonus — same amount as wallet signups (Credits.WELCOME_BONUS).
+        // The initial balance is set via the ledger (`Credits.credit`) rather
+        // than a raw `credits_balance` write so balance and ledger can never
+        // drift apart.
+        try {
+          await Credits.credit(
+            user.id,
+            Credits.WELCOME_BONUS,
+            "credit",
+            `signup_${user.email}`
+          );
+        } catch (creditError) {
+          // Non-fatal: the account is usable; an admin can adjust the balance.
+          console.error(
+            "Public registration: welcome bonus failed:",
+            creditError.message
+          );
+        }
+
+        // Auto-create a default workspace (non-fatal — same as wallet signup).
+        try {
+          const { message: wsError } = await Workspace.new(
+            "My Workspace",
+            user.id
+          );
+          if (wsError)
+            console.error(
+              "Public registration: default workspace creation failed:",
+              wsError
+            );
+        } catch (wsErr) {
+          console.error(
+            "Public registration: default workspace creation error:",
+            wsErr.message
+          );
+        }
+
+        await EventLogs.logEvent(
+          "user_registered",
+          { username: user.username, ip: request.ip || "unknown" },
+          user.id
+        );
+
+        // Same response shape as the invite flow — the user then logs in
+        // via username OR email through /request-token.
+        response.status(200).json({ success: true, error: null });
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
 
   app.get("/system/logo", async function (request, response) {
     try {

@@ -32,7 +32,7 @@ export default function AttachItem({
   const threadSlug = workspaceThreadSlug ?? params.threadSlug ?? null;
 
   if (!agentModeEnabled) return null;
-  
+
   const tooltipRef = useRef(null);
   const [isEmbedding, setIsEmbedding] = useState(false);
   const [files, setFiles] = useState([]);

@@ -120,13 +120,29 @@ const WorkspaceThread = {
             response.status < 500 &&
             response.status !== 429
           ) {
+            // Read the body (if JSON) so machine-readable signals reach the UI —
+            // e.g. the 402 "no credits" gate returns { message, action: "buy_credits" }
+            // which would otherwise be reduced to a generic "Code N" string.
+            let serverError = null;
+            let action = null;
+            try {
+              const body = await response.json();
+              if (body && typeof body.message === "string")
+                serverError = body.message;
+              if (body && typeof body.action === "string") action = body.action;
+            } catch {
+              /* non-JSON body: fall through to the generic error below */
+            }
             handleChat({
               id: v4(),
               type: "abort",
               textResponse: null,
               sources: [],
               close: true,
-              error: `An error occurred while streaming response. Code ${response.status}`,
+              error:
+                serverError ||
+                `An error occurred while streaming response. Code ${response.status}`,
+              action,
             });
             ctrl.abort();
             throw new Error("Invalid Status code response.");

@@ -42,6 +42,12 @@ function handleDefaultStreamResponseV2(response, stream, responseProps) {
     // to preserve previously generated content.
     const handleAbort = () => {
       stream?.endMeasurement(usage);
+      // Kill the upstream LLM stream (e.g. Venice AI) so we stop consuming
+      // compute credits after the user presses Stop. The OpenAI SDK Stream
+      // object exposes a `controller` (AbortController); aborting it closes
+      // the underlying HTTP connection to the provider and causes the
+      // `for await` iterator below to end cleanly.
+      stream?.controller?.abort?.();
       clientAbortedHandler(resolve, fullText);
     };
     response.on("close", handleAbort);

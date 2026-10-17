@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { CONTEXT_USAGE_EVENT, AGENT_TOKEN_USAGE_EVENT } from "@/utils/constants";
+import {
+  CONTEXT_USAGE_EVENT,
+  AGENT_TOKEN_USAGE_EVENT,
+} from "@/utils/constants";
 
 /**
  * Tracks the most recent context (prompt) token usage reported by an LLM turn.
@@ -25,7 +28,8 @@ export default function useContextUsage(initialUsage = null) {
         // Only update if the new value is >= current — prevents out-of-order
         // or stale agent-step messages from making the bar shrink mid-run.
         const newVal = Number(promptTokens);
-        if (prev && prev.promptTokens != null && newVal < prev.promptTokens) return prev;
+        if (prev && prev.promptTokens != null && newVal < prev.promptTokens)
+          return prev;
         return { promptTokens: newVal, model: model ?? null };
       });
     };

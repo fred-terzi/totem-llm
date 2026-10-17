@@ -109,6 +109,111 @@ const System = {
         return { valid: false, message: e.message };
       });
   },
+
+  /**
+   * Wallet auth (SIWE) — two-step flow.
+   * Step 1: getNonce() → { nonce, message }
+   * Step 2: verify({ signature, nonce }) → { valid, user, token }
+   */
+  walletNonce: async function (origin) {
+    const url = `${API_BASE}/auth/wallet/nonce`;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: origin || window.location.origin }),
+      });
+      if (!res.ok) throw new Error("Could not get wallet nonce.");
+      return await res.json();
+    } catch (e) {
+      console.error("[wallet] nonce:", e.message);
+      return { nonce: null, message: null, error: e.message };
+    }
+  },
+
+  /**
+   * Sanity check for the mobile wallet flow: called when the "Connect
+   * Mobile Wallet" button is tapped. If this reaches the server, the
+   * server log shows "[wallet:ping] BUTTON PRESSED" — proving the
+   * frontend↔backend path works, independent of the wallet/relay flow.
+   */
+  walletPing: async function () {
+    try {
+      const res = await fetch(`${API_BASE}/auth/wallet/ping`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ origin: window.location.origin }),
+      });
+      if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
+  },
+
+  walletVerify: async function (body, maxRetries = 3) {
+    const url = `${API_BASE}/auth/wallet/verify`;
+    let lastError = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        // Server received and responded (even 4xx/5xx) — return immediately.
+        // HTTP errors are not retried because the nonce is single-use and
+        // the server already consumed (or rejected) it.
+        return await res.json();
+      } catch (e) {
+        // Network-level failure (TypeError: "Failed to fetch").
+        // Typical cause on mobile: Android suspends the browser tab while
+        // the user is in the wallet app; on resume the network stack needs
+        // a moment to re-establish the LAN connection. The nonce is safe —
+        // it is only consumed server-side on a *successful* verify, so a
+        // request that never arrived does not invalidate it.
+        lastError = e;
+        if (attempt < maxRetries) {
+          const delay = 1500 * (attempt + 1);
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+      }
+    }
+    console.error("[wallet] verify:", lastError?.message);
+    return {
+      valid: false,
+      user: null,
+      token: null,
+      message: lastError?.message || "Network error",
+    };
+  },
+
+  /**
+   * Reads the caller's $TOTEM token balance from the server (on-chain, Base).
+   * The server reads it for the wallet address stored on the account at
+   * login time; this endpoint re-checks it on demand (page load + manual refresh).
+   *
+   * @returns {Promise<{available: boolean, configured?: boolean, noWallet?: boolean, tokenAddress?: string|null, symbol?: string, chainId?: number, amount?: string, error?: string}>}
+   *   - `configured: false` → server has no $TOTEM token configured (show "non-holder")
+   *   - `available: true`  → `amount` is the decimal balance string (may be "0")
+   *   - `available: false, noWallet: true` → account has no wallet (show "non-holder")
+   *   - `available: false` → configured but the on-chain read failed (show retry)
+   */
+  totemBalance: async function () {
+    try {
+      const res = await fetch(`${API_BASE}/wallet/balance`, {
+        headers: baseHeaders(),
+      });
+      if (res.status === 204) return { available: false, configured: false };
+      if (!res.ok)
+        return { available: false, error: "Could not read $TOTEM balance." };
+      const data = await res.json();
+      return { configured: true, ...data };
+    } catch (e) {
+      return { available: false, error: e.message };
+    }
+  },
   /**
    * Refreshes the user object from the session.
    * @returns {Promise<{success: boolean, user: Object | null, message: string | null}>}
@@ -213,6 +318,47 @@ const System = {
         return { success: false, error: e.message };
       });
   },
+  /**
+   * Reads the public registration flags (unauthenticated endpoint).
+   * Used by the login screen to decide whether to show a Sign Up option.
+   * @returns {Promise<{multiUserMode: boolean, publicRegistration: boolean}>}
+   */
+  publicRegistration: async function () {
+    return await fetch(`${API_BASE}/system/public-registration`, {
+      method: "GET",
+    })
+      .then((res) => res.json())
+      .then((res) => ({
+        multiUserMode: !!res?.multiUserMode,
+        publicRegistration: !!res?.publicRegistration,
+      }))
+      .catch(() => ({ multiUserMode: false, publicRegistration: false }));
+  },
+
+  /**
+   * Public email registration (multi-user mode + admin toggle only).
+   * Creates an account with a required username + email + password and
+   * applies the standard welcome bonus. The user then logs in normally.
+   * @param {{username: string, email: string, password: string}} body
+   * @returns {Promise<{success: boolean, error: string | null}>}
+   */
+  registerUser: async function (body) {
+    return await fetch(`${API_BASE}/system/new-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Registration failed.");
+        return data;
+      })
+      .catch((e) => ({
+        success: false,
+        error: e.message,
+      }));
+  },
+
   isMultiUserMode: async () => {
     return await fetch(`${API_BASE}/system/multi-user-mode`, {
       method: "GET",

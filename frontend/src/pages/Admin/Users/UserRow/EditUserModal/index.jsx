@@ -9,6 +9,7 @@ import {
   USERNAME_MAX_LENGTH,
   USERNAME_PATTERN,
 } from "@/utils/username";
+import { isValidEmail } from "@/utils/email";
 
 export default function EditUserModal({ currentUser, user, closeModal }) {
   const [role, setRole] = useState(user.role);
@@ -28,6 +29,13 @@ export default function EditUserModal({ currentUser, user, closeModal }) {
       if (!value || value === null) continue;
       data[key] = value;
     }
+    // Email is optional and clearable: an emptied field must still be sent
+    // (as null) so the server clears it instead of leaving it unchanged.
+    if (form.has("email") && !data.email) data.email = null;
+    if (data.email !== undefined && !isValidEmail(data.email)) {
+      setError("A valid email address is required");
+      return;
+    }
     if (messageLimit.enabled) {
       data.dailyMessageLimit = messageLimit.limit;
     } else {
@@ -41,6 +49,7 @@ export default function EditUserModal({ currentUser, user, closeModal }) {
         currentUser.username = data.username;
         currentUser.bio = data.bio;
         currentUser.role = data.role;
+        if (data.email !== undefined) currentUser.email = data.email || null;
         localStorage.setItem(AUTH_USER, JSON.stringify(currentUser));
       }
 
@@ -109,6 +118,26 @@ export default function EditUserModal({ currentUser, user, closeModal }) {
                 />
                 <p className="mt-2 text-xs text-white/60">
                   Password must be at least 8 characters long
+                </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="email"
+                  className="block mb-2 text-sm font-medium text-white"
+                >
+                  Email <span className="text-white/60">(optional)</span>
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  className="border-none bg-theme-settings-input-bg w-full text-white placeholder:text-theme-settings-input-placeholder text-sm rounded-lg focus:outline-primary-button active:outline-primary-button outline-none block w-full p-2.5"
+                  placeholder="user@example.com"
+                  defaultValue={user.email || ""}
+                  autoComplete="email"
+                />
+                <p className="mt-2 text-xs text-white/60">
+                  If set, the user can also log in with this email. Leave empty
+                  to remove it.
                 </p>
               </div>
               <div>

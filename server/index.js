@@ -37,6 +37,7 @@ const { getVectorDbClass } = require("./utils/helpers");
 const { adminEndpoints } = require("./endpoints/admin");
 const { modelRouterEndpoints } = require("./endpoints/modelRouter");
 const { inviteEndpoints } = require("./endpoints/invite");
+const { walletEndpoints } = require("./endpoints/wallet");
 const { utilEndpoints } = require("./endpoints/utils");
 const { developerEndpoints } = require("./endpoints/api");
 const { extensionEndpoints } = require("./endpoints/extensions");
@@ -66,6 +67,7 @@ const {
 const { memoryEndpoints } = require("./endpoints/memory");
 const { featureEndpoints } = require("./endpoints/features");
 const { importChatgptEndpoints } = require("./endpoints/importChatgpt");
+const { creditEndpoints } = require("./endpoints/credits");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
 const apiRouter = express.Router();
@@ -107,6 +109,7 @@ chatEndpoints(apiRouter);
 adminEndpoints(apiRouter);
 modelRouterEndpoints(apiRouter);
 inviteEndpoints(apiRouter);
+walletEndpoints(apiRouter);
 embedManagementEndpoints(apiRouter);
 utilEndpoints(apiRouter);
 documentEndpoints(apiRouter);
@@ -127,6 +130,7 @@ googleAgentSkillEndpoints(apiRouter);
 memoryEndpoints(apiRouter);
 featureEndpoints(apiRouter);
 importChatgptEndpoints(apiRouter);
+creditEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);
 

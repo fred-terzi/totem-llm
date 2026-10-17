@@ -1,5 +1,5 @@
 const path = require("path");
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 module.exports.FilesystemReadMultipleFiles = {
   name: "filesystem-read-multiple-files",
@@ -52,6 +52,9 @@ module.exports.FilesystemReadMultipleFiles = {
           },
           handler: async function ({ paths = [] }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-read-multiple-files tool.`
               );

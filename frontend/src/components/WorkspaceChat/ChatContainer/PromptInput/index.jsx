@@ -139,6 +139,23 @@ export default function PromptInput({
   }
 
   /**
+   * Determine if we're on a mobile device so we can let Enter insert a
+   * newline instead of submitting the message. Mobile keyboards don't
+   * have a distinct Shift key, so a bare Enter press there should act as
+   * the newline key. Messages are sent via the Send button instead.
+   * @returns {boolean}
+   */
+  function isMobileDevice() {
+    if (typeof navigator === "undefined") return false;
+    if (navigator.userAgentData?.mobile != null) {
+      return navigator.userAgentData.mobile;
+    }
+    return /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent ?? ""
+    );
+  }
+
+  /**
    * Capture enter key press to handle submission, redo, or undo
    * via keyboard shortcuts
    * @param {KeyboardEvent} event
@@ -192,6 +209,9 @@ export default function PromptInput({
 
     // Is simple enter key press w/o shift key
     if (event.keyCode === 13 && !event.shiftKey) {
+      // On mobile, Enter inserts a newline (there's no distinct Shift key on
+      // touch keyboards). The user sends the message via the Send button.
+      if (isMobileDevice()) return;
       event.preventDefault();
       if (isStreaming || isDisabled) return; // Prevent submission if streaming or disabled
       setShowTools(false);

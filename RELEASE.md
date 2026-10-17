@@ -1,5 +1,11 @@
 # Release Workflow — standard-version
 
+## Unreleased (pending next version bump)
+
+- **Per-user filesystem isolation** (`feat(per-user-filesystem)`): Filesystem tools are now per-user sandboxes in multiuser mode. Each user's agent is scoped to `$STORAGE_DIR/totemllm-fs/users/<id>/`. Legacy shared files require the optional migration script (`yarn fs:migrate`).
+
+---
+
 Totem LLM uses [standard-version](https://github.com/conventional-software/standard-version) to manage versioning, git tags, and changelog generation from conventional commit messages.
 
 ## Prerequisites

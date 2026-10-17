@@ -61,12 +61,13 @@ function UsersContainer() {
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
 
+  const fetchUsers = async () => {
+    const _users = await Admin.users();
+    setUsers(_users);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    async function fetchUsers() {
-      const _users = await Admin.users();
-      setUsers(_users);
-      setLoading(false);
-    }
     fetchUsers();
   }, []);
 
@@ -97,6 +98,9 @@ function UsersContainer() {
           <th scope="col" className="px-6 py-3">
             Date Added
           </th>
+          <th scope="col" className="px-6 py-3">
+            Credits
+          </th>
           <th scope="col" className="px-6 py-3 rounded-tr-lg">
             {" "}
           </th>
@@ -104,7 +108,12 @@ function UsersContainer() {
       </thead>
       <tbody>
         {users.map((user) => (
-          <UserRow key={user.id} currUser={currUser} user={user} />
+          <UserRow
+            key={user.id}
+            currUser={currUser}
+            user={user}
+            onCreditsUpdated={fetchUsers}
+          />
         ))}
       </tbody>
     </table>

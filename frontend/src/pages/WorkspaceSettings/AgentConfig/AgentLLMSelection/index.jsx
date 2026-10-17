@@ -67,7 +67,6 @@ const LLM_DEFAULT = {
   requiredConfig: [],
 };
 
-
 export default function AgentLLMSelection({
   settings,
   workspace,
@@ -79,7 +78,8 @@ export default function AgentLLMSelection({
     LLM_DEFAULT,
     ...AVAILABLE_LLM_PROVIDERS.filter((llm) => {
       if (!ENABLED_PROVIDERS.includes(llm.value)) return false;
-      if (providerAllowlist && !providerAllowlist.includes(llm.value)) return false;
+      if (providerAllowlist && !providerAllowlist.includes(llm.value))
+        return false;
       return true;
     }),
   ];
@@ -114,7 +114,8 @@ export default function AgentLLMSelection({
     setFilteredLLMs(filtered);
   }, [searchQuery, selectedLLM]);
 
-  const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM) ?? LLM_DEFAULT;
+  const selectedLLMObject =
+    LLMS.find((llm) => llm.value === selectedLLM) ?? LLM_DEFAULT;
   return (
     <div className="border-b border-white/40 pb-8">
       {WARN_PERFORMANCE.includes(selectedLLM) && (

@@ -1,6 +1,9 @@
 import { useState } from "react";
 import FileRow from "../FileRow";
-import { CaretDown, FolderNotch } from "@phosphor-icons/react";
+import {
+  CaretDown,
+  FolderNotchIcon as FolderNotch,
+} from "@phosphor-icons/react";
 import { middleTruncate } from "@/utils/directories";
 
 export default function FolderRow({

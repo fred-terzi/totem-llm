@@ -81,7 +81,7 @@ Prisma client 5.3.1. SQLite default; PostgreSQL supported via `DATABASE_URL`. Sc
 
 | Model | Purpose |
 |---|---|
-| `users` | Auth, roles (admin/default), suspended, daily message limits, profile pic |
+| `users` | Auth, roles (admin/default), suspended, daily message limits, profile pic, `wallet_address` (optional), `credits_balance` (int, microdollars) |
 | `workspaces` | Knowledge base containers — system prompt, model selection, similarity thresholds, chat mode (`chat`,`agent`,`query`) |
 | `workspace_threads` | Chat sessions within a workspace |
 | `workspace_chats` | Individual turns in workspace chats (includes feedbackScore) |
@@ -101,6 +101,7 @@ Prisma client 5.3.1. SQLite default; PostgreSQL supported via `DATABASE_URL`. Sc
 | `document_sync_queues` + `document_sync_executions` | Periodic re-sync of watched documents |
 | `cache_data` | Key-value cache with TTL (`expiresAt`) |
 | `event_logs` | Audit trail: event type + JSON metadata + userId |
+| `credit_transactions` | Billing ledger: `amount` (microdollars), `type` (`purchase`\|`debit`\|`refund`), `reference`, `model`, `input_tokens`, `output_tokens`. One row per top-up or usage charge. Relation → `users` (cascade) |
 | `browser_extension_api_keys` | Browser extension auth tokens |
 | `temporary_auth_tokens` | Short-lived tokens for passwordless flows |
 | `password_reset_tokens`, `recovery_codes` | Account recovery |
@@ -139,6 +140,8 @@ All routes mounted under `/api`. Each file exports a function that appends to th
 | `agentFileServer.js` | Serve/receive files from agents | File I/O during agent sessions |
 | `experimental.js` | Live sync, imported agent plugins | Experimental/alpha features |
 | `invite.js` | Invite codes for multi-user join flows | User onboarding |
+| `credits.js` | `GET /credits`; admin: `POST /credits/debit-test`, `POST /credits/grant-test` | Credit balance + ledger; admin debit/grant for testing |
+| `wallet.js` | `GET /wallet/balance`; `POST /auth/wallet/nonce`, `POST /auth/wallet/verify` | **Distinct from billing credits** — on-chain $TOTEM token (Base) balance + SIWE (sign-in-with-Ethereum) wallet login. New wallet signups get the 100 000 µ$ welcome bonus + auto-created default workspace |
 | `mcpServers.js` | MCP (Model Context Protocol) server configs | External tool integrations |
 | `mobile.js` | Mobile app pairing + chat | Teams mobile companion |
 | `telegram.js` | Telegram long-poll webhook proxy | Telegram bot bridge |
@@ -199,6 +202,135 @@ Declarative workflows — ordered sequences of steps (llm-instruction, web-scrap
 - **Multi-user mode** (enabled via `system_settings` table): JWT-based login with bcrypt password verification. Roles: admin / default. API keys and session tokens for stateless auth.
 - **Single-user mode**: Password stored as `AUTH_TOKEN` env var, JWT payload encrypted with PEM key (`EncryptionManager`). Bypassed in dev or when no AUTH_TOKEN is set.
 - **API keys**: Stateless `api_keys` table — bearer token validation via `validApiKey` middleware.
+- **Wallet login (SIWE)**: Primary login method — see [Wallet Login (SIWE)](#wallet-login-siwe) below.
+
+### Wallet Login (SIWE)
+
+Sign-In with Ethereum (SIWE) is the **primary login method**. Users sign a server-generated message with their EVM wallet; the server recovers the address from the signature and issues a JWT. **The address is never trusted from the client** — it is always derived via `ethers.verifyMessage()`, so the user cannot impersonate a different address.
+
+**Two-step flow:**
+
+1. `POST /auth/wallet/nonce` → server returns `{ nonce, message }`.
+   - The nonce is a UUID stored in an **in-memory `Map`** with a **5-minute TTL** (expired entries cleaned up every 60 s). The nonce is **single-use** — deleted immediately on consumption, even if the signature is invalid.
+   - The message is a SIWE-style string. Example:
+   ```
+   totem.example.com wants you to sign in with your Ethereum account:
+
+   (your wallet address will be derived from the signature)
+
+   Sign this message to authenticate with Totem LLM.
+   This request will not trigger a blockchain transaction or cost any gas fees.
+
+   URI: https://totem.example.com
+   Version: 1
+   Chain ID: 1
+   Nonce: 550e8400-e29b-41d4-a716-446655440000
+   Issued At: 2026-01-01T12:00:00.000Z
+   ```
+   > **Note:** `Chain ID: 1` in the message is informational only — `personal_sign` has no chain parameter, so the signature is valid on any EVM chain. The on-chain $TOTEM balance is read from **Base (8453)** independently.
+
+2. `POST /auth/wallet/verify` with `{ signature, nonce }` → server:
+   - Looks up the nonce (replays and expired nonces are rejected with 401)
+   - Recovers the address: `ethers.verifyMessage(storedMessage, signature)`
+   - Normalises to lowercase
+   - **Existing user**: looks up by `wallet_address` → checks `suspended` (403 if suspended) → issues JWT (30 d default)
+   - **New user**: creates a `users` row:
+     - `username`: `wallet_<first 6 hex chars of address>`
+     - `password`: `uuidv4() + uuidv4()` (64-char placeholder — no one knows it; wallet-only account)
+     - `wallet_address`: the recovered address
+     - `credits_balance`: **100 000 µ$** welcome bonus
+     - `role`: `default`
+     - Records a `credit_transactions` row (`type: "credit"`, `reference: signup_<address>`)
+     - Auto-creates a **"My Workspace"** (non-fatal on failure — user can create one manually)
+     - Logs `wallet_account_created` event
+   - Logs `wallet_login_event` on every successful login
+   - Returns `{ valid: true, user: User.filterFields(user), token: <JWT> }`
+   - **Race-condition safe**: concurrent first-login attempts for the same address catch the Prisma `P2002` unique constraint error and re-fetch the existing user
+
+**Frontend — two wallet paths** (both in the login modal, rendered above the password form):
+
+| Path | Component | How it works |
+|---|---|---|
+| **Desktop (EIP-1193)** | `WalletConnectButton` (inline in `MultiUserAuth.jsx`) | `window.ethereum.request({ method: "eth_requestAccounts" })` → `System.walletNonce()` → `window.ethereum.request({ method: "personal_sign", params: [message, address] })` → `System.walletVerify({ signature, nonce })` → store JWT + user in `localStorage` → redirect to home. Works with MetaMask, Rainbow, and any wallet that injects `window.ethereum`. |
+| **Mobile (Reown AppKit)** | `WalletConnectMobile.jsx` | Uses **Reown AppKit** (`@reown/appkit` + `@reown/appkit-adapter-ethers`, ethers v6) instead of hand-rolled WalletConnect. `createAppKit()` is called once at module scope; the component uses `useAppKit`/`useAppKitAccount`/`useAppKitProvider` hooks. Tap "Connect Mobile Wallet" → AppKit's wallet picker modal handles wallet discovery, deep links/universal links (incl. cold-start retries), QR fallback, and session persistence across page reloads. Once connected, SIWE runs over the AppKit-provided EIP-1193 provider: `System.walletNonce()` → `personal_sign` → `System.walletVerify()` → JWT → redirect. Replaces the earlier raw `@walletconnect/sign-client` two-tap flow, whose MetaMask cold-start deep-link drops and Android hand-back reloads made login unreliable. Requires `VITE_WC_PROJECT_ID`. EVM-only (Phantom/Solana not supported). |
+
+> **Mobile wallet connection:** the mobile path uses **Reown AppKit**, which handles wallet discovery, deep linking, cold-start retries, and session persistence internally — do not hand-roll `@walletconnect/sign-client` deep-link flows for mobile login; they break on MetaMask cold launches and Android universal-link hand-backs.
+
+**On-chain $TOTEM balance** (`GET /wallet/balance`):
+
+Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `eth_call` (no transaction is created). Feature-gated by the `TOTEM_ADDRESS` env var — when unset the endpoint returns `204 No Content` and the UI hides the badge. The wallet address used is the one stored on the user's account at login time.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `TOTEM_ADDRESS` | *(unset — feature off)* | ERC-20 contract address (enables the balance endpoint) |
+| `TOTEM_RPC_URL` | `https://mainnet.base.org` | JSON-RPC endpoint |
+| `TOTEM_CHAIN_ID` | `8453` | Base mainnet |
+| `TOTEM_DECIMALS` | `18` | Token decimals |
+| `TOTEM_SYMBOL` | `TOTEM` | Display symbol |
+| `VITE_WC_PROJECT_ID` | *(unset — mobile wallet off)* | WalletConnect project ID (required for the mobile path) |
+
+> **Frontend/Vite version note:** `@reown/appkit-utils` → `@base-org/account` ships `import … with { type: 'json' }` (import attributes) in its dist. esbuild <0.20 cannot parse this, so the frontend was upgraded **Vite 4 → Vite 5** (esbuild ≥0.21) when AppKit was adopted. Don't downgrade Vite below 5.
+
+**Key files:**
+
+| File | Role |
+|---|---|
+| `server/endpoints/wallet.js` | Nonce + verify + balance endpoints; in-memory nonce store |
+| `server/utils/totemBalance.js` | $TOTEM config resolution, `eth_call` balance reader, amount formatting (pure — no server deps) |
+| `frontend/src/components/Modals/Password/MultiUserAuth.jsx` | Login modal — desktop EIP-1193 wallet button + password form |
+| `frontend/src/components/Modals/Password/WalletConnectMobile.jsx` | Mobile Reown AppKit flow (wallet picker modal + SIWE over EIP-1193 provider) |
+| `frontend/src/models/system.js` | `System.walletNonce()`, `System.walletVerify()`, `System.totemBalance()` API methods |
+
+### Credits & Billing
+
+Token-priced usage billing. The internal unit is the **microdollar** (1 µ$ = $0.000001); the customer-facing unit is an opaque integer called **"credits"**. Microdollar values are `@internal` — **never** rendered in the UI or leaked to end users.
+
+**Pricing** (`server/models/credits.js`, currently single-model `e2ee-glm-5-3-flash`; per-model rates are a `TODO`):
+
+| Token type | Rate |
+|---|---|
+| Input  | 0.5 µ$ / token ($0.50 per 1M) |
+| Output | 1.0 µ$ / token ($1.00 per 1M) |
+
+Cost is **ceiling-rounded per token type** so a partial token never under-charges:
+
+```
+cost(µ$) = ceil(inputTokens × 0.5) + ceil(outputTokens × 1.0)
+```
+
+**Data layer** — `server/models/credits.js` (static methods over Prisma):
+
+| Method | Purpose |
+|---|---|
+| `calculateCost(inputTokens, outputTokens)` | Compute cost in µ$ from rates (ceiling-rounded). |
+| `getBalance(userId)` | Current balance in µ$. |
+| `hasCredits(userId, minMicro, role)` | Pre-flight affordability check before a chat turn. |
+| `debit(userId, amount, ref, usage?)` | Deduct from balance (capped at available, never negative); records full requested cost. |
+| `debitUsage(userId, { inputTokens, outputTokens, model, reference })` | Convenience wrapper — computes cost via rates, then calls `debit`. |
+| `credit(userId, amount, type, ref)` | Top-up, refund, or welcome bonus. |
+| `getTransactions(userId, limit)` | Recent ledger rows. |
+| `getUsageStats(userId)` | Lifetime totals: input/output tokens, cost (µ$), debit count. |
+| `microToDisplay(micro)` | `@internal` — µ$ → `$…` string. **Never expose to end users.** |
+
+**Welcome bonus**: new accounts (notably via wallet signup in `wallet.js`) receive **100 000 µ$** (≈ $0.10) at creation, recorded as a `credit_transactions` row.
+
+**API** — `server/endpoints/credits.js`:
+
+| Endpoint | Auth | Purpose |
+|---|---|---|
+| `GET /credits` | session | `{ balance, transactions }` (last 20) for the signed-in user |
+| `POST /credits/debit-test` | session, **admin** | Simulate a debit (testing) |
+| `POST /credits/grant-test` | session, **admin** | Grant/adjust balance (testing) |
+
+> **Gotcha:** `wallet.js` is a *separate* concern from billing credits — it reads the on-chain $TOTEM token balance (Base) and handles SIWE wallet login. Don't conflate `GET /wallet/balance` (crypto token) with `GET /credits` (billing ledger).
+
+**Frontend** — `CreditContext` (`frontend/src/context/CreditContext.jsx`, hook `useCredits()`) + `CreditBadge` (`frontend/src/components/CreditBadge/index.jsx`):
+
+- `CreditProvider` fetches `GET /credits` on mount (authenticated); exposes `{ credits, loading, error, refresh }`.
+- Re-fetches on every completed assistant response via **`ASSISTANT_MESSAGE_COMPLETE_EVENT`** (the canonical end-of-turn signal, fired in both standard chat and agent/websocket flows) so the badge stays accurate as credits are spent.
+- Concurrency-safe: an `inFlight` ref collapses bursts of refresh/usage events into a single in-flight request.
+- Never throws to the consumer — network/auth failures resolve to `error: true` with the last-known (or null) balance, so the badge degrades gracefully.
+- The badge renders the opaque integer only; the microdollar value never reaches the DOM.
 
 ## Collector Service Details
 
@@ -261,7 +393,7 @@ Frontend entry point alias: `@` → `frontend/src/`. Build output goes to `serve
 ### Frontend Structure
 - **Pages**: `Admin`, `GeneralSettings`, `Invite`, `Login`, `Main`, `OnboardingFlow`, `WorkspaceChat`, `WorkspaceSettings`
 - **Components**: `WorkspaceChat` (core chat UI), `Sidebar` (workspace nav + threads), `Modals` (settings dialogs), `LLMSelection`, `VectorDBSelection`, `EmbeddingSelection`, `SpeechToText`, `TextToSpeech`
-- **Contexts**: Auth, Theme, PWA, Logo, Pfp, EmbeddingProgress
+- **Contexts**: Auth, Theme, PWA, Logo, Pfp, EmbeddingProgress, CreditContext (live credit balance; `useCredits()`)
 
 ## Swagger Docs
 
@@ -300,6 +432,7 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 - **SSE for chat, WebSocket for agents**: Chat-to-workspace uses HTTP SSE streaming. Agent tool execution streams over dedicated WebSocket connection (`agentWebsocket.js`). Both require different frontend handling.
 - **Body limit is 3GB** across all services — allows large document uploads but means body-parser buffers huge payloads into memory.
 - **No relation on `workspace_agent_invocations.thread_id`**: Intentional — SQLite migration would lock the entire `workspace_threads` table, causing cascading timeouts. Same pattern on `workspace_chats.thread_id`.
+- **Credits ≠ microdollars, and ≠ wallet token**: `server/models/credits.js` + `credit_transactions` work in **microdollars**; the frontend `CreditContext`/`CreditBadge` show an opaque integer. `microToDisplay()` is `@internal` — never render it to end users. `wallet.js` ($TOTEM on-chain token + SIWE login) is a *different* balance entirely.
 
 ## Security Notes
 

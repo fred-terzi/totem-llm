@@ -1,6 +1,6 @@
 const fs = require("fs/promises");
 const path = require("path");
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 async function copyRecursive(source, destination) {
   const lstat = await fs.lstat(source);
@@ -73,6 +73,9 @@ module.exports.FilesystemCopyFile = {
           },
           handler: async function ({ source = "", destination = "" }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-copy-file tool.`
               );

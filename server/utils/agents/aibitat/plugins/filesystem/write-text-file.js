@@ -1,4 +1,4 @@
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 module.exports.FilesystemWriteTextFile = {
   name: "filesystem-write-text-file",
@@ -49,6 +49,9 @@ module.exports.FilesystemWriteTextFile = {
           },
           handler: async function ({ path: filePath = "", content = "" }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-write-text-file tool.`
               );

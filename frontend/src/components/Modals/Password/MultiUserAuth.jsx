@@ -6,8 +6,97 @@ import showToast from "@/utils/toast";
 import ModalWrapper from "@/components/ModalWrapper";
 import { useModal } from "@/hooks/useModal";
 import RecoveryCodeModal from "@/components/Modals/DisplayRecoveryCodeModal";
+import WalletConnectMobile from "@/components/Modals/Password/WalletConnectMobile";
+import SignUpModal from "@/components/Modals/Password/SignUpModal";
 import { useTranslation } from "react-i18next";
 import { t } from "i18next";
+
+/**
+ * Wallet connect button with SIWE (Sign-In with Ethereum) flow.
+ * Requires a wallet extension (MetaMask, Rainbow, etc.) to be installed.
+ */
+const WalletConnectButton = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const hasWallet = typeof window !== "undefined" && !!window.ethereum;
+
+  const handleConnect = async () => {
+    setError(null);
+    if (!hasWallet) {
+      setError(
+        "No wallet detected. Please install MetaMask or another wallet extension."
+      );
+      return;
+    }
+    setLoading(true);
+    try {
+      // Step 1: Request wallet account (prompts user to connect if needed)
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No wallet account available.");
+      }
+      const address = accounts[0];
+
+      // Step 2: Get nonce + message from server
+      const { nonce, message } = await System.walletNonce();
+      if (!nonce || !message) {
+        throw new Error("Could not get signing message.");
+      }
+
+      // Step 3: Sign the message with the wallet
+      const signature = await window.ethereum.request({
+        method: "personal_sign",
+        params: [message, address],
+      });
+      if (!signature) throw new Error("Signature was rejected.");
+
+      // Step 4: Verify signature on server, get JWT
+      const result = await System.walletVerify({ signature, nonce });
+      if (result.valid && result.token && result.user) {
+        window.localStorage.setItem(AUTH_USER, JSON.stringify(result.user));
+        window.localStorage.setItem(AUTH_TOKEN, result.token);
+        window.location = paths.home();
+      } else {
+        throw new Error(result.message || "Wallet login failed.");
+      }
+    } catch (e) {
+      console.error("[wallet] login failed:", e.message);
+      setError(e.message || "Wallet connection failed.");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center w-[300px] my-3">
+        <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+        <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">
+          on desktop
+        </span>
+        <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+      </div>
+      <button
+        type="button"
+        onClick={handleConnect}
+        disabled={loading}
+        className="text-zinc-200 light:text-slate-700 hover:bg-zinc-800 light:hover:bg-slate-200 text-sm rounded-lg border border-zinc-600 light:border-slate-400 h-[38px] w-[300px] flex items-center justify-center gap-x-2 transition-colors"
+      >
+        {/* Ethereum diamond icon */}
+        <svg width="18" height="18" viewBox="0 0 32 32" fill="currentColor">
+          <path d="M16 2L5.5 16.746L16 23.199L26.5 16.746L16 2Z" opacity=".7" />
+          <path d="M16 25.288L5.5 18.799L16 30L26.5 18.799L16 25.288Z" />
+        </svg>
+        {loading ? "Connecting..." : "Connect Wallet in Browser"}
+      </button>
+      {error && (
+        <p className="text-red-400 text-xs mt-2 text-center">{error}</p>
+      )}
+    </>
+  );
+};
 
 const RecoveryForm = ({ onSubmit, setShowRecoveryForm }) => {
   const [username, setUsername] = useState("");
@@ -180,6 +269,8 @@ export default function MultiUserAuth() {
   const [token, setToken] = useState(null);
   const [showRecoveryForm, setShowRecoveryForm] = useState(false);
   const [showResetPasswordForm, setShowResetPasswordForm] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);
+  const [canSignUp, setCanSignUp] = useState(false);
   const [customAppName, setCustomAppName] = useState(null);
 
   const {
@@ -270,6 +361,12 @@ export default function MultiUserAuth() {
       setLoading(false);
     };
     fetchCustomAppName();
+    // Sign-up option is only offered when the admin has opened the door.
+    const fetchPublicRegistration = async () => {
+      const { publicRegistration } = await System.publicRegistration();
+      setCanSignUp(publicRegistration);
+    };
+    fetchPublicRegistration();
   }, []);
 
   if (showRecoveryForm) {
@@ -283,6 +380,17 @@ export default function MultiUserAuth() {
 
   if (showResetPasswordForm)
     return <ResetPasswordForm onSubmit={handleResetSubmit} />;
+
+  if (showSignUp)
+    return (
+      <SignUpModal
+        onBackToLogin={() => {
+          setShowSignUp(false);
+          setError(null);
+        }}
+      />
+    );
+
   return (
     <>
       <form
@@ -297,11 +405,27 @@ export default function MultiUserAuth() {
               </h3>
             </div>
             <p className="text-zinc-400 light:text-zinc-600 text-sm text-center">
-              {t("login.sign-in", { appName: customAppName || "AnythingLLM" })}
+              {t("login.sign-in", { appName: customAppName || "Totem LLM" })}
             </p>
           </div>
         </div>
-        <div className="w-full px-12">
+
+        {/* Wallet login (primary) */}
+        <div className="flex items-center w-[300px] flex-col gap-y-6">
+          <WalletConnectButton />
+          <WalletConnectMobile />
+        </div>
+
+        {/* Official install — password login */}
+        <div className="flex items-center w-[300px] mt-3">
+          <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+          <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">
+            Totem Official Installs
+          </span>
+          <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
+        </div>
+
+        <div className="w-full px-12 mt-3">
           <div className="w-full flex flex-col gap-y-3">
             <div className="w-full flex flex-col gap-y-2">
               <label className="text-zinc-300 light:text-slate-800 text-sm">
@@ -311,9 +435,13 @@ export default function MultiUserAuth() {
                 name="username"
                 type="text"
                 className="border-none bg-zinc-800 light:bg-slate-200 text-zinc-200 light:text-zinc-600 text-sm rounded-lg p-2.5 w-[300px] h-[34px] focus:outline-none focus:ring-1 focus:ring-sky-300"
+                placeholder="Username or email"
                 required={true}
-                autoComplete="off"
+                autoComplete="username"
               />
+              <p className="text-zinc-500 light:text-slate-400 text-xs">
+                You can log in with your username or your account email.
+              </p>
             </div>
             <div className="w-full px-0 flex flex-col gap-y-2">
               <label className="text-zinc-300 light:text-slate-800 text-sm">
@@ -330,6 +458,7 @@ export default function MultiUserAuth() {
             {error && <p className="text-red-400 text-sm">Error: {error}</p>}
           </div>
         </div>
+
         <div className="flex items-center px-12 mt-9 space-x-2 w-full flex-col gap-y-6">
           <button
             disabled={loading}
@@ -350,6 +479,21 @@ export default function MultiUserAuth() {
               {t("login.multi-user.reset")}
             </b>
           </button>
+          {canSignUp && (
+            <button
+              type="button"
+              className="text-zinc-200 light:text-zinc-600 hover:text-sky-300 light:hover:text-sky-600 hover:underline text-sm"
+              onClick={() => {
+                setError(null);
+                setShowSignUp(true);
+              }}
+            >
+              No account?{" "}
+              <b className="font-semibold text-sky-300 light:text-sky-600">
+                Sign up
+              </b>
+            </button>
+          )}
         </div>
       </form>
 

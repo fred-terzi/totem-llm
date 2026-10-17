@@ -61,6 +61,7 @@ const SystemSettings = {
     "agent_clarifying_questions_max_per_turn",
     "custom_app_name",
     "feature_flags",
+    "allow_public_registration",
     "meta_page_title",
     "meta_page_favicon",
     "memory_enabled",
@@ -89,6 +90,9 @@ const SystemSettings = {
     "agent_clarifying_questions_max_per_turn",
     "custom_app_name",
     "default_system_prompt",
+
+    // Multi-user mode extras
+    "allow_public_registration",
 
     // Meta page customization
     "meta_page_title",
@@ -407,6 +411,10 @@ const SystemSettings = {
       if (!Number.isFinite(n) || n < 1) return 3;
       return Math.min(Math.floor(n), 10);
     },
+    allow_public_registration: (update) => {
+      if (typeof update === "boolean") return update ? "true" : "false";
+      return String(update) === "true" ? "true" : "false";
+    },
     experimental_live_file_sync: (update) => {
       if (typeof update === "boolean")
         return update === true ? "enabled" : "disabled";
@@ -689,6 +697,22 @@ const SystemSettings = {
   isMultiUserMode: async function () {
     try {
       const setting = await this.get({ label: "multi_user_mode" });
+      return setting?.value === "true";
+    } catch (error) {
+      console.error(error.message);
+      return false;
+    }
+  },
+
+  /**
+   * Whether anonymous visitors may create their own account with an email
+   * address (public sign-up). Only meaningful in multi-user mode. Defaults
+   * to false when the setting row is absent.
+   * @returns {Promise<boolean>}
+   */
+  isPublicRegistrationEnabled: async function () {
+    try {
+      const setting = await this.get({ label: "allow_public_registration" });
       return setting?.value === "true";
     } catch (error) {
       console.error(error.message);

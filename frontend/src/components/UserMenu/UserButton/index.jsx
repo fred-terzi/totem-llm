@@ -62,7 +62,7 @@ export default function UserButton() {
 
   if (mode === null) return null;
   return (
-    <div className="absolute top-3 right-4 md:top-9 md:right-10 w-fit h-fit z-40">
+    <div className="relative w-fit h-fit shrink-0">
       <button
         ref={buttonRef}
         onClick={() => setShowMenu(!showMenu)}

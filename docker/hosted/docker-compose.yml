@@ -1,0 +1,77 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Totem LLM — Hosted Multi-User Platform (Local Dev / Testing)
+#
+# Usage:
+#   cd docker/hosted
+#   cp .env.example .env   # then fill in your keys
+#   docker compose up --build
+#
+# Open: http://localhost:8686
+#
+# For production with TLS, add the Caddy service (uncomment below)
+# or deploy Caddy separately and point it at the totem service.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: totem-hosted
+
+services:
+  totem:
+    build:
+      context: ../..
+      dockerfile: docker/hosted/Dockerfile
+    container_name: totem-hosted
+    restart: unless-stopped
+    ports:
+      - "8686:8686"
+    volumes:
+      - totem-data:/app/totem-storage
+    env_file:
+      - .env
+    environment:
+      # Feature profile — baked at build time, but set here for clarity
+      # and in case the .env overrides anything.
+      TOTEM_BUILD_PROFILE: hosted
+      # Multi-user mode — enable in system_settings after first boot
+      # (or via API: POST /api/system-settings { multiUser: true })
+      # The "hosted" profile has multiUser: true in the feature flags,
+      # but the runtime toggle in system_settings also needs to be on.
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8686/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+  # ── Caddy (production TLS) ─────────────────────────────────────────────────
+  # Uncomment for production with automatic HTTPS via Let's Encrypt.
+  # Requires port 80 and 443 to be reachable.
+  #
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: totem-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile
+  #     - caddy-data:/data
+  #     - caddy-config:/config
+  #   depends_on:
+  #     - totem
+  #   networks:
+  #     - totem-net
+  #
+  # ── Caddyfile (production) ──────────────────────────────────────────────────
+  # totem.example.com {
+  #     reverse_proxy totem:8686
+  # }
+
+volumes:
+  totem-data:
+  # caddy-data:
+  # caddy-config:
+
+# networks:
+#   totem-net:

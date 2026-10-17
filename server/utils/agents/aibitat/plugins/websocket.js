@@ -55,6 +55,13 @@ const websocket = {
       name: this.name,
       setup(aibitat) {
         aibitat.onError(async (error) => {
+          // A user-triggered abort (Stop / socket close / client disconnect)
+          // is not an upstream model failure - unwind quietly without
+          // reporting a scary error or sending a wssFailure to the socket.
+          if (aibitat.abortSignal.aborted) {
+            aibitat.terminate();
+            return;
+          }
           let errorMessage =
             error?.message || "An error occurred while running the agent.";
           console.error(chalk.red(`   error: ${errorMessage}`), error);
@@ -293,7 +300,30 @@ const websocket = {
           socket.close();
         });
 
+        // If the run is aborted while a feedback/interrupt prompt is pending
+        // (socket is in WAITING_ON_INPUT), resolve the pending feedback
+        // promise as a bail so the interrupt handler closes the socket
+        // instead of calling aibitat.continue() on an aborted run.
+        aibitat.onAbort(() => {
+          if (typeof socket.handleFeedback === "function") {
+            const handler = socket.handleFeedback;
+            delete socket.handleFeedback;
+            handler(
+              JSON.stringify({
+                type: "awaitingFeedback",
+                feedback: "exit",
+                attachments: [],
+              })
+            );
+          }
+        });
+
         aibitat.onInterrupt(async (node) => {
+          // Guard: abort fired while askForFeedback was pending.
+          if (aibitat.abortSignal.aborted) {
+            socket.close();
+            return;
+          }
           const { feedback, attachments } = await socket.askForFeedback(
             socket,
             node

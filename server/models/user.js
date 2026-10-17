@@ -7,6 +7,7 @@ const { EventLogs } = require("./eventLogs");
  * @property {number} id
  * @property {string} username
  * @property {string} password
+ * @property {string|null} email
  * @property {string} pfpFilename
  * @property {string} role
  * @property {boolean} suspended
@@ -19,6 +20,7 @@ const User = {
     // Used for generic updates so we can validate keys in request body
     "username",
     "password",
+    "email",
     "pfpFilename",
     "role",
     "suspended",
@@ -47,6 +49,24 @@ const User = {
       } catch (e) {
         throw new Error(e.message);
       }
+    },
+    /**
+     * Optional email address:
+     * - Empty/null/undefined returns null (field left unset)
+     * - Normalized to lowercase, max 254 characters (RFC 5321 limit)
+     * - Must match a basic local@domain format with a dotted domain
+     */
+    email: (newValue = null) => {
+      if (newValue === null || newValue === undefined) return null;
+      const email = String(newValue).trim().toLowerCase();
+      if (!email) return null;
+      if (email.length > 254)
+        throw new Error("Email cannot be longer than 254 characters");
+      // Local part, then domain with at least one dot (rejects user@localhost).
+      const EMAIL_REGEX = /^[a-z0-9][a-z0-9._%+-]*@([a-z0-9-]+\.)+[a-z]{2,}$/;
+      if (!EMAIL_REGEX.test(email))
+        throw new Error("A valid email address is required");
+      return email;
     },
     role: (role = "default") => {
       const VALID_ROLES = ["default", "admin", "manager"];
@@ -81,6 +101,8 @@ const User = {
         return Number(Boolean(value));
       case "dailyMessageLimit":
         return value === null ? null : Number(value);
+      case "email":
+        return value === null || value === undefined ? null : String(value);
       default:
         return String(value);
     }
@@ -111,6 +133,7 @@ const User = {
     role = "default",
     dailyMessageLimit = null,
     bio = "",
+    email = null,
   }) {
     const passwordCheck = this.checkPasswordComplexity(password);
     if (!passwordCheck.checkedOK) {
@@ -120,6 +143,7 @@ const User = {
     try {
       // Validate username format (validation function handles all checks)
       const validatedUsername = this.validations.username(username);
+      const validatedEmail = this.validations.email(email);
 
       const bcrypt = require("bcryptjs");
       const hashedPassword = bcrypt.hashSync(password, 10);
@@ -131,6 +155,7 @@ const User = {
           bio: this.validations.bio(bio),
           dailyMessageLimit:
             this.validations.dailyMessageLimit(dailyMessageLimit),
+          email: validatedEmail,
         },
       });
       return { user: this.filterFields(user), error: null };
@@ -273,6 +298,27 @@ const User = {
     try {
       const user = await prisma.users.findFirst({ where: clause });
       return user ? this.filterFields({ ...user }) : null;
+    } catch (error) {
+      console.error(error.message);
+      return null;
+    }
+  },
+  /**
+   * Look up a user by username OR email address (single identifier, either works).
+   * Emails are normalized to lowercase to match the stored format.
+   * @param {string} identifier - Username or email address.
+   * @returns {Promise<import("@prisma/client").users|null>} The user object or null if not found.
+   */
+  getByUsernameOrEmail: async function (identifier) {
+    try {
+      const id = String(identifier ?? "").trim();
+      if (!id) return null;
+      const user = await prisma.users.findFirst({
+        where: {
+          OR: [{ username: id }, { email: id.toLowerCase() }],
+        },
+      });
+      return user ? { ...user } : null;
     } catch (error) {
       console.error(error.message);
       return null;

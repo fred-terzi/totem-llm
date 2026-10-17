@@ -25,14 +25,39 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     const authToken = process.env.OLLAMA_AUTH_TOKEN;
     const basePath = process.env.OLLAMA_BASE_PATH;
     const headers = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+    // Base fetch preserves the existing no-timeout undici behavior;
+    // `_chat` layers the run's AbortSignal on top per-call.
+    this._baseFetch = OllamaAILLM.applyOllamaFetch();
     this._client = new Ollama({
       host: basePath,
       headers: headers,
-      fetch: OllamaAILLM.applyOllamaFetch(),
+      fetch: this._baseFetch,
     });
     this.model = model;
     this.verbose = true;
     this._supportsToolCalling = null;
+  }
+
+  /**
+   * Ollama chat call wired to the run's AbortSignal (if attached):
+   * `fetch()` itself honors `signal`, so aborting mid-stream tears down the
+   * request even though the Ollama SDK itself can't take a signal.
+   * @param {Object} requestPayload - Ollama chat request body
+   * @returns {Promise<ChatResponse|AsyncIterator>} - Ollama response or stream
+   */
+  async _chat(requestPayload) {
+    if (!this.abortSignal) return this.client.chat(requestPayload);
+    // Build a throwaway client whose fetch injects this run's AbortSignal
+    // (the Ollama SDK v0.6.3 has no signal support - fetch injection is the
+    // only seam). Abort mid-stream: undici aborts the request and Ollama
+    // stops generating instead of burning local GPU/CPU to completion.
+    const client = new Ollama({
+      host: this._client.config?.host,
+      headers: this._client.config?.headers,
+      fetch: (input, init = {}) =>
+        this._baseFetch(input, { ...init, signal: this.abortSignal }),
+    });
+    return client.chat(requestPayload);
   }
 
   get client() {
@@ -115,7 +140,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       options: this.queryOptions,
     };
     if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
-    const response = await this.client.chat(requestPayload);
+    const response = await this._chat(requestPayload);
     return response?.message?.content || null;
   }
 
@@ -128,7 +153,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       options: this.queryOptions,
     };
     if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
-    return await this.client.chat(requestPayload);
+    return await this._chat(requestPayload);
   }
 
   /**
@@ -358,7 +383,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         options: this.queryOptions,
       };
       if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
-      const stream = await this.client.chat(requestPayload);
+      const stream = await this._chat(requestPayload);
 
       let textResponse = "";
       let toolCalls = null;
@@ -594,7 +619,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         options: this.queryOptions,
       };
       if (this.thinkLevel !== "") requestPayload.think = this.thinkLevel;
-      const response = await this.client.chat(requestPayload);
+      const response = await this._chat(requestPayload);
 
       // Record usage (Ollama uses prompt_eval_count/eval_count)
       this.recordUsage({

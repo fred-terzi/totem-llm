@@ -42,9 +42,8 @@ export default function LLMSelectorModal({
   const [selectedLLMProvider, setSelectedLLMProvider] = useState(null);
   const [selectedLLMModel, setSelectedLLMModel] = useState("");
   const [selectedRouterId, setSelectedRouterId] = useState(null);
-  const [availableProviders, setAvailableProviders] = useState(
-    filteredProviders
-  );
+  const [availableProviders, setAvailableProviders] =
+    useState(filteredProviders);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [missingCredentials, setMissingCredentials] = useState(false);

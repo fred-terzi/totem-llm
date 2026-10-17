@@ -13,12 +13,9 @@ const chatHistory = {
     return {
       name: this.name,
       setup: function (aibitat) {
-        // If the agent is aborted (e.g. user sent /reset mid-response), skip
-        // the pending save so a completing in-flight response doesn't reappear.
-        aibitat.onAbort(() => {
-          aibitat._aborted = true;
-        });
-
+        // Note: `aibitat._aborted` is set centrally by AIbitat.abort()
+        // before the "abort" event fires, so we no longer need to set it
+        // here — the onMessage check below just reads that flag.
         // pre-register a workspace chat ID to secure it in the DB
         aibitat.onMessage(async (message) => {
           if (message.from !== "USER") return;
@@ -99,11 +96,38 @@ const chatHistory = {
         { prompt, response, attachments = [] } = {}
       ) {
         const invocation = aibitat.handlerProps.invocation;
-        const metrics = aibitat.providerInstance?.getUsage?.() ?? {};
+
+        // Use session-level usage (cumulative across all LLM calls in this turn)
+        // instead of lastUsage (last call only) so the stored metrics reflect
+        // the total tokens Venice actually billed for this turn.
+        const lastCall = aibitat.providerInstance?.getUsage?.() ?? {};
+        const session = aibitat.providerInstance?.getSessionUsage?.() ?? {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        };
+        const metrics = {
+          // Primary numbers = session totals (accurate for billing)
+          prompt_tokens: session.prompt_tokens || 0,
+          completion_tokens: session.completion_tokens || 0,
+          total_tokens: session.total_tokens || 0,
+          // Per-last-call info for debugging / context window display
+          lastCall: {
+            prompt_tokens: lastCall.prompt_tokens || 0,
+            completion_tokens: lastCall.completion_tokens || 0,
+            total_tokens: lastCall.total_tokens || 0,
+            duration: lastCall.duration || 0,
+          },
+          model: lastCall.model,
+          provider: lastCall.provider,
+          timestamp: lastCall.timestamp,
+        };
+
         const citations = aibitat._pendingCitations ?? [];
         const outputs = aibitat._pendingOutputs ?? [];
         const clarifyingQuestions =
           aibitat._pendingClarifyingQuestionSurveys ?? [];
+
         await WorkspaceChats.upsert(aibitat.trackedChatId, {
           workspaceId: Number(invocation.workspace_id),
           prompt,
@@ -121,6 +145,15 @@ const chatHistory = {
           include: true,
         });
 
+        // Debit credits based on input/output token usage. Admins are exempt.
+        await this._debitCredits(
+          invocation,
+          metrics.prompt_tokens,
+          metrics.completion_tokens,
+          metrics.model,
+          aibitat.trackedChatId
+        );
+
         if (!aibitat._threadRenamed) {
           aibitat._threadRenamed = await this._autoRenameThread(
             aibitat,
@@ -134,12 +167,35 @@ const chatHistory = {
         { prompt, response, attachments = [], options = {} } = {}
       ) {
         const invocation = aibitat.handlerProps.invocation;
-        const metrics = aibitat.providerInstance?.getUsage?.() ?? {};
+
+        // Use session-level usage (cumulative across all LLM calls in this turn)
+        const lastCall = aibitat.providerInstance?.getUsage?.() ?? {};
+        const session = aibitat.providerInstance?.getSessionUsage?.() ?? {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        };
+        const metrics = {
+          prompt_tokens: session.prompt_tokens || 0,
+          completion_tokens: session.completion_tokens || 0,
+          total_tokens: session.total_tokens || 0,
+          lastCall: {
+            prompt_tokens: lastCall.prompt_tokens || 0,
+            completion_tokens: lastCall.completion_tokens || 0,
+            total_tokens: lastCall.total_tokens || 0,
+            duration: lastCall.duration || 0,
+          },
+          model: lastCall.model,
+          provider: lastCall.provider,
+          timestamp: lastCall.timestamp,
+        };
+
         const citations = aibitat._pendingCitations ?? [];
         const outputs = aibitat._pendingOutputs ?? [];
         const clarifyingQuestions =
           aibitat._pendingClarifyingQuestionSurveys ?? [];
         const existingSources = options?.sources ?? [];
+
         await WorkspaceChats.upsert(aibitat.trackedChatId, {
           workspaceId: Number(invocation.workspace_id),
           prompt,
@@ -161,6 +217,15 @@ const chatHistory = {
           include: true,
         });
 
+        // Debit credits based on input/output token usage. Admins are exempt.
+        await this._debitCredits(
+          invocation,
+          metrics.prompt_tokens,
+          metrics.completion_tokens,
+          metrics.model,
+          aibitat.trackedChatId
+        );
+
         if (!aibitat._threadRenamed) {
           aibitat._threadRenamed = await this._autoRenameThread(
             aibitat,
@@ -169,6 +234,51 @@ const chatHistory = {
         }
         options?.postSave();
         this._cleanup(aibitat);
+      },
+
+      /**
+       * Debit credits from the user's balance based on actual token usage.
+       * Cost = ceil(input_tokens × 0.5) + ceil(output_tokens × 1.0)  [microdollars]
+       * Admins are exempt. Failures are logged and do not block the chat save.
+       * @param {object}   invocation
+       * @param {number}   inputTokens   — prompt tokens
+       * @param {number}   outputTokens  — completion tokens
+       * @param {string}   [model]
+       * @param {number|null} chatId
+       */
+      _debitCredits: async function (
+        invocation,
+        inputTokens,
+        outputTokens,
+        model,
+        chatId = null
+      ) {
+        const userId = invocation?.user_id;
+        if (!userId || (!inputTokens && !outputTokens)) return;
+
+        try {
+          const { Credits } = require("../../../../models/credits");
+          const { User } = require("../../../../models/user");
+          const user = await User.get({ id: Number(userId) });
+          if (!user || user.role === "admin") return;
+
+          const reference = chatId ? `chat_${chatId}` : null;
+          const result = await Credits.debitUsage(userId, {
+            inputTokens: inputTokens || 0,
+            outputTokens: outputTokens || 0,
+            model: model || undefined,
+            reference,
+          });
+          console.log(
+            `\x1b[33m[Credits]\x1b[0m user_${userId} debited ${result.debited} microdollars ` +
+              `(${inputTokens} in / ${outputTokens} out, cost=${result.cost}) balance: ${result.newBalance}`
+          );
+        } catch (e) {
+          // Credit debit failure should never block the chat save.
+          console.error(
+            `\x1b[31m[Credits] Error debiting user ${userId}: ${e.message}\x1b[0m`
+          );
+        }
       },
 
       _autoRenameThread: async function (aibitat, prompt) {

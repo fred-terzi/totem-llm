@@ -1,5 +1,5 @@
 const path = require("path");
-const filesystem = require("./lib.js");
+const { getFilesystemFor } = require("./lib.js");
 
 module.exports.FilesystemReadTextFile = {
   name: "filesystem-read-text-file",
@@ -62,6 +62,9 @@ module.exports.FilesystemReadTextFile = {
           },
           handler: async function ({ path: filePath = "", head, tail }) {
             try {
+              const filesystem = getFilesystemFor(
+                this.super.handlerProps?.userId
+              );
               this.super.handlerProps.log(
                 `Using the filesystem-read-text-file tool.`
               );

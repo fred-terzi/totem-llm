@@ -31,7 +31,6 @@ const LLM_DEFAULT = {
   requiredConfig: [],
 };
 
-
 export default function WorkspaceLLMSelection({
   settings,
   workspace,
@@ -41,7 +40,8 @@ export default function WorkspaceLLMSelection({
   const providerAllowlist = featureFlags.llmProviders?.allowlist ?? null;
   const LLMS = [LLM_DEFAULT, ...AVAILABLE_LLM_PROVIDERS].filter((llm) => {
     if (DISABLED_PROVIDERS.includes(llm.value)) return false;
-    if (providerAllowlist && !providerAllowlist.includes(llm.value)) return false;
+    if (providerAllowlist && !providerAllowlist.includes(llm.value))
+      return false;
     return true;
   });
   const [filteredLLMs, setFilteredLLMs] = useState([]);
@@ -74,7 +74,8 @@ export default function WorkspaceLLMSelection({
     );
     setFilteredLLMs(filtered);
   }, [LLMS, searchQuery, selectedLLM]);
-  const selectedLLMObject = LLMS.find((llm) => llm.value === selectedLLM) ?? LLM_DEFAULT;
+  const selectedLLMObject =
+    LLMS.find((llm) => llm.value === selectedLLM) ?? LLM_DEFAULT;
 
   return (
     <div className="border-b border-white/40 pb-8">

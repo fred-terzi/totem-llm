@@ -2,6 +2,7 @@ import { THREAD_RENAME_EVENT } from "@/components/Sidebar/ActiveWorkspaces/Threa
 import { emitAssistantMessageCompleteEvent } from "@/components/contexts/TTSProvider";
 import { getAgentSessionActive } from "@/utils/chat/agent";
 import { CONTEXT_USAGE_EVENT } from "@/utils/constants";
+import showToast from "@/utils/toast";
 export const ABORT_STREAM_EVENT = "abort-chat-stream";
 
 // Tracks whether the user has seen the "Swapping over to agent chat" banner
@@ -205,6 +206,16 @@ export default function handleChat(
 
   // Action Handling via special 'action' attribute on response.
   if (action === "reset_chat") setChatHistory([]);
+
+  if (action === "buy_credits") {
+    showToast(
+      "You're out of credits. Top up your balance to keep chatting.",
+      "error",
+      {
+        autoClose: 8000,
+      }
+    );
+  }
 
   // Notify the UI of this turn's context usage so displays like the context
   // window indicator can stay in sync without re-deriving it from history.

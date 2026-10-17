@@ -33,7 +33,8 @@ export const ICON_COMPONENTS = {
 
 export default function Footer() {
   const [footerData, setFooterData] = useState(false);
-  const { enabled: documentationLinkEnabled } = useFeatureFlag("documentationLink");
+  const { enabled: documentationLinkEnabled } =
+    useFeatureFlag("documentationLink");
 
   useEffect(() => {
     async function fetchFooterData() {

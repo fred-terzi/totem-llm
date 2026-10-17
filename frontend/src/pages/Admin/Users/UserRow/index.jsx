@@ -12,10 +12,11 @@ const ModMap = {
   default: [],
 };
 
-export default function UserRow({ currUser, user }) {
+export default function UserRow({ currUser, user, onCreditsUpdated }) {
   const rowRef = useRef(null);
   const canModify = ModMap[currUser?.role || "default"].includes(user.role);
   const [suspended, setSuspended] = useState(user.suspended === 1);
+  const [granting, setGranting] = useState(false);
   const { isOpen, openModal, closeModal } = useModal();
   const handleSuspend = async () => {
     if (
@@ -38,6 +39,42 @@ export default function UserRow({ currUser, user }) {
       setSuspended(!suspended);
     }
   };
+  const handleGrantCredits = async () => {
+    const raw = window.prompt(
+      `Add credits to ${user.username}\n\nCurrent balance: ${(user.credits_balance ?? 0).toLocaleString("en-US")}\nEnter amount to add:`,
+      "100000"
+    );
+    if (raw === null) return;
+    const amount = parseInt(raw, 10);
+    if (!amount || amount <= 0) {
+      showToast("Please enter a valid positive number.", "error", {
+        clear: true,
+      });
+      return;
+    }
+    if (
+      !window.confirm(
+        `Add ${amount.toLocaleString("en-US")} credits to ${user.username}?`
+      )
+    )
+      return;
+
+    setGranting(true);
+    const { success, error } = await Admin.grantCredits(user.id, amount);
+    setGranting(false);
+
+    if (success) {
+      showToast(
+        `Added ${amount.toLocaleString("en-US")} credits to ${user.username}.`,
+        "success",
+        { clear: true }
+      );
+      onCreditsUpdated?.();
+    } else {
+      showToast(error || "Failed to add credits.", "error", { clear: true });
+    }
+  };
+
   const handleDelete = async () => {
     if (
       !window.confirm(
@@ -64,6 +101,11 @@ export default function UserRow({ currUser, user }) {
         </th>
         <td className="px-6">{titleCase(user.role)}</td>
         <td className="px-6">{user.createdAt}</td>
+        <td className="px-6 whitespace-nowrap">
+          {user.credits_balance != null
+            ? user.credits_balance.toLocaleString("en-US")
+            : "—"}
+        </td>
         <td className="px-6 flex items-center gap-x-6 h-full mt-2">
           {canModify && (
             <button
@@ -71,6 +113,15 @@ export default function UserRow({ currUser, user }) {
               className="text-xs font-medium text-white/80 light:text-black/80 rounded-lg hover:text-white hover:light:text-gray-500 px-2 py-1 hover:bg-white hover:bg-opacity-10"
             >
               Edit
+            </button>
+          )}
+          {currUser?.role === "admin" && (
+            <button
+              onClick={handleGrantCredits}
+              disabled={granting}
+              className="text-xs font-medium text-white/80 light:text-black/80 hover:light:text-green-500 hover:text-green-300 rounded-lg px-2 py-1 hover:bg-white hover:light:bg-green-50 hover:bg-opacity-10 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {granting ? "Adding…" : "+ Credits"}
             </button>
           )}
           {currUser?.id !== user.id && canModify && (

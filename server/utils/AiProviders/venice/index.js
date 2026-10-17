@@ -113,8 +113,7 @@ class VeniceLLM {
   static async cacheContextWindows(force = false) {
     if (VeniceLLM.modelContextCachePromise)
       return VeniceLLM.modelContextCachePromise;
-    if (Object.keys(VeniceLLM.modelContextWindows).length > 0 && !force)
-      return;
+    if (Object.keys(VeniceLLM.modelContextWindows).length > 0 && !force) return;
     if (!process.env.VENICE_API_KEY)
       return VeniceLLM.#slog(
         `No VENICE_API_KEY set - skipping context window cache.`

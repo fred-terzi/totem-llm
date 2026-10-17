@@ -58,6 +58,22 @@ class FilesystemManager {
 
   #allowedDirectories = [];
   #isInitialized = false;
+  #initialDirectories = null;
+
+  /**
+   * @param {string[]} [initialDirectories] - Optional array of absolute directory paths
+   *   that will be used as the allowed-roots for this instance. When omitted, the
+   *   default `totemllm-fs` root is used (existing behaviour).
+   */
+  constructor(initialDirectories = null) {
+    if (
+      initialDirectories &&
+      Array.isArray(initialDirectories) &&
+      initialDirectories.length > 0
+    ) {
+      this.#initialDirectories = initialDirectories;
+    }
+  }
 
   /**
    * Gets the default filesystem root path.
@@ -414,7 +430,9 @@ class FilesystemManager {
    * @returns {Promise<void>}
    */
   async ensureInitialized() {
-    if (!this.#isInitialized) await this.#initializeFilesystem();
+    if (!this.#isInitialized) {
+      await this.#initializeFilesystem(this.#initialDirectories);
+    }
   }
 
   /**
@@ -798,4 +816,47 @@ class FilesystemManager {
   }
 }
 
-module.exports = new FilesystemManager();
+/* ------------------------------------------------------------------ */
+/*  Per-user filesystem registry                                        */
+/* ------------------------------------------------------------------ */
+
+const defaultFilesystem = new FilesystemManager();
+const perUserRegistry = new Map(); // "<userId-string>" -> FilesystemManager
+
+/**
+ * Returns a `FilesystemManager` scoped to the given user's sandbox directory.
+ *
+ * - `userId == null` → returns the shared default instance (single-user / legacy path).
+ * - `userId` is a Prisma integer → returns a cached per-user instance whose
+ *   allow-list is `$STORAGE_DIR/totemllm-fs/users/<userId>/`.
+ *
+ * The per-user directory is created lazily on first `ensureInitialized()` call
+ * (i.e. the first `validatePath()` invocation for that user), so importing this
+ * module has zero filesystem side-effects.
+ *
+ * @param {number|null|undefined} userId - Prisma user ID or null/undefined
+ * @returns {FilesystemManager}
+ */
+function getFilesystemFor(userId) {
+  if (userId == null) return defaultFilesystem;
+  const key = String(userId);
+  if (perUserRegistry.has(key)) return perUserRegistry.get(key);
+
+  const storageRoot =
+    process.env.STORAGE_DIR ||
+    path.resolve(__dirname, "../../../../../storage");
+  const userRoot = path.join(storageRoot, "totemllm-fs", "users", key);
+
+  const instance = new FilesystemManager([userRoot]);
+  perUserRegistry.set(key, instance);
+  return instance;
+}
+
+// Backwards-compatible: existing plugins do `const filesystem = require("./lib.js")`
+// and call `filesystem.validatePath(...)` etc. — that still works because
+// `module.exports` is the default (shared) instance.
+// New code should use `require("./lib.js").getFilesystemFor(userId)`.
+module.exports = defaultFilesystem;
+module.exports.defaultFs = defaultFilesystem;
+module.exports.getFilesystem = () => defaultFilesystem;
+module.exports.getFilesystemFor = getFilesystemFor;

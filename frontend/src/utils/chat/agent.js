@@ -71,7 +71,9 @@ export function getAgentStepTokenUsage(data) {
 export function emitAgentTokenUsage(data) {
   const usage = getAgentStepTokenUsage(data);
   if (usage && usage.promptTokens > 0) {
-    window.dispatchEvent(new CustomEvent("agent-token-usage", { detail: usage }));
+    window.dispatchEvent(
+      new CustomEvent("agent-token-usage", { detail: usage })
+    );
   }
 }
 
@@ -359,7 +361,10 @@ export default function handleSocketResponse(socket, event, setChatHistory) {
   }
 
   // Handle dedicated tokenUsage events sent outside of reportStreamEvent
-  if (data.type === "agentStepUsage" || (data && getAgentStepTokenUsage(data))) {
+  if (
+    data.type === "agentStepUsage" ||
+    (data && getAgentStepTokenUsage(data))
+  ) {
     emitAgentTokenUsage(data);
     return;
   }
@@ -459,64 +464,6 @@ export function setAgentSessionActive(value) {
 }
 export function getAgentSessionActive() {
   return _agentSessionActive;
-}
-
-/**
- * Persistent agent socket store.
- * Keeps active WebSocket sessions alive when the user navigates away from a
- * workspace or thread so they don't have to wait for the full @agent
- * setup/planning phase when they return to the same context.
- *
- * Key format: "<workspaceSlug>:<threadSlug|default>"
- */
-const _persistedSockets = new Map();
-
-/**
- * @param {string} key - workspace:thread key
- * @param {WebSocket} socket - the active WebSocket
- * @param {string} socketId - the invocation UUID used to identify the session
- */
-export function persistAgentSocket(key, socket, socketId) {
-  _persistedSockets.set(key, { socket, socketId });
-}
-
-/**
- * @param {string} key
- * @returns {{ socket: WebSocket, socketId: string } | null}
- */
-export function getPersistedAgentSocket(key) {
-  const entry = _persistedSockets.get(key);
-  if (!entry) return null;
-  // If the socket is no longer open, clean it up.
-  if (entry.socket.readyState !== WebSocket.OPEN) {
-    _persistedSockets.delete(key);
-    return null;
-  }
-  return entry;
-}
-
-/**
- * Remove a persisted socket and close it.
- * @param {string} key
- */
-export function closePersistedAgentSocket(key) {
-  const entry = _persistedSockets.get(key);
-  if (entry) {
-    entry.socket.close();
-    _persistedSockets.delete(key);
-  }
-}
-
-/**
- * Close ALL persisted agent sockets (e.g. on page unload).
- */
-export function closeAllPersistedAgentSockets() {
-  for (const { socket } of _persistedSockets.values()) {
-    try {
-      socket.close();
-    } catch {}
-  }
-  _persistedSockets.clear();
 }
 
 export function useIsAgentSessionActive() {
