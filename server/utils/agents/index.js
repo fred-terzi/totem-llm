@@ -803,6 +803,7 @@ class AgentHandler {
         invocation: this.invocation,
         log: this.log,
         routingMetadata: this.routingMetadata || null,
+        userId: this.invocation.user_id || null,
       },
     });
 
