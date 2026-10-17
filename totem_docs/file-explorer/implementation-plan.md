@@ -181,7 +181,18 @@ No middleware attached here — auth is applied at route registration in Step 2.
 
 ---
 
-## Step 2 — Server: Register routes in `server/index.js`
+## Step 2 — Server: Register routes in `server/index.js` ✅ DONE
+
+> **Implemented via commit `e33d513a`.** Note: the snippet below is the *original* plan (direct `app.get` on `app`). The actual implementation (per Step 0 recon findings) exports a `filesystemEndpoints(app)` function from `server/endpoints/filesystem.js` and registers it on `apiRouter` — matching the existing endpoint pattern:
+>
+> ```js
+> // server/index.js:47
+> const { filesystemEndpoints } = require("./endpoints/filesystem");
+> // server/index.js:117
+> filesystemEndpoints(apiRouter);
+> ```
+>
+> Routes register as `/filesystem/list` & `/filesystem/read` on `apiRouter`, producing full URLs `/api/filesystem/list` & `/api/filesystem/read`. Both use `[validatedRequest, flexUserRoleValid([ROLES.all])]`. The plan snippet below is retained for reference.
 
 **File:** `server/index.js` (or wherever other `/api/*` routes are registered — confirm in Step 0.2)
 
@@ -718,13 +729,9 @@ Ran a 15-case script against a real `os.tmpdir()` sandbox (root `package.json` i
 | File | Change |
 |------|--------|
 | `server/endpoints/filesystem.js` | **new** (Step 1 deliverable) |
+| `server/index.js` | `require` + `filesystemEndpoints(apiRouter)` registration (Step 2, commit `e33d513a`) |
 | `totem_docs/file-explorer/implementation-plan.md` | Step 1 marked ✅ DONE + this findings section |
 
-### Ready for Step 2
+### Step 2 status
 
-`server/index.js` needs:
-```js
-const { filesystemEndpoints } = require("./endpoints/filesystem");
-// alongside the other endpoint registrations:
-filesystemEndpoints(apiRouter);
-```
+Step 2 is **done** — `server/index.js` contains the `require` and `filesystemEndpoints(apiRouter);` registration (commit `e33d513a`). See the Step 2 section above.
