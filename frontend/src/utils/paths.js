@@ -193,6 +193,9 @@ export default {
     importData: () => {
       return "/settings/import-data";
     },
+    files: () => {
+      return "/settings/files";
+    },
     scheduledJobRuns: (jobId) => {
       return `/settings/scheduled-jobs/${jobId}/runs`;
     },

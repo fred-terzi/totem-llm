@@ -211,7 +211,7 @@ curl -s -b "session=..." http://localhost:8686/api/filesystem/list | jq .
 
 ---
 
-## Step 3 — Frontend: Create the FileExplorer component
+## Step 3 — Frontend: Create the FileExplorer component ✅ DONE
 
 **New files:**
 ```

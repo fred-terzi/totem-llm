@@ -470,6 +470,12 @@ const SidebarOptions = ({ user = null, t }) => {
                 flex: true,
                 roles: ["admin", "manager", "default"],
               },
+              {
+                btnText: t("settings.files", "Files"),
+                href: paths.settings.files(),
+                flex: true,
+                roles: ["admin", "manager", "default"],
+              },
               ...(developerApiEnabled
                 ? [
                     {
