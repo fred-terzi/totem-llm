@@ -17,6 +17,7 @@ d5fbc4c8  fix(file-explorer): remove centered logo from SettingsSidebar mobile t
 70bc1f49  fix(file-explorer): halve mobile top padding to mt-8 / calc(100%-32px)
 fafb7965  feat(file-explorer): add lightweight Markdown viewer with rendered/raw toggle
 8f84d1d4  test(file-explorer): add endpoint test suite (19 cases)
+00c4612a  docs(file-explorer): update plan, spec, index, release notes
 ```
 
 ---
@@ -277,12 +278,14 @@ Implements `topbar-button-plan.md`.
 
 ---
 
-## Step 8 — Docs & release
+## Step 8 — Docs & release ✅
 
 - [x] `requirement-spec.md` — status ✅ Implemented; F4 updated, F4b (Markdown) added.
 - [x] `implementation-plan.md` — this document, all steps updated to ✅ with real file paths, line counts, commit hashes, and deviations.
-- [ ] `totem_docs/README.md` — add one-line index entry for `file-explorer/`.
-- [ ] `RELEASE.md` — add `feat: file explorer & viewer (Markdown renderer, topbar button)` bullet under the current dev heading.
+- [x] `totem_docs/README.md` — index entry added (line 32: `File Explorer & Viewer | file-explorer/ | ✅ Implemented`).
+- [x] `RELEASE.md` — `feat(file-explorer)` bullet added under **Unreleased**, including Markdown renderer + topbar button sub-bullets.
+
+**Commit:** `00c4612a`
 
 ---
 
