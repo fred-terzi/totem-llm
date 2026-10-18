@@ -71,22 +71,6 @@ function walletEndpoints(app) {
   if (!app) return;
 
   /**
-   * POST /api/auth/wallet/ping
-   *
-   * Sanity check only: the frontend calls this when the "Connect Mobile
-   * Wallet" button is tapped, so the server log proves the frontend and
-   * backend are talking — completely independent of the wallet/relay flow.
-   * No state, no auth, no side effects.
-   */
-  app.post("/auth/wallet/ping", async (request, response) => {
-    const { origin } = reqBody(request);
-    console.log(
-      `[wallet:ping] BUTTON PRESSED — frontend reached the server. ip=${request.ip} host=${request.headers.host} origin=${origin || "(none)"}`
-    );
-    response.status(200).json({ ok: true, ts: Date.now() });
-  });
-
-  /**
    * GET /api/wallet/balance
    *
    * Reads the caller's $TOTEM token balance (on-chain, Base) for the wallet
