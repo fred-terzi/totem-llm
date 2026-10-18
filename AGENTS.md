@@ -253,9 +253,9 @@ Sign-In with Ethereum (SIWE) is the **primary login method**. Users sign a serve
 | Path | Component | How it works |
 |---|---|---|
 | **Desktop (EIP-1193)** | `WalletConnectButton` (inline in `MultiUserAuth.jsx`) | `window.ethereum.request({ method: "eth_requestAccounts" })` → `System.walletNonce()` → `window.ethereum.request({ method: "personal_sign", params: [message, address] })` → `System.walletVerify({ signature, nonce })` → store JWT + user in `localStorage` → redirect to home. Works with MetaMask, Rainbow, and any wallet that injects `window.ethereum`. |
-| **Mobile (Reown AppKit)** | `WalletConnectMobile.jsx` | Uses **Reown AppKit** (`@reown/appkit` + `@reown/appkit-adapter-ethers`, ethers v6) instead of hand-rolled WalletConnect. `createAppKit()` is called once at module scope; the component uses `useAppKit`/`useAppKitAccount`/`useAppKitProvider` hooks. Tap "Connect Mobile Wallet" → AppKit's wallet picker modal handles wallet discovery, deep links/universal links (incl. cold-start retries), QR fallback, and session persistence across page reloads. Once connected, SIWE runs over the AppKit-provided EIP-1193 provider: `System.walletNonce()` → `personal_sign` → `System.walletVerify()` → JWT → redirect. Replaces the earlier raw `@walletconnect/sign-client` two-tap flow, whose MetaMask cold-start deep-link drops and Android hand-back reloads made login unreliable. Requires `VITE_WC_PROJECT_ID`. EVM-only (Phantom/Solana not supported). |
+| **Mobile (MetaMask Connect)** | `WalletConnectMobile.jsx` | Uses **MetaMask Connect** (`@metamask/connect-evm`, first-party MetaMask SDK) — one deep link into the MetaMask app, one approval. Tap "Sign in with MetaMask" → `System.walletNonce()` → `client.connectAndSign({ message })` (connect + `personal_sign` combined into a single user approval, SDK owns the deeplink/handback plumbing) → `System.walletVerify()` → JWT → redirect. The SDK auto-deeplinks to MetaMask Mobile and auto-redirects back after approval on both platforms. Nonce (+ captured signature) is persisted in `sessionStorage` so a mid-flow page reload can resume (server keeps a 30 s replay window on the consumed nonce for exactly this). Requires `VITE_INFURA_API_KEY` (Infura RPC URLs for the client's `supportedNetworks`; free tier is sufficient). EVM-only, MetaMask-only on mobile — wallets opened in their own in-app browsers still hit the desktop EIP-1193 path. Replaces both the raw `@walletconnect/sign-client` two-tap flow (Android cold-start deep-link drops) and the Reown AppKit rewrite (broke both platforms in the beta Docker environment, heavy warning spam in dev mode). |
 
-> **Mobile wallet connection:** the mobile path uses **Reown AppKit**, which handles wallet discovery, deep linking, cold-start retries, and session persistence internally — do not hand-roll `@walletconnect/sign-client` deep-link flows for mobile login; they break on MetaMask cold launches and Android universal-link hand-backs.
+> **Mobile wallet connection:** the mobile path uses **MetaMask Connect** (`@metamask/connect-evm`) — the first-party MetaMask SDK that owns deeplink/handback handling (`connectAndSign` = connect + `personal_sign` in one approval). Do not hand-roll `@walletconnect/sign-client` deep-link flows for mobile login — they break on MetaMask cold launches and Android universal-link hand-backs. Do not re-adopt Reown AppKit for login either — it broke both mobile platforms in the beta Docker environment (Oct 2026).
 
 **On-chain $TOTEM balance** (`GET /wallet/balance`):
 
@@ -268,9 +268,9 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 | `TOTEM_CHAIN_ID` | `8453` | Base mainnet |
 | `TOTEM_DECIMALS` | `18` | Token decimals |
 | `TOTEM_SYMBOL` | `TOTEM` | Display symbol |
-| `VITE_WC_PROJECT_ID` | *(unset — mobile wallet off)* | WalletConnect project ID (required for the mobile path) |
+| `VITE_INFURA_API_KEY` | *(unset — mobile wallet off)* | Infura API key (free tier OK) — required for the mobile MetaMask Connect path |
 
-> **Frontend/Vite version note:** `@reown/appkit-utils` → `@base-org/account` ships `import … with { type: 'json' }` (import attributes) in its dist. esbuild <0.20 cannot parse this, so the frontend was upgraded **Vite 4 → Vite 5** (esbuild ≥0.21) when AppKit was adopted. Don't downgrade Vite below 5.
+> **Frontend/Vite version note:** Vite was upgraded **Vite 4 → Vite 5** (esbuild ≥0.21) when wallet SDKs were adopted — their dist code requires esbuild ≥0.20. Don't downgrade Vite below 5. Also note: `frontend/package.json` pins `@wallet-standard/base` to `1.1.0` via `resolutions` — its `1.1.1` declares `engines: node >=22`, which yarn 1 hard-fails on under our Node 18.18 pin.
 
 **Key files:**
 
@@ -279,7 +279,7 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 | `server/endpoints/wallet.js` | Nonce + verify + balance endpoints; in-memory nonce store |
 | `server/utils/totemBalance.js` | $TOTEM config resolution, `eth_call` balance reader, amount formatting (pure — no server deps) |
 | `frontend/src/components/Modals/Password/MultiUserAuth.jsx` | Login modal — desktop EIP-1193 wallet button + password form |
-| `frontend/src/components/Modals/Password/WalletConnectMobile.jsx` | Mobile Reown AppKit flow (wallet picker modal + SIWE over EIP-1193 provider) |
+| `frontend/src/components/Modals/Password/WalletConnectMobile.jsx` | Mobile MetaMask Connect flow (`connectAndSign` SIWE — one deep link, one approval, reload-resumable) |
 | `frontend/src/models/system.js` | `System.walletNonce()`, `System.walletVerify()`, `System.totemBalance()` API methods |
 
 ### Credits & Billing
