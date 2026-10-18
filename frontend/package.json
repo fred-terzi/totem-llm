@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@lobehub/icons": "^4.0.3",
-    "@metamask/connect-evm": "2.1.1",
     "@microsoft/fetch-event-source": "^2.0.1",
     "@mintplex-labs/piper-tts-web": "^1.0.4",
     "@phosphor-icons/react": "^2.1.7",

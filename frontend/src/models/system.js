@@ -131,62 +131,17 @@ const System = {
     }
   },
 
-  /**
-   * Sanity check for the mobile wallet flow: called when the "Connect
-   * Mobile Wallet" button is tapped. If this reaches the server, the
-   * server log shows "[wallet:ping] BUTTON PRESSED" — proving the
-   * frontend↔backend path works, independent of the wallet/relay flow.
-   */
-  walletPing: async function () {
+  walletVerify: async function (body) {
     try {
-      const res = await fetch(`${API_BASE}/auth/wallet/ping`, {
+      const res = await fetch(`${API_BASE}/auth/wallet/verify`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ origin: window.location.origin }),
+        body: JSON.stringify(body),
       });
-      if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
       return await res.json();
     } catch (e) {
-      return { ok: false, error: e.message };
+      return { valid: false, user: null, token: null, message: e.message };
     }
-  },
-
-  walletVerify: async function (body, maxRetries = 3) {
-    const url = `${API_BASE}/auth/wallet/verify`;
-    let lastError = null;
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        // Server received and responded (even 4xx/5xx) — return immediately.
-        // HTTP errors are not retried because the nonce is single-use and
-        // the server already consumed (or rejected) it.
-        return await res.json();
-      } catch (e) {
-        // Network-level failure (TypeError: "Failed to fetch").
-        // Typical cause on mobile: Android suspends the browser tab while
-        // the user is in the wallet app; on resume the network stack needs
-        // a moment to re-establish the LAN connection. The nonce is safe —
-        // it is only consumed server-side on a *successful* verify, so a
-        // request that never arrived does not invalidate it.
-        lastError = e;
-        if (attempt < maxRetries) {
-          const delay = 1500 * (attempt + 1);
-          await new Promise((r) => setTimeout(r, delay));
-          continue;
-        }
-      }
-    }
-    console.error("[wallet] verify:", lastError?.message);
-    return {
-      valid: false,
-      user: null,
-      token: null,
-      message: lastError?.message || "Network error",
-    };
   },
 
   /**

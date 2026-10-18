@@ -58,18 +58,6 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        // @metamask/mobile-wallet-protocol-core is CJS-only in its package.json (no
-        // "module"/"exports" field), so Vite's dep optimizer fails to detect its named
-        // exports and emits a default-only chunk. At runtime connect-multichain does
-        // `const { SessionStore } = await import(...)` → undefined →
-        // "undefined is not an object (evaluating 'mwpCore.SessionStore.create')".
-        // The package ships a real ESM build at dist/index.mjs — force Vite to use it.
-        find: "@metamask/mobile-wallet-protocol-core",
-        replacement: fileURLToPath(
-          new URL("./node_modules/@metamask/mobile-wallet-protocol-core/dist/index.mjs", import.meta.url)
-        ),
-      },
-      {
         find: "@",
         replacement: fileURLToPath(new URL("./src", import.meta.url))
       },
