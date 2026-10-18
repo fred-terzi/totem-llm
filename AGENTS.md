@@ -37,6 +37,8 @@ Totem LLM, a self-hosted AI chat app. Fork of [AnythingLLM](https://github.com/M
 | `config/` | Build-time feature flags (`totem.features.json`) | — |
 | `scripts/` | Setup, postinstall, build orchestrators | ESM (.mjs) |
 
+> **File tree reference:** `FILE_TREE.md` (repo root) is an auto-generated listing of all source files (~1,350 files, ~25K tokens). Read it to quickly locate where a component, endpoint, or utility lives without grepping. Regenerate after structural changes: `node scripts/generate-file-tree.mjs --file` (or `yarn file-tree:generate`).
+
 ### Key Files by Service
 
 **Server entry**: `server/index.js` — loads `.env`, creates storage dirs, mounts ~27 endpoint routers under `/api`, serves static frontend in prod. Body limit: 3GB. CORS: `origin: true`. HTTPS via `bootSSL` if `ENABLE_HTTPS`.
