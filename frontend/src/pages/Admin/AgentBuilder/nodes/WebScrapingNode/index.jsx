@@ -1,5 +1,3 @@
-import Toggle from "@/components/lib/Toggle";
-
 export default function WebScrapingNode({
   config,
   onConfigChange,
