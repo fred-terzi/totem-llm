@@ -7,12 +7,13 @@ import paths from "../../../utils/paths";
 // ── Config ──────────────────────────────────────────────────────────────────
 const infuraKey = import.meta.env.VITE_INFURA_API_KEY;
 
-// Base (8453) is where $TOTEM lives; mainnet (1) as a secondary. Map keyed by
-// CAIP-2 chain id → full RPC URL, per the @metamask/connect-evm v2 API.
+// Base (8453) is where $TOTEM lives; mainnet (1) as a secondary. Per the
+// @metamask/connect-evm API the map lives under `api:` and is keyed by HEX
+// chain id ("0x1", "0x8453") → full RPC URL. CAIP-2 keys ("eip155:1") throw.
 const supportedNetworks = infuraKey
   ? {
-      "eip155:1": `https://eth-mainnet.infura.io/v3/${infuraKey}`,
-      "eip155:8453": `https://base-mainnet.infura.io/v3/${infuraKey}`,
+      "0x1": `https://eth-mainnet.infura.io/v3/${infuraKey}`,
+      "0x8453": `https://base-mainnet.infura.io/v3/${infuraKey}`,
     }
   : undefined;
 
@@ -31,7 +32,7 @@ function getMetaMaskClient() {
   }
   if (!mmClientPromise) {
     mmClientPromise = createEVMClient({
-      supportedNetworks,
+      api: { supportedNetworks },
       dapp: {
         name: "Totem",
         url: window.location.origin,
@@ -129,7 +130,7 @@ function runSIWE({ onDone, onError }) {
         const client = await getMetaMaskClient();
         const { signature } = await client.connectAndSign({
           message: p.message,
-          chainIds: ["eip155:1", "eip155:8453"],
+          chainIds: ["0x1", "0x8453"],
         });
         if (!signature || signature === "0x")
           throw new Error("Signature was rejected.");
