@@ -6,6 +6,7 @@ import showToast from "@/utils/toast";
 import ModalWrapper from "@/components/ModalWrapper";
 import { useModal } from "@/hooks/useModal";
 import RecoveryCodeModal from "@/components/Modals/DisplayRecoveryCodeModal";
+import WalletConnectMobile from "@/components/Modals/Password/WalletConnectMobile";
 import SignUpModal from "@/components/Modals/Password/SignUpModal";
 import { useTranslation } from "react-i18next";
 import { t } from "i18next";
@@ -18,29 +19,13 @@ const WalletConnectButton = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // EIP-1193 injected provider (MetaMask, Rainbow, Brave, …). Present in
-  // desktop browsers with a wallet extension and inside mobile wallet
-  // in-app browsers. Plain mobile Safari/Chrome have none — for those we
-  // show a deep link into MetaMask (no SDK, no relay, nothing to break).
   const hasWallet = typeof window !== "undefined" && !!window.ethereum;
-  const isMobile =
-    typeof navigator !== "undefined" &&
-    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  // MetaMask universal deep link — opens the current URL inside MetaMask's
-  // in-app browser, where window.ethereum IS injected. Works on Android
-  // and iOS, no SDK required.
-  const metaMaskDappUrl =
-    typeof window !== "undefined"
-      ? `https://metamask.app.link/dapp/${window.location.host}${window.location.pathname}`
-      : "https://metamask.app.link";
 
   const handleConnect = async () => {
     setError(null);
     if (!hasWallet) {
       setError(
-        isMobile
-          ? "No wallet found in this browser. Open this site in the MetaMask app's built-in browser, or install the MetaMask extension on desktop."
-          : "No wallet detected. Please install MetaMask or another wallet extension."
+        "No wallet detected. Please install MetaMask or another wallet extension."
       );
       return;
     }
@@ -108,14 +93,6 @@ const WalletConnectButton = () => {
       </button>
       {error && (
         <p className="text-red-400 text-xs mt-2 text-center">{error}</p>
-      )}
-      {isMobile && !hasWallet && (
-        <a
-          href={metaMaskDappUrl}
-          className="text-zinc-950 bg-white hover:bg-zinc-300 light:bg-sky-200 light:text-slate-950 light:hover:bg-sky-300 text-sm font-semibold rounded-lg border-primary-button h-[38px] w-[300px] flex items-center justify-center gap-x-2 mt-2 transition-colors"
-        >
-          Open this site in MetaMask
-        </a>
       )}
     </>
   );
@@ -436,6 +413,7 @@ export default function MultiUserAuth() {
         {/* Wallet login (primary) */}
         <div className="flex items-center w-[300px] flex-col gap-y-6">
           <WalletConnectButton />
+          <WalletConnectMobile />
         </div>
 
         {/* Official install — password login */}
