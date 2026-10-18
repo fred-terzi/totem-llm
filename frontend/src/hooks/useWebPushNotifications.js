@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { API_BASE } from "@/utils/constants";
 import { baseHeaders } from "@/utils/request";
+import showToast from "@/utils/toast";
 
 const PUSH_PUBKEY_URL = `${API_BASE}/web-push/pubkey`;
 const PUSH_USER_SUBSCRIBE_URL = `${API_BASE}/web-push/subscribe`;
@@ -67,13 +68,15 @@ export async function subscribeToPushNotifications(askToEnable = true) {
           newWorker.state === "installed" &&
           navigator.serviceWorker.controller
         ) {
-          // New service worker is installed and ready
+          // New service worker is installed and ready. Do NOT force a reload:
+          // on mobile this often fires right as the app is resumed from the
+          // background, so users see the page "refresh itself". The update
+          // activates on the next natural navigation/reload instead.
           log("New service worker installed, ready to activate");
-
-          // Optionally show a notification to the user
-          if (confirm("A new version is available. Reload to update?")) {
-            window.location.reload();
-          }
+          showToast(
+            "A new version is available. It will load on your next visit.",
+            "info"
+          );
         }
       });
     });

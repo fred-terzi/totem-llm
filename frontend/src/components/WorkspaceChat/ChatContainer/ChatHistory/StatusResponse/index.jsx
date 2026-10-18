@@ -55,10 +55,6 @@ export default function StatusResponse({ messages = [], isThinking = false }) {
               <button
                 onClick={handleExpandClick}
                 className="absolute top-4 right-4 border-none text-zinc-200 light:text-slate-800 transition-colors"
-                data-tooltip-id="expand-cot"
-                data-tooltip-content={
-                  isExpanded ? "Hide thought chain" : "Show thought chain"
-                }
                 aria-label={
                   isExpanded ? "Hide thought chain" : "Show thought chain"
                 }

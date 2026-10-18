@@ -1,6 +1,7 @@
 import paths from "./paths";
 import { useEffect } from "react";
 import { userFromStorage } from "./request";
+import navigateTo from "./navigation";
 import { TOGGLE_LLM_SELECTOR_EVENT } from "@/components/WorkspaceChat/ChatContainer/PromptInput/LLMSelector/action";
 
 export const KEYBOARD_SHORTCUTS_HELP_EVENT = "keyboard-shortcuts-help";
@@ -9,37 +10,37 @@ export const SHORTCUTS = {
   "⌘ + ,": {
     translationKey: "settings",
     action: () => {
-      window.location.href = paths.settings.interface();
+      navigateTo(paths.settings.interface());
     },
   },
   "⌘ + H": {
     translationKey: "home",
     action: () => {
-      window.location.href = paths.home();
+      navigateTo(paths.home());
     },
   },
   "⌘ + I": {
     translationKey: "workspaces",
     action: () => {
-      window.location.href = paths.settings.workspaces();
+      navigateTo(paths.settings.workspaces());
     },
   },
   "⌘ + K": {
     translationKey: "apiKeys",
     action: () => {
-      window.location.href = paths.settings.apiKeys();
+      navigateTo(paths.settings.apiKeys());
     },
   },
   "⌘ + L": {
     translationKey: "llmPreferences",
     action: () => {
-      window.location.href = paths.settings.llmPreference();
+      navigateTo(paths.settings.llmPreference());
     },
   },
   "⌘ + Shift + C": {
     translationKey: "chatSettings",
     action: () => {
-      window.location.href = paths.settings.chat();
+      navigateTo(paths.settings.chat());
     },
   },
   "⌘ + Shift + ?": {
