@@ -146,8 +146,8 @@ app.post(
   async function (request, response) {
     const { link, captureAs = "text" } = reqBody(request);
     try {
-      const { success, content = null } = await getLinkText(link, captureAs);
-      response.status(200).json({ url: link, success, content });
+      const { success, content = null, title = null } = await getLinkText(link, captureAs);
+      response.status(200).json({ url: link, success, content, title });
     } catch (e) {
       console.error(e);
       response.status(200).json({
