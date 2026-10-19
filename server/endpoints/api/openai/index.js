@@ -8,7 +8,6 @@ const { EventLogs } = require("../../../models/eventLogs");
 const {
   OpenAICompatibleChat,
 } = require("../../../utils/chats/openaiCompatible");
-const { getModelTag } = require("../../utils");
 const { extractTextContent, extractAttachments } = require("./helpers");
 
 function apiOpenAICompatibleEndpoints(app) {

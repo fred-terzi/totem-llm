@@ -1,5 +1,3 @@
-const { getGitVersion } = require("../../endpoints/utils");
-
 function checkColumnTemplate(tablename = null, column = null) {
   if (!tablename || !column)
     throw new Error(`Migration Error`, { tablename, column });

@@ -181,7 +181,7 @@ class OllamaAILLM {
             ...init,
             dispatcher: new Agent({ headersTimeout: ONE_HOUR_MS }),
           });
-      } catch (_) {
+      } catch {
         return fetch;
       }
     }

@@ -103,7 +103,10 @@ const webScraping = {
            */
           scrape: async function (url, maxTokens) {
             const DEFAULT_MAX_TOKENS = 32_000;
-            const cap = Math.max(500, Math.min(maxTokens || DEFAULT_MAX_TOKENS, 128_000));
+            const cap = Math.max(
+              500,
+              Math.min(maxTokens || DEFAULT_MAX_TOKENS, 128_000)
+            );
 
             this.super.introspect(
               `${this.caller}: Scraping the content of ${url} (cap: ${cap} tokens)`

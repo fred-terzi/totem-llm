@@ -2,7 +2,7 @@ const { v4: uuidv4 } = require("uuid");
 const { WorkspaceThread } = require("../../../models/workspaceThread");
 const { Workspace } = require("../../../models/workspace");
 const { validApiKey } = require("../../../utils/middleware/validApiKey");
-const { reqBody, multiUserMode } = require("../../../utils/http");
+const { reqBody } = require("../../../utils/http");
 const { VALID_CHAT_MODE } = require("../../../utils/chats/stream");
 const { EventLogs } = require("../../../models/eventLogs");
 const {
@@ -12,7 +12,6 @@ const {
 const { WorkspaceChats } = require("../../../models/workspaceChats");
 const { User } = require("../../../models/user");
 const { ApiChatHandler } = require("../../../utils/chats/apiChatHandler");
-const { getModelTag } = require("../../utils");
 
 function apiWorkspaceThreadEndpoints(app) {
   if (!app) return;

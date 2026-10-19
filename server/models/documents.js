@@ -3,7 +3,6 @@ const { getVectorDbClass } = require("../utils/helpers");
 const prisma = require("../utils/prisma");
 const { EventLogs } = require("./eventLogs");
 const { safeJsonParse } = require("../utils/http");
-const { getModelTag } = require("../endpoints/utils");
 
 const Document = {
   writable: ["pinned", "watched", "lastUpdatedAt"],

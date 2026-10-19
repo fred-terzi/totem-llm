@@ -26,7 +26,7 @@ async function importChatgptExport(dirPath, userId = null) {
   }
 
   // Get metadata for the summary report
-  const metadata = getExportMetadata(dirPath);
+  getExportMetadata(dirPath);
 
   // STEP 2: Parse
   let parsed;

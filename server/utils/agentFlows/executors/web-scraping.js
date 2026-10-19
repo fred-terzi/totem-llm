@@ -20,7 +20,7 @@ async function executeWebScraping(config, context) {
 
   const captureMode = captureAs === "querySelector" ? "html" : captureAs;
   introspect(`Scraping the content of ${url} as ${captureAs}`);
-  const { success, content, title } = await new CollectorApi()
+  const { success, content } = await new CollectorApi()
     .getLinkContent(url, captureMode)
     .then((res) => {
       if (captureAs !== "querySelector") return res;

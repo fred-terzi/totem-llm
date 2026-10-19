@@ -1,5 +1,5 @@
 const {
-  multiUserMode,
+  multiUserMode: _multiUserMode,
   userFromSession,
   reqBody,
   safeJsonParse,
@@ -17,7 +17,6 @@ const {
 } = require("../utils/middleware/validWorkspace");
 const { WorkspaceChats } = require("../models/workspaceChats");
 const { convertToChatHistory } = require("../utils/helpers/chat/responses");
-const { getModelTag } = require("./utils");
 
 function workspaceThreadEndpoints(app) {
   if (!app) return;

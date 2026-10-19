@@ -305,10 +305,8 @@ function walletEndpoints(app) {
 
           // --- Auto-create a default workspace for the new user ---
           try {
-            const { workspace, message: wsError } = await Workspace.new(
-              "My Workspace",
-              user.id
-            );
+            const { workspace: _workspace, message: wsError } =
+              await Workspace.new("My Workspace", user.id);
             if (wsError) {
               console.error(
                 "[wallet] default workspace creation failed:",
