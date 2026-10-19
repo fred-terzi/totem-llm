@@ -123,9 +123,9 @@ services:
       #   VECTOR_DB: lancedb
       #
       # ── Feature flags (baked into the Vite bundle at dev-server start) ──
-      # "source" profile enables terminal access, agent mode, etc.
-      # (default — see Dockerfile ENV)
-      TOTEM_BUILD_PROFILE: hosted
+      # "beta" profile = hosted + filesystem tool + text splitter
+      # (no terminal access, no community hub, no model router)
+      TOTEM_BUILD_PROFILE: beta
 
       # ── WalletConnect (mobile wallet login) ────────────────────────────
       # Required for the "Start pairing" + "Open in MetaMask" flow.

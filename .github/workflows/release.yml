@@ -1,0 +1,57 @@
+name: Release
+
+on:
+  push:
+    branches: [main-totem]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for conventional-commits parsing
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: yarn install --ignore-scripts
+
+      - name: Create release
+        id: release
+        run: |
+          # standard-version auto-detects bump level from conventional commits since last tag:
+          #   feat! / BREAKING CHANGE  → major
+          #   feat                     → minor
+          #   fix / perf / revert      → patch
+          #   no applicable commits    → no-op (exits 0, no commit or tag created)
+          BEFORE=$(git rev-parse HEAD)
+
+          yarn standard-version 2>&1
+
+          AFTER=$(git rev-parse HEAD)
+
+          if [ "$BEFORE" != "$AFTER" ]; then
+            TAG=$(git describe --tags --abbrev=0)
+            echo "created=true"  >> "$GITHUB_OUTPUT"
+            echo "tag=${TAG}"   >> "$GITHUB_OUTPUT"
+            echo "::notice::Released: ${TAG}"
+          else
+            echo "created=false" >> "$GITHUB_OUTPUT"
+            echo "No release-worthy commits since last tag — skipping."
+          fi
+
+      - name: Push release commit + tags
+        if: steps.release.outputs.created == 'true'
+        run: |
+          git push
+          git push --tags
+          echo "Released ${steps.release.outputs.tag} — commit + tag pushed."

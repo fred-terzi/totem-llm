@@ -22,6 +22,10 @@ export const CONTEXT_USAGE_EVENT = "context-usage-update";
 // (Defined here for a single import point; tests mock this string directly.)
 export const AGENT_TOKEN_USAGE_EVENT = "agent-token-usage";
 
+// Emitted when the chat history is cleared (/reset command) so components
+// like the context usage indicator can drop their state and hide the bar.
+export const CONTEXT_USAGE_CLEAR_EVENT = "context-usage-clear";
+
 export const APPEARANCE_SETTINGS = "anythingllm_appearance_settings";
 
 export const OLLAMA_COMMON_URLS = [

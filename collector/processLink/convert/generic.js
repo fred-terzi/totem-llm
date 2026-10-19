@@ -1,3 +1,4 @@
+const { toMarkdown } = require("../helpers/toMarkdown");
 const { v4 } = require("uuid");
 const {
   PuppeteerWebBaseLoader,
@@ -51,11 +52,32 @@ async function scrapeGenericUrl({
     );
 
   // Otherwise, assume the content is a webpage and scrape the content from the webpage
-  const content = await getPageContent({
+  let content = await getPageContent({
     link,
     captureAs,
     headers: scraperHeaders,
   });
+  let pageTitle = null;
+
+  // Convert raw HTML to clean, structured Markdown using Readability + Turndown.
+  // This strips nav, footer, ads, cookie banners and preserves headings, lists,
+  // tables, and code blocks — dramatically reducing token count for LLM consumption.
+  if (captureAs === "markdown" && content) {
+    const result = toMarkdown(content);
+    if (result.markdown && result.markdown.length) {
+      content = result.markdown;
+      pageTitle = result.title;
+    } else {
+      console.warn(
+        `-- Markdown conversion failed (source=${result.source}), falling back to raw HTML --`
+      );
+    }
+    console.log(
+      `-- Markdown conversion: source=${result.source}, "${result.title}" ` +
+      `(${result.markdown.length} chars) --`
+    );
+  }
+
   if (!content || !content.length) {
     console.error(`Resulting URL content was empty at ${link}.`);
     return returnResult({
@@ -70,11 +92,11 @@ async function scrapeGenericUrl({
   // If the captureAs is text, return the content as a string immediately
   // so that we dont save the content as a document
   if (!saveAsDocument)
-    return returnResult({
+    return {
       success: true,
       content,
-      saveAsDocument,
-    });
+      title: pageTitle || null,
+    };
 
   // Save the content as a document from the URL
   const url = new URL(link);
@@ -83,7 +105,7 @@ async function scrapeGenericUrl({
   const data = {
     id: v4(),
     url: "file://" + slugify(filename) + ".html",
-    title: metadata.title || slugify(filename) + ".html",
+    title: pageTitle || metadata.title || slugify(filename) + ".html",
     docAuthor: metadata.docAuthor || "no author found",
     description: metadata.description || "No description found.",
     docSource: metadata.docSource || "URL link uploaded by the user.",
@@ -170,7 +192,7 @@ async function getPageContent({ link, captureAs = "text", headers = {} }) {
       async evaluate(page, browser) {
         const result = await page.evaluate((captureAs) => {
           if (captureAs === "text") return document.body.innerText;
-          if (captureAs === "html") return document.documentElement.innerHTML;
+          if (captureAs === "html" || captureAs === "markdown") return document.documentElement.innerHTML;
           return document.body.innerText;
         }, captureAs);
         await browser.close();

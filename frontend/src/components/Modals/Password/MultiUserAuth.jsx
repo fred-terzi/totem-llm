@@ -74,7 +74,7 @@ const WalletConnectButton = () => {
       <div className="flex items-center w-[300px] my-3">
         <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
         <span className="px-3 text-zinc-500 light:text-slate-400 text-xs">
-          on desktop
+          or
         </span>
         <div className="flex-1 h-px bg-zinc-700 light:bg-slate-300" />
       </div>
@@ -89,7 +89,7 @@ const WalletConnectButton = () => {
           <path d="M16 2L5.5 16.746L16 23.199L26.5 16.746L16 2Z" opacity=".7" />
           <path d="M16 25.288L5.5 18.799L16 30L26.5 18.799L16 25.288Z" />
         </svg>
-        {loading ? "Connecting..." : "Connect Wallet in Browser"}
+        {loading ? "Connecting..." : "Connect Wallet"}
       </button>
       {error && (
         <p className="text-red-400 text-xs mt-2 text-center">{error}</p>

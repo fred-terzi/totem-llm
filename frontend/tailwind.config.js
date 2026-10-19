@@ -1,3 +1,5 @@
+import typography from '@tailwindcss/typography'
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: "class",
@@ -287,6 +289,7 @@ export default {
     }
   ],
   plugins: [
+    typography,
     function ({ addVariant }) {
       addVariant('light', '.light &') // Add the `light:` variant
       addVariant('pwa', '.pwa &') // Add the `pwa:` variant

@@ -34,7 +34,6 @@ const { WorkspaceThread } = require("../models/workspaceThread");
 
 const truncate = require("truncate");
 const { purgeDocument } = require("../utils/files/purgeDocument");
-const { getModelTag } = require("./utils");
 const { searchWorkspaceAndThreads } = require("../utils/helpers/search");
 const { workspaceParsedFilesEndpoints } = require("./workspacesParsedFiles");
 const {

@@ -16,8 +16,6 @@
     "@microsoft/fetch-event-source": "^2.0.1",
     "@mintplex-labs/piper-tts-web": "^1.0.4",
     "@phosphor-icons/react": "^2.1.7",
-    "@reown/appkit": "^1.8.24",
-    "@reown/appkit-adapter-ethers": "^1.8.24",
     "@tremor/react": "^3.15.1",
     "@walletconnect/sign-client": "^2.18.0",
     "cronstrue": "^2.50.0",
@@ -61,6 +59,7 @@
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.1.1",
     "@eslint/js": "^9.39.2",
+    "@tailwindcss/typography": "^0.5.20",
     "@types/react": "^18.2.23",
     "@types/react-dom": "^18.2.8",
     "@types/react-router-dom": "^5.3.3",
@@ -85,5 +84,8 @@
     "rollup-plugin-visualizer": "^5.9.0",
     "tailwindcss": "^3.3.1",
     "vite": "^5.4.11"
+  },
+  "resolutions": {
+    "@wallet-standard/base": "1.1.0"
   }
 }

@@ -78,7 +78,10 @@ function MarkdownViewer({ content, truncated }) {
   const [mode, setMode] = useState("rendered"); // "rendered" | "raw"
 
   const html = useMemo(
-    () => (mode === "rendered" && content ? DOMPurify.sanitize(md.render(content)) : null),
+    () =>
+      mode === "rendered" && content
+        ? DOMPurify.sanitize(md.render(content))
+        : null,
     [mode, content]
   );
 
@@ -281,7 +284,10 @@ export default function FileViewer({ data, onClose }) {
   let body;
   if (isMarkdown(data.mime)) {
     body = (
-      <MarkdownViewer content={data.content || ""} truncated={!!data.truncated} />
+      <MarkdownViewer
+        content={data.content || ""}
+        truncated={!!data.truncated}
+      />
     );
   } else if (isTextLike(data.mime)) {
     body = (

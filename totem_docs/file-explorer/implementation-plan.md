@@ -93,7 +93,7 @@ function classifyValidationError(error) {
 
 - Null-byte check → **400** (spec §6).
 - `validatePath(rawPath || ".")` → **400/403/404** via `classifyValidationError`.
-- `fs.stat` → **404** on ENOENT; **400** if the path is a file (not a directory).
+- `fs.stat` → **404** on ENOENT; **404** (`"Directory not found"`) if the path is a file (not a directory) — matches spec §6 ("valid path but not a directory" → 404).
 - `fs.readdir(absolutePath, { withFileTypes: true })`.
 - Per-entry `fs.stat` **in parallel** (`Promise.all`), tolerating individual failures (broken symlinks) — the entry is still listed, just without `size`/`modified`.
 - Each entry: `{ name, type, size, sizeFormatted, modified, mime }` — `sizeFormatted` via the existing `humanFileSize(size, true, 2)` helper from `server/utils/helpers.js`; `mime` via `mimeFor` (files only).
@@ -123,7 +123,7 @@ function filesystemEndpoints(app) {
 
 Mounted on `apiRouter` in `server/index.js` (alongside `workspaceEndpoints`, `chatEndpoints`, …). Full URLs: `GET /api/filesystem/list`, `GET /api/filesystem/read`.
 
-**Acceptance:** `yarn test` → **43/43 filesystem endpoint smoke tests passed.**
+**Acceptance:** `yarn test` → **19/19 filesystem endpoint tests passed** (`server/__tests__/endpoints/filesystem.test.js`, suite added in Step 5a / commit `8f84d1d4`).
 
 ---
 

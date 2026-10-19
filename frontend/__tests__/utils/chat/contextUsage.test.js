@@ -18,17 +18,19 @@ jest.mock("@/utils/chat/agent", () => ({
   getAgentSessionActive: () => false,
 }));
 // constants.js uses `import.meta.env` which is Vite-only and not supported by
-// the CJS babel transform - mock it here. The event name just needs to match
-// whatever emitContextUsage dispatches with.
+// the CJS babel transform - mock it here. The event names just need to match
+// whatever emitContextUsage / handleChat dispatch with.
 jest.mock("@/utils/constants", () => ({
   CONTEXT_USAGE_EVENT: "context-usage-update",
+  CONTEXT_USAGE_CLEAR_EVENT: "context-usage-clear",
 }));
 
-const { CONTEXT_USAGE_EVENT } = require("@/utils/constants");
 const {
-  emitContextUsage,
-  lastContextUsageFromHistory,
-} = require("@/utils/chat");
+  CONTEXT_USAGE_EVENT,
+  CONTEXT_USAGE_CLEAR_EVENT,
+} = require("@/utils/constants");
+const { emitContextUsage, lastContextUsageFromHistory } = require("@/utils/chat");
+const handleChat = require("@/utils/chat").default;
 
 describe("emitContextUsage", () => {
   function dispatch(metrics) {
@@ -72,6 +74,56 @@ describe("emitContextUsage", () => {
   it("is a no-op when prompt_tokens is not a finite number", () => {
     expect(dispatch({ prompt_tokens: "abc" })).toHaveLength(0);
     expect(dispatch({ prompt_tokens: NaN })).toHaveLength(0);
+  });
+});
+
+describe("handleChat context usage events", () => {
+  it("dispatches the clear event (and no update event) for a reset_chat response", () => {
+    const spy = jest.spyOn(window, "dispatchEvent");
+
+    handleChat(
+      {
+        type: "statusResponse",
+        action: "reset_chat",
+        // Even if the server ever included usage on a reset response, the
+        // update event must not fire after the clear event.
+        metrics: { prompt_tokens: 500, total_tokens: 500, model: "test" },
+      },
+      () => {},
+      () => {},
+      [],
+      []
+    );
+
+    const eventNames = spy.mock.calls.map((args) => args[0].type);
+    expect(eventNames).toContain(CONTEXT_USAGE_CLEAR_EVENT);
+    expect(eventNames).not.toContain(CONTEXT_USAGE_EVENT);
+
+    spy.mockRestore();
+  });
+
+  it("still dispatches the update event for normal responses with usage metrics", () => {
+    const spy = jest.spyOn(window, "dispatchEvent");
+
+    handleChat(
+      {
+        type: "finalizeResponseStream",
+        textResponse: "hello",
+        uuid: "u1",
+        close: true,
+        metrics: { prompt_tokens: 42, total_tokens: 60, model: "test" },
+      },
+      () => {},
+      () => {},
+      [],
+      []
+    );
+
+    const eventNames = spy.mock.calls.map((args) => args[0].type);
+    expect(eventNames).toContain(CONTEXT_USAGE_EVENT);
+    expect(eventNames).not.toContain(CONTEXT_USAGE_CLEAR_EVENT);
+
+    spy.mockRestore();
   });
 });
 

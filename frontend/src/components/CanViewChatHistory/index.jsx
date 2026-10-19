@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { FullScreenLoader } from "@/components/Preloader";
 import System from "@/models/system";
 import paths from "@/utils/paths";
+import { Navigate } from "react-router-dom";
 
 /**
  * Protects the view from system set ups who cannot view chat history.
@@ -12,8 +13,8 @@ export function CanViewChatHistory({ children }) {
   const { loading, viewable } = useCanViewChatHistory();
   if (loading) return <FullScreenLoader />;
   if (!viewable) {
-    window.location.href = paths.home();
-    return <FullScreenLoader />;
+    // Client-side redirect: a full page load here tears down the SPA.
+    return <Navigate to={paths.home()} replace />;
   }
 
   return <>{children}</>;

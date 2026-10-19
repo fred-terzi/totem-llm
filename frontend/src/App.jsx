@@ -15,8 +15,23 @@ import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import ImageLightbox from "@/components/ImageLightbox";
 import { ErrorBoundary } from "react-error-boundary";
 import ErrorBoundaryFallback from "./components/ErrorBoundaryFallback";
+import { useNavigate } from "react-router-dom";
+import { registerNavigator } from "@/utils/navigation";
 import useBackendOfflineNotifications from "@/hooks/useBackendOfflineNotifications";
 import useIOSPushPrompt from "@/hooks/useIOSPushPrompt";
+
+/**
+ * Registers React Router's navigate function so non-React code (utils,
+ * module-level handlers) can navigate without full page reloads.
+ */
+function RouterNavigator() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    registerNavigator(navigate);
+    return () => registerNavigator(null);
+  }, [navigate]);
+  return null;
+}
 
 /**
  * Listen for SET_APP_BADGE messages broadcast by the push service worker.
@@ -54,6 +69,7 @@ export default function App() {
       onError={console.error}
       resetKeys={[location.pathname]}
     >
+      <RouterNavigator />
       <ThemeProvider>
         <PWAModeProvider>
           <Suspense fallback={<FullScreenLoader />}>

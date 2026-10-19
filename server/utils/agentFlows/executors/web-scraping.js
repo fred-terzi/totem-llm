@@ -7,10 +7,8 @@
 async function executeWebScraping(config, context) {
   const { CollectorApi } = require("../../collectorApi");
   const { TokenManager } = require("../../helpers/tiktoken");
-  const Provider = require("../../agents/aibitat/providers/ai-provider");
-  const { summarizeContent } = require("../../agents/aibitat/utils/summarize");
 
-  const { url, captureAs = "text", enableSummarization = true } = config;
+  const { url, captureAs = "markdown" } = config;
   const { introspect, logger, aibitat } = context;
   logger(
     `\x1b[43m[AgentFlowToolExecutor]\x1b[0m - executing Web Scraping block`
@@ -40,37 +38,31 @@ async function executeWebScraping(config, context) {
     throw new Error("There was no content to be collected or read.");
   }
 
-  if (!enableSummarization) {
-    logger(`Returning raw content as summarization is disabled`);
-    return content;
-  }
-
-  const tokenCount = new TokenManager(
-    aibitat.defaultProvider.model
-  ).countFromString(content);
-  const contextLimit = Provider.contextLimit(
-    aibitat.defaultProvider.provider,
-    aibitat.defaultProvider.model
+  // Truncate oversized pages instead of summarizing - summarization costs
+  // extra LLM calls/credits and can be slow. Token-accurate slice keeps valid UTF-8.
+  const DEFAULT_MAX_TOKENS = 32_000;
+  const cap = Math.max(
+    500,
+    Math.min(config.maxTokens || DEFAULT_MAX_TOKENS, 128_000)
   );
+  const tokenManager = new TokenManager(aibitat.defaultProvider.model);
+  const tokens = tokenManager.tokensFromString(content);
 
-  if (tokenCount < contextLimit) {
+  if (tokens.length <= cap) {
     logger(
-      `Content within token limit (${tokenCount}/${contextLimit}). Returning raw content.`
+      `Content within cap (${tokens.length}/${cap} tokens). Returning full content.`
     );
     return content;
   }
 
   introspect(
-    `This page's content is way too long (${tokenCount} tokens). I will summarize it right now.`
+    `This page's content is ~${tokens.length} tokens, exceeding the ${cap} token cap. Truncating to fit.`
   );
-  const summary = await summarizeContent({
-    provider: aibitat.defaultProvider.provider,
-    model: aibitat.defaultProvider.model,
-    content,
-  });
-
-  introspect(`Successfully summarized content`);
-  return summary;
+  const truncated = tokenManager.bytesFromTokens(tokens.slice(0, cap));
+  logger(
+    `Truncated content from ${tokens.length} to ${cap} tokens (no summarization to save credits).`
+  );
+  return `${truncated}\n\n[Content truncated: page was ~${tokens.length} tokens, showing first ${cap} tokens.]`;
 }
 
 /**

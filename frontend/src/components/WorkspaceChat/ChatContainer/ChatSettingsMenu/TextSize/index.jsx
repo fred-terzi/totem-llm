@@ -60,7 +60,7 @@ function TextSizeSubmenu({ selectedSize, onSizeChange }) {
   const textSizes = getTextSizes(t);
 
   return (
-    <div className="absolute right-full top-0 -mr-2 pr-2 pt-0">
+    <div className="absolute left-full top-0 -ml-2 pl-2 pt-0">
       <div className="bg-zinc-800 light:bg-slate-50 border border-zinc-700 light:border-slate-300 rounded-lg p-1.5 w-auto whitespace-nowrap flex flex-col gap-1 shadow-lg">
         {textSizes.map(({ key, label }) => (
           <div

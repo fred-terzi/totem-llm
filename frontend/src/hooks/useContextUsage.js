@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   CONTEXT_USAGE_EVENT,
   AGENT_TOKEN_USAGE_EVENT,
+  CONTEXT_USAGE_CLEAR_EVENT,
 } from "@/utils/constants";
 
 /**
@@ -36,9 +37,16 @@ export default function useContextUsage(initialUsage = null) {
 
     window.addEventListener(CONTEXT_USAGE_EVENT, handler);
     window.addEventListener(AGENT_TOKEN_USAGE_EVENT, handler);
+
+    // When the chat is reset (e.g. /reset command) drop the tracked usage so
+    // the context usage indicator hides instead of showing the previous bar.
+    const clearHandler = () => setUsage(null);
+    window.addEventListener(CONTEXT_USAGE_CLEAR_EVENT, clearHandler);
+
     return () => {
       window.removeEventListener(CONTEXT_USAGE_EVENT, handler);
       window.removeEventListener(AGENT_TOKEN_USAGE_EVENT, handler);
+      window.removeEventListener(CONTEXT_USAGE_CLEAR_EVENT, clearHandler);
     };
   }, []);
 

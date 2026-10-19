@@ -19,7 +19,7 @@ import debounce from "lodash.debounce";
 import Chartable from "./Chartable";
 import ModelRouteNotification from "./ModelRouteNotification";
 import Workspace from "@/models/workspace";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import paths from "@/utils/paths";
 import Appearance from "@/models/appearance";
 import useTextSize from "@/hooks/useTextSize";
@@ -41,6 +41,7 @@ export default forwardRef(function (
   const lastScrollTopRef = useRef(0);
   const chatHistoryRef = useRef(null);
   const { threadSlug = null } = useParams();
+  const navigate = useNavigate();
   const { showing, hideModal } = useManageWorkspaceModal();
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
@@ -171,10 +172,9 @@ export default forwardRef(function (
       threadSlug,
       chatId
     );
-    window.location.href = paths.workspace.thread(
-      workspace.slug,
-      newThreadSlug
-    );
+    // Client-side navigation: a full page load here tears down the SPA and
+    // loses all in-memory state (especially painful on mobile).
+    navigate(paths.workspace.thread(workspace.slug, newThreadSlug));
   };
 
   const compiledHistory = useMemo(

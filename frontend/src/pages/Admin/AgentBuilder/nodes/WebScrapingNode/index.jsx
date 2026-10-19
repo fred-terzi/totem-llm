@@ -1,5 +1,3 @@
-import Toggle from "@/components/lib/Toggle";
-
 export default function WebScrapingNode({
   config,
   onConfigChange,
@@ -30,13 +28,14 @@ export default function WebScrapingNode({
           Capture Page Content As
         </label>
         <select
-          value={config.captureAs}
+          value={config.captureAs || "markdown"}
           onChange={(e) =>
             onConfigChange({ ...config, captureAs: e.target.value })
           }
           className="w-full border-none bg-theme-settings-input-bg text-theme-text-primary text-sm rounded-lg focus:outline-primary-button active:outline-primary-button outline-none p-2.5"
         >
           {[
+            { label: "Clean Markdown (recommended)", value: "markdown" },
             { label: "Text content only", value: "text" },
             { label: "Raw HTML", value: "html" },
             { label: "CSS Query Selector", value: "querySelector" },
@@ -71,16 +70,28 @@ export default function WebScrapingNode({
         </div>
       )}
 
-      <Toggle
-        size="md"
-        variant="horizontal"
-        label="Content Summarization"
-        hint="content-summarization-tooltip"
-        enabled={config.enableSummarization ?? true}
-        onChange={(checked) =>
-          onConfigChange({ ...config, enableSummarization: checked })
-        }
-      />
+      <div>
+        <label className="block text-sm font-medium text-theme-text-primary mb-2">
+          Max Content Tokens
+        </label>
+        <p className="text-xs text-theme-text-secondary mb-2">
+          Content longer than this is truncated (not summarized) to save
+          credits. Default 32000.
+        </p>
+        <input
+          type="number"
+          min={500}
+          max={128000}
+          value={config.maxTokens ?? 32000}
+          onChange={(e) =>
+            onConfigChange({
+              ...config,
+              maxTokens: Number(e.target.value),
+            })
+          }
+          className="w-full border-none bg-theme-settings-input-bg text-theme-text-primary text-sm rounded-lg focus:outline-primary-button active:outline-primary-button outline-none p-2.5"
+        />
+      </div>
       <div>
         <label className="block text-sm font-medium text-theme-text-primary mb-2">
           Result Variable

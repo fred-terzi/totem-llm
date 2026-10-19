@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require("uuid");
-const { reqBody, multiUserMode } = require("../../utils/http");
+const { reqBody } = require("../../utils/http");
 const { streamChatWithForEmbed } = require("../../utils/chats/embed");
 const { EmbedChats } = require("../../models/embedChats");
 const {

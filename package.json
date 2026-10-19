@@ -59,7 +59,8 @@
     "prepublishOnly": "node scripts/build-frontend.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "test:install": "node scripts/test-install.mjs",
-    "fs:migrate": "node scripts/migrate-fs-to-users.mjs"
+    "fs:migrate": "node scripts/migrate-fs-to-users.mjs",
+    "file-tree:generate": "node scripts/generate-file-tree.mjs --file"
   },
   "private": false,
   "devDependencies": {

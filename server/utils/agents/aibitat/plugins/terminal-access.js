@@ -23,7 +23,7 @@ const os = require("os");
 // Each entry is an independent RegExp; a match on ANY triggers approval.
 // ---------------------------------------------------------------------------
 const DANGEROUS_PATTERNS = [
-  /rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\/|\~|\$HOME)/i, // rm -rf / ~ $HOME
+  /rm\s+(-[a-zA-Z]*r[a-zA-Z]*f|-[a-zA-Z]*f[a-zA-Z]*r)\s+(\/|~|\$HOME)/i, // rm -rf / ~ $HOME
   /rm\s+-rf\s+["']?\/(?!tmp\b|var\b|dev\b)/i, // rm -rf on root-ish paths (allow /tmp, /var, /dev for cleanup)
   /\bdd\s+of=\/dev\//i, // dd writing to block devices
   /\bmkfs(\.[a-z]+)?\s/i, // mkfs, mkfs.ext4, etc.
@@ -179,14 +179,14 @@ class TerminalManager {
         timedOut = true;
         try {
           process.kill(-proc.pid, "SIGTERM");
-        } catch (_) {
+        } catch {
           proc.kill("SIGTERM");
         }
         // Escalate to SIGKILL if still alive after 3 seconds.
         killTimer = setTimeout(() => {
           try {
             process.kill(-proc.pid, "SIGKILL");
-          } catch (_) {
+          } catch {
             /* already dead */
           }
         }, 3000);
@@ -210,7 +210,7 @@ class TerminalManager {
         // Also kill the process group in case children survived.
         try {
           process.kill(-proc.pid, "SIGKILL");
-        } catch (_) {
+        } catch {
           /* already dead */
         }
 

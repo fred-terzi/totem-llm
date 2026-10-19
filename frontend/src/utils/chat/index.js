@@ -1,7 +1,10 @@
 import { THREAD_RENAME_EVENT } from "@/components/Sidebar/ActiveWorkspaces/ThreadContainer";
 import { emitAssistantMessageCompleteEvent } from "@/components/contexts/TTSProvider";
 import { getAgentSessionActive } from "@/utils/chat/agent";
-import { CONTEXT_USAGE_EVENT } from "@/utils/constants";
+import {
+  CONTEXT_USAGE_EVENT,
+  CONTEXT_USAGE_CLEAR_EVENT,
+} from "@/utils/constants";
 import showToast from "@/utils/toast";
 export const ABORT_STREAM_EVENT = "abort-chat-stream";
 
@@ -205,7 +208,14 @@ export default function handleChat(
   }
 
   // Action Handling via special 'action' attribute on response.
-  if (action === "reset_chat") setChatHistory([]);
+  if (action === "reset_chat") {
+    setChatHistory([]);
+    // The chat history is being cleared by /reset — notify listeners (e.g. the
+    // context usage indicator) so they drop stale token usage and hide the bar.
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(CONTEXT_USAGE_CLEAR_EVENT));
+    }
+  }
 
   if (action === "buy_credits") {
     showToast(
@@ -219,7 +229,9 @@ export default function handleChat(
 
   // Notify the UI of this turn's context usage so displays like the context
   // window indicator can stay in sync without re-deriving it from history.
-  emitContextUsage(metrics);
+  // A reset_chat response already dispatched the clear event above — skip the
+  // update emission so a stale usage bar never reappears after /reset.
+  if (action !== "reset_chat") emitContextUsage(metrics);
 
   // If thread was updated automatically based on chat prompt
   // then we can handle the updating of the thread here.
