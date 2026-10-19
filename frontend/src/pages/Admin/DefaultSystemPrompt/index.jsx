@@ -74,28 +74,45 @@ export default function DefaultSystemPrompt() {
     }));
     const newSystemPrompt = systemPromptForm.value.trim();
     await System.updateDefaultSystemPrompt(newSystemPrompt)
-      .then(({ success, message }) => {
-        if (!success) throw new Error(message);
+      .then(
+        ({
+          success,
+          message,
+          updatedWorkspaces,
+          workspacePropagationError,
+        }) => {
+          if (!success) throw new Error(message);
 
-        // If the user has set the default system prompt to the sane default, reset the value to the sane default.
-        if (
-          !newSystemPrompt ||
-          newSystemPrompt.trim() === saneDefaultSystemPrompt
-        ) {
-          return setSystemPromptForm((prev) => ({
+          // If the user has set the default system prompt to the sane default, reset the value to the sane default.
+          if (
+            !newSystemPrompt ||
+            newSystemPrompt.trim() === saneDefaultSystemPrompt
+          ) {
+            return setSystemPromptForm((prev) => ({
+              ...prev,
+              value: saneDefaultSystemPrompt,
+            }));
+          }
+
+          showToast(
+            typeof updatedWorkspaces === "number"
+              ? `Default system prompt updated and applied to ${updatedWorkspaces} existing ${updatedWorkspaces === 1 ? "workspace" : "workspaces"}.`
+              : "Default system prompt updated successfully.",
+            "success"
+          );
+          if (workspacePropagationError)
+            showToast(
+              `Default system prompt saved, but it could not be applied to all existing workspaces: ${workspacePropagationError}`,
+              "warning"
+            );
+          setSystemPromptForm((prev) => ({
             ...prev,
-            value: saneDefaultSystemPrompt,
+            default: newSystemPrompt,
+            isDirty: false,
+            isSubmitting: false,
           }));
         }
-
-        showToast("Default system prompt updated successfully.", "success");
-        setSystemPromptForm((prev) => ({
-          ...prev,
-          default: newSystemPrompt,
-          isDirty: false,
-          isSubmitting: false,
-        }));
-      })
+      )
       .catch((error) => {
         showToast(
           `Failed to update default system prompt: ${error.message}`,

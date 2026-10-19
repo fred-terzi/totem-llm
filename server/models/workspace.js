@@ -287,6 +287,71 @@ const Workspace = {
   },
 
   /**
+   * Propagate a new default system prompt to every existing workspace that is
+   * still using the previous default (or has no prompt at all). Workspaces
+   * with a customized prompt are deliberately left untouched so an admin
+   * changing the default never clobbers per-workspace overrides.
+   * @param {string|null} newPrompt - The new default system prompt. Null/empty means "reset to sane default".
+   * @param {Object|null} user - The admin user performing the change (for event logging).
+   * @param {string|null} previousPrompt - The previous default system prompt, captured before the setting was overwritten.
+   * @returns {Promise<{updatedWorkspaces: number, error: string|null}>}
+   */
+  propagateDefaultSystemPrompt: async function (
+    newPrompt = null,
+    user = null,
+    previousPrompt = null
+  ) {
+    try {
+      const effectivePrompt =
+        typeof newPrompt === "string" && newPrompt.trim()
+          ? newPrompt.trim()
+          : SystemSettings.saneDefaultSystemPrompt;
+      const previousDefault =
+        typeof previousPrompt === "string" && previousPrompt.trim()
+          ? previousPrompt.trim()
+          : SystemSettings.saneDefaultSystemPrompt;
+
+      // Only touch workspaces that are still on the old default (or blank).
+      const result = await prisma.workspaces.updateMany({
+        where: {
+          OR: [
+            { openAiPrompt: null },
+            { openAiPrompt: "" },
+            { openAiPrompt: previousDefault },
+          ],
+        },
+        data: {
+          openAiPrompt: effectivePrompt,
+          lastUpdatedAt: new Date(),
+        },
+      });
+
+      const { EventLogs } = require("./eventLogs");
+      try {
+        await EventLogs.logEvent(
+          "default_system_prompt_propagated",
+          {
+            updatedWorkspaces: result.count,
+            promptLength: effectivePrompt.length,
+          },
+          user?.id || null
+        );
+      } catch (logError) {
+        // Audit log failure must not mask a successful propagation.
+        console.error(
+          "Workspace.propagateDefaultSystemPrompt (event log):",
+          logError.message
+        );
+      }
+
+      return { updatedWorkspaces: result.count, error: null };
+    } catch (error) {
+      console.error("Workspace.propagateDefaultSystemPrompt:", error.message);
+      return { updatedWorkspaces: 0, error: error.message };
+    }
+  },
+
+  /**
    * Set (or clear) the default-user inference option for a workspace.
    * The ONLY sanctioned write path for `user_inference_option` — called from
    * the F13 endpoint (`POST /workspace/:slug/inference-option`). The option

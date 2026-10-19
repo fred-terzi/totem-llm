@@ -978,6 +978,13 @@ function systemEndpoints(app) {
     async (request, response) => {
       try {
         const { defaultSystemPrompt } = reqBody(request);
+        // Capture the previous default BEFORE it is overwritten so we can
+        // target only the workspaces that are still tracking the old default.
+        const previousSetting = await SystemSettings.get({
+          label: "default_system_prompt",
+        });
+        const previousPrompt =
+          previousSetting?.value || SystemSettings.saneDefaultSystemPrompt;
         const { success, error } = await SystemSettings.updateSettings({
           default_system_prompt: defaultSystemPrompt,
         });
@@ -985,9 +992,38 @@ function systemEndpoints(app) {
           throw new Error(
             error.message || "Failed to update default system prompt."
           );
+
+        // Propagate the new default system prompt to every existing workspace
+        // so the admin does not have to re-apply it one workspace at a time.
+        // Failures here are logged and reported in the response but never
+        // roll back the saved setting.
+        let propagatedToWorkspaces = 0;
+        let workspacePropagationError = null;
+        try {
+          const user = response.locals?.user || null;
+          const result = await Workspace.propagateDefaultSystemPrompt(
+            defaultSystemPrompt,
+            user,
+            previousPrompt
+          );
+          propagatedToWorkspaces = result.updatedWorkspaces;
+          if (result.error) workspacePropagationError = result.error;
+        } catch (propError) {
+          workspacePropagationError = propError.message;
+          console.error(
+            "Failed to propagate default system prompt to workspaces:",
+            propError.message
+          );
+        }
+
         response.status(200).json({
           success: true,
-          message: "Default system prompt updated successfully.",
+          message:
+            workspacePropagationError === null
+              ? "Default system prompt updated successfully."
+              : "Default system prompt updated, but it could not be applied to all existing workspaces.",
+          updatedWorkspaces: propagatedToWorkspaces,
+          workspacePropagationError,
         });
       } catch (error) {
         console.error("Error updating default system prompt:", error);
