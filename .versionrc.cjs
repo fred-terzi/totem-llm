@@ -16,7 +16,4 @@ module.exports = {
   compareUrlFormat: '{{host}}/{{owner}}/{{repo}}/compare/{{previousTag}}...{{currentTag}}',
   issueUrlFormat: '{{host}}/{{owner}}/{{repo}}/issues/{{id}}',
   releaseCommitMessageFormat: 'chore(release): v{{currentTag}} [skip ci]',
-  scripts: {
-    postbump: 'node scripts/postversion.mjs',
-  },
 }

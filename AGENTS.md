@@ -411,8 +411,15 @@ Auto-generated on server start/restart by nodemon event hook in `server/nodemon.
 
 ## Versioning & Release Process
 
-- **`RELEASE.md`** (repo root) is the single source of truth for versioning and releases: standard-version workflow, semver bump rules, tag/publish steps. Follow it for every release.
-- Never skip the version bump when creating a PR that reaches main-totem.
+- **`RELEASE.md`** (repo root) is the single source of truth for versioning and releases.
+- **Releases are automated** by GitHub Actions (`.github/workflows/release.yml`). When a PR merges into `main-totem`, `standard-version` runs automatically: bumps `package.json`, updates `CHANGELOG.md`, creates the tag, and pushes. No manual `npx standard-version` step needed.
+- Bump level is derived from conventional commit types since the last tag: `feat:` → minor, `fix:`/`perf:` → patch, `feat!:`/`BREAKING CHANGE` → major.
+- **After the release is pushed**, fast-forward `dev-totem` to `main-totem` so both branches share the same version:
+  ```bash
+  git checkout dev-totem && git pull origin dev-totem && git merge main-totem && git push
+  ```
+- **`npm publish`** is still a manual step if needed.
+- `[skip ci]` in the release commit message prevents the workflow from re-triggering.
 
 ## Node Version
 
