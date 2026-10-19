@@ -12,6 +12,14 @@
  * tests live in `inferenceOptionChatPath.test.js` — the jest.mock
  * registrations in this file leak through the file-scoped mock registry and
  * would suppress the real `resolveOverrideForUser` call under test there.
+ *
+ * F16 mid-session extension: the per-turn `resolveInferenceOption` hook is
+ * covered in `server/__tests__/utils/agents/aibitat/inferenceOptionMidSession.test.js`
+ * (including the ordering guarantee that the hook runs BEFORE `resolveRoute`
+ * in `reply()` — the explicit option outranks `anythingllm-router`, mirroring
+ * the init path where an active override bypasses router resolution in
+ * `#providerSetupAndCheck`). This file stays init-path scoped to keep the
+ * mock registry clean.
  */
 
 process.env.STORAGE_DIR = __dirname;

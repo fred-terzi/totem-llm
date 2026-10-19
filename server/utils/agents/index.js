@@ -858,6 +858,50 @@ class AgentHandler {
       };
     }
 
+    // F16 mid-session inference-option re-resolution: same problem the
+    // resolveRoute hook above solves, for the default-user inference option.
+    // The (provider, model) is frozen at WebSocket connect time
+    // (init → #providerSetupAndCheck), so a completed selection — or an
+    // admin slug change (F11) — would only apply after a page reload.
+    // AIbitat.reply() consumes this hook before every turn. Returns null
+    // (→ legacy chain untouched, fail-closed N5) when there is no
+    // selection, the user is privileged or absent, the key is unknown, or
+    // resolution fails.
+    this.aibitat.resolveInferenceOption = async (_prompt) => {
+      try {
+        const user =
+          this.invocation?.user_id != null
+            ? await User.get({ id: Number(this.invocation.user_id) })
+            : null;
+        const optionOverride = await resolveOverrideForUser({
+          workspace: this.invocation.workspace,
+          user,
+        });
+        if (!optionOverride) return null;
+        // Compare against the live defaultProvider (reply() mutates it on a
+        // switch) so the log fires exactly once per actual switch.
+        const current = this.aibitat.defaultProvider;
+        if (
+          optionOverride.provider !== current.provider ||
+          optionOverride.model !== current.model
+        ) {
+          this.log(
+            `Inference option mid-session switch: ${current.provider}:${current.model} → ${optionOverride.provider}:${optionOverride.model} (user #${user.id})`
+          );
+        }
+        return {
+          provider: optionOverride.provider,
+          model: optionOverride.model,
+        };
+      } catch (e) {
+        this.log(
+          "Inference option re-resolution failed, keeping current provider",
+          e.message
+        );
+        return null;
+      }
+    };
+
     // Attach standard websocket plugin for frontend communication.
     this.log(`Attached ${AgentPlugins.websocket.name} plugin to Agent cluster`);
     this.aibitat.use(

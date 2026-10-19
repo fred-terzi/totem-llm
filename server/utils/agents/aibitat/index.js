@@ -963,6 +963,46 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       }
     }
 
+    // F16: re-resolve the default-user inference option before each turn if
+    // a resolver is attached. Runs BEFORE the model-router hook below — the
+    // explicit user option takes priority over `anythingllm-router` (the
+    // init path in AgentHandler.#providerSetupAndCheck already bypasses the
+    // router when an override is active, so this ordering mirrors it).
+    // Mutating this.defaultProvider here is safe: reply() rebuilds the
+    // provider instance from it every turn (no cached connector).
+    if (this.resolveInferenceOption) {
+      const userPrompt =
+        this.#extractUserPrompt(messages) || route.content || "";
+      const resolved = await this.resolveInferenceOption(userPrompt);
+      if (resolved?.provider && resolved?.model) {
+        const changed =
+          this.defaultProvider.provider !== resolved.provider ||
+          this.defaultProvider.model !== resolved.model;
+        this.defaultProvider = {
+          ...this.defaultProvider,
+          provider: resolved.provider,
+          model: resolved.model,
+        };
+        if (changed) {
+          // Reuse the router's socket notification so the UI can show the
+          // switch ("Switched to …") on the turn it happens.
+          this.handlerProps.log?.(
+            `[agent]: inference option switched → ${resolved.provider}:${resolved.model}`
+          );
+          this.handlerProps.routingMetadata = {
+            routedTo: {
+              provider: resolved.provider,
+              model: resolved.model,
+              ruleTitle: null,
+              ruleType: "inference-option",
+              isFallback: false,
+              shouldNotify: true,
+            },
+          };
+        }
+      }
+    }
+
     // Re-evaluate model router before each turn if a resolver is attached.
     // This ensures routing rules are applied per-message, not just at initialization.
     if (this.resolveRoute) {

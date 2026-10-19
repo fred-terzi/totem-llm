@@ -100,3 +100,41 @@ describe("resolveOverrideForUser (shared F12 guard)", () => {
     expect(result).toBeNull();
   });
 });
+
+/**
+ * F16 mid-session hook coverage — the same shared guard backs the
+ * `resolveInferenceOption` hook attached in `AgentHandler.createAIbitat()`
+ * (consumed per turn by `AIbitat.reply()`). The hook itself is exercised in
+ * `server/__tests__/utils/agents/aibitat/inferenceOptionMidSession.test.js`;
+ * here we assert the fail-closed contract the hook depends on: a null return
+ * must be produced for privileged roles and unknown keys even when the
+ * workspace selection is set, so the hook can never diverge the mid-session
+ * path from the init-path guarantees (F12/N5).
+ */
+describe("resolveOverrideForUser (F16 mid-session hook contract)", () => {
+  it("hook contract: privileged roles yield null so the mid-session hook keeps the legacy chain", async () => {
+    for (const role of ["admin", "manager"]) {
+      const result = await resolveOverrideForUser({
+        workspace: { user_inference_option: OPTION_KEYS.E2EE },
+        user: { id: 1, role },
+      });
+      expect(result).toBeNull();
+    }
+  });
+
+  it("hook contract: unknown option keys yield null (fail-closed to legacy routing mid-session)", async () => {
+    const result = await resolveOverrideForUser({
+      workspace: { user_inference_option: "totem-unknown-key" },
+      user: { id: 1, role: "default" },
+    });
+    expect(result).toBeNull();
+  });
+
+  it("hook contract: cleared selection (null) yields null mid-session", async () => {
+    const result = await resolveOverrideForUser({
+      workspace: { user_inference_option: null },
+      user: { id: 1, role: "default" },
+    });
+    expect(result).toBeNull();
+  });
+});
