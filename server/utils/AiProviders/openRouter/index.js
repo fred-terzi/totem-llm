@@ -17,6 +17,22 @@ const cacheFolder = path.resolve(
     : path.resolve(__dirname, `../../../storage/models/openrouter`)
 );
 
+/**
+ * F8 (spec: totem_docs/default-user-inference-options): when the upstream
+ * OpenRouter request fails with HTTP 429 on the *currently configured*
+ * free-option slug, rethrow carrying the stable marker so the client-facing
+ * mapping (`server/utils/freeModelRateLimit.js`) shows the F8 wording.
+ * Every other error is rethrown unchanged (standard error shape, N5).
+ * @param {Error} error - the caught upstream error
+ * @param {string|null} model - the model slug the request was made with
+ * @returns {Promise<Error>} the error to throw onward
+ */
+async function mapFreeOptionRateLimit(error, model = null) {
+  const { freeOptionRateLimitError } = require("../../freeModelRateLimit");
+  const freeLimitError = await freeOptionRateLimitError(error, model);
+  return freeLimitError || error;
+}
+
 class OpenRouterLLM {
   /**
    * Some openrouter models never send a finish_reason and thus leave the stream open in the UI.
@@ -244,9 +260,10 @@ class OpenRouterLLM {
         `OpenRouter chat: ${this.model} is not valid for chat completion!`
       );
 
-    const result = await LLMPerformanceMonitor.measureAsyncFunction(
-      this.openai.chat.completions
-        .create({
+    let result;
+    try {
+      result = await LLMPerformanceMonitor.measureAsyncFunction(
+        this.openai.chat.completions.create({
           model: this.model,
           messages,
           temperature,
@@ -255,11 +272,12 @@ class OpenRouterLLM {
           include_reasoning: true,
           user: user?.id ? `user_${user.id}` : "",
         })
-        .catch((e) => {
-          throw new Error(e.message);
-        })
-    );
-
+      );
+    } catch (error) {
+      // F8: upstream 429 on the configured free-option slug → rethrow with
+      // the stable marker for the client-facing F8 wording mapping.
+      throw await mapFreeOptionRateLimit(error, this.model);
+    }
     if (
       !result?.output?.hasOwnProperty("choices") ||
       result?.output?.choices?.length === 0
@@ -292,24 +310,33 @@ class OpenRouterLLM {
         `OpenRouter chat: ${this.model} is not valid for chat completion!`
       );
 
-    const measuredStreamRequest = await LLMPerformanceMonitor.measureStream({
-      func: this.openai.chat.completions.create({
-        model: this.model,
-        stream: true,
+    let measuredStreamRequest;
+    try {
+      measuredStreamRequest = await LLMPerformanceMonitor.measureStream({
+        func: this.openai.chat.completions.create({
+          model: this.model,
+          stream: true,
+          messages,
+          temperature,
+          // This is an OpenRouter specific option that allows us to get the reasoning text
+          // before the token text.
+          include_reasoning: true,
+          user: user?.id ? `user_${user.id}` : "",
+        }),
         messages,
-        temperature,
-        // This is an OpenRouter specific option that allows us to get the reasoning text
-        // before the token text.
-        include_reasoning: true,
-        user: user?.id ? `user_${user.id}` : "",
-      }),
-      messages,
-      // OpenRouter returns the usage in the stream as the very last chunk **after** the finish reason.
-      // so we don't need to run the prompt token calculation.
-      runPromptTokenCalculation: false,
-      modelTag: this.model,
-      provider: this.className,
-    });
+        // OpenRouter returns the usage in the stream as the very last chunk **after** the finish reason.
+        // so we don't need to run the prompt token calculation.
+        runPromptTokenCalculation: false,
+        modelTag: this.model,
+        provider: this.className,
+      });
+    } catch (error) {
+      // F8: upstream 429 on the configured free-option slug → rethrow with
+      // the stable marker for the client-facing F8 wording mapping. The
+      // stream may also 429 *mid-iteration* — that case is handled in
+      // `handleStream`'s catch below.
+      throw await mapFreeOptionRateLimit(error, this.model);
+    }
 
     return measuredStreamRequest;
   }
@@ -512,7 +539,13 @@ class OpenRouterLLM {
           type: "abort",
           textResponse: null,
           close: true,
-          error: e.message,
+          // F8: a mid-stream upstream 429 on the configured free-option slug
+          // is mapped to the stable marker (embedded in the error string) so
+          // the client-facing layer shows the F8 wording; all other errors
+          // keep the standard shape (N5).
+          error: await mapFreeOptionRateLimit(e, this.model).then(
+            (mapped) => mapped.message
+          ),
         });
         response.removeListener("close", handleAbort);
         clearInterval(timeoutCheck);

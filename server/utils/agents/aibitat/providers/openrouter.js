@@ -4,6 +4,7 @@ const InheritMultiple = require("./helpers/classes.js");
 const UnTooled = require("./helpers/untooled.js");
 const { tooledStream, tooledComplete } = require("./helpers/tooled.js");
 const { RetryError } = require("../error.js");
+const { freeOptionRateLimitError } = require("../../../freeModelRateLimit");
 
 /**
  * The agent provider for the OpenRouter provider.
@@ -125,6 +126,10 @@ class OpenRouterProvider extends InheritMultiple([Provider, UnTooled]) {
       );
     } catch (error) {
       console.error(error.message, error);
+      // F8: upstream 429 on the configured free-option slug → rethrow with a
+      // stable marker so the client-facing mapping can show the F8 wording.
+      const freeLimitError = await freeOptionRateLimitError(error, this.model);
+      if (freeLimitError) throw freeLimitError;
       if (error instanceof OpenAI.AuthenticationError) throw error;
       if (
         error instanceof OpenAI.RateLimitError ||
@@ -170,6 +175,10 @@ class OpenRouterProvider extends InheritMultiple([Provider, UnTooled]) {
 
       return result;
     } catch (error) {
+      // F8: upstream 429 on the configured free-option slug → rethrow with a
+      // stable marker so the client-facing mapping can show the F8 wording.
+      const freeLimitError = await freeOptionRateLimitError(error, this.model);
+      if (freeLimitError) throw freeLimitError;
       if (error instanceof OpenAI.AuthenticationError) throw error;
       if (
         error instanceof OpenAI.RateLimitError ||

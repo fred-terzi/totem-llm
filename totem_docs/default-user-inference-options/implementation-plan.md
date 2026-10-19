@@ -134,12 +134,32 @@ Registry smoke-checked live (key-gating flips correctly with/without the API key
 
 ## Step 4 — Upstream 429 mapping (F8)
 
-**Status: not started**
+**Status: complete (2026-10-19)**
 
-- In the OpenRouter agent provider (`server/utils/agents/aibitat/providers/openrouter.js`) and/or the LLM connector (`server/utils/AiProviders/openRouter/index.js`) — wherever the upstream error is caught first — detect HTTP 429 / free-tier exhaustion and rethrow with a stable error marker.
-- Map that marker to the F8 wording at the point where agent errors reach the client, so the message shown is exactly: *"The free model is rate-limited right now. Switch to Anonymous or E2EE inference to continue."* No new error contract beyond the string (N5).
+### Implemented
 
-**Tests:** unit test the 429 detection and message mapping (AC 7).
+- **Shared detection/mapping module — `server/utils/freeModelRateLimit.js` (new):**
+  - `isUpstreamRateLimitError(error)` — narrow 429 detection matching the OpenAI-SDK shapes both OpenRouter code paths surface: explicit `status === 429`, `name === "RateLimitError"`, or an SDK-generated `429 …` message prefix. Other failures never match.
+  - `freeOptionRateLimitError(error, model)` — throw-site gate: returns a new Error carrying the stable marker **only** when the caught error is a 429 **and** the affected model is the *currently configured* free-option slug (checked per request against `system_settings` via the new registry helper `isConfiguredFreeSlug`). Anything else (other models, unknown/null model, registry failure) returns null so the caller's existing error handling runs — fail-closed to the standard error shape (N5), and a rate limit on a *paid* OpenRouter model is never mis-mapped to the free-option wording.
+  - Marker is a plain substring (`[totem_free_model_rate_limited]`) embedded in `error.message` rather than a custom error class: the agent path stringifies errors twice on the way to the socket (provider catch → `RetryError`/`APIError` wrapping in AIbitat `#safeProviderCall` → `error.message` over the wire), and a class would not survive that round-trip.
+  - `mapFreeModelRateLimitMessage(message)` — client-facing mapping: marker-carrying messages become the **exact F8 wording** (replacing any surrounding wrapper text such as "The agent model failed to respond: …"); everything else passes through unchanged.
+- **Throw sites (where the upstream error is caught first):**
+  - Aibitat agent provider (`server/utils/agents/aibitat/providers/openrouter.js`): both `stream()` and `complete()` catch blocks call the gate **before** the existing `AuthenticationError`/`RetryError` classification, so a free-option 429 is rethrown marked while every other error keeps the existing classification.
+  - LLM connector (`server/utils/AiProviders/openRouter/index.js`): `getChatCompletion` and `streamGetChatCompletion` now wrap the upstream call and map through the same gate (previously the non-streaming call flattened all errors via `.catch(e => new Error(e.message))` — that flattening is gone so the SDK error shape reaches the gate). `handleStream`'s mid-iteration catch (stream 429s can surface there) maps the abort chunk's `error` field the same way.
+- **Client-facing mapping points (where agent/chat errors reach the client):**
+  - Aibitat `websocket` plugin `onError` (`server/utils/agents/aibitat/plugins/websocket.js`) — the `wssFailure` socket message for agent sessions. This is the path default users on Option 1 hit in agent mode.
+  - `chat.js` catch blocks for both SSE stream endpoints (`/workspace/:slug/stream-chat`, `/workspace/:slug/thread/:threadSlug/stream-chat`) — the standard chat-path fallback Option 1 uses when native tool calling is env-gated off (Step 0 correction).
+- **Registry addition:** `isConfiguredFreeSlug(model)` in `server/utils/inferenceOptions.js` — per-request comparison against the configured free slug; resolution errors → false.
+- **Scope check:** credits are untouched on the 429 path — the debit only runs after a successful completion (`chat-history.js` `_debitCredits`), so a rate-limited chat produces no charge and no ledger row (AC 7 second clause). No per-user counter or stored quota introduced (N2).
+
+### Tests
+
+`server/__tests__/utils/freeModelRateLimit.test.js` (new, 15 tests, all passing) against the real module with `system_settings` mocked at the DB boundary: detection shapes (status/name/message-prefix, non-429 negatives incl. null/undefined); throw-site gate (429 on configured free slug → marker; 429 on other/unknown/null model → null; non-429 on free slug → null; registry failure → null, N5); client mapping (marker → verbatim F8 wording asserted character-exact; wrapper text does not defeat the match; unmapped passthrough incl. null/undefined; the marker can never leak raw); wiring consistency (option key matches `chat.js`, marker survives a JSON string round-trip as sent over the socket). Full suite after Step 4: **46 suites / 355 tests passing**.
+
+### Notes
+
+- `yarn lint` fails at HEAD in this checkout on **pre-existing** frontend errors (`react-hooks/refs` etc. in `PromptInput`, `ThreadItem`, `Memories`, `QuickActions` — verified identical on a clean stash of this step's changes). `npx eslint` over every touched server file is clean; not a Step 4 regression.
+- Env-var-driven lazy require inside `mapFreeOptionRateLimit` (connector file) avoids a top-level circular import with the registry graph.
 
 ---
 
@@ -206,7 +226,7 @@ Registry smoke-checked live (key-gating flips correctly with/without the API key
 | — | 1 | **Complete (2026-10-19)** — migration `20261019162057_add_user_inference_option` applied + verified; per-model rate table in `credits.js` (fail-closed N7, zero-rate free slug); `Workspace.setInferenceOption` write helper; credits tests 6→23 passing; full server test suite green (41 suites / 320 tests) |
 | — | 2 | **Complete (2026-10-19)** — registry `server/utils/inferenceOptions.js` (seed-on-first-read `system_settings` slugs, availability flags, fail-closed resolve); `POST /workspace/:slug/inference-option` (F13, member-gated option-key-only, EventLogs audit); `GET /workspace/:slug/inference-options` (F14 payload + `selected`); `GET\|POST /admin/inference-options` (F11, admin-only); 6 new endpoint tests; full suite 42/326 green |
 | — | 3 | **Complete (2026-10-19)** — shared F12 guard `resolveOverrideForUser` in the registry (fail-closed: null option / non-default role / unknown key → null; resolution errors downgraded to null per N5); wired into both insertion points — `AgentHandler.#providerSetupAndCheck()` (role via `User.get({ id })` per Step 0) and `resolveProviderConnector()` (chat-path fallback per Step 0 correction); F7 gate-skip as a local `skipCreditGate` predicate in `chat.js`, both gates updated, admin-exemption semantics unchanged; test-file split (AgentHandler block vs chat-path block) to avoid jest.mock registry leakage; 14 routing/guard/chat-path tests; full suite 45/340 green; FILE_TREE regenerated |
-| — | 4 | Not started |
+| — | 4 | **Complete (2026-10-19)** — `server/utils/freeModelRateLimit.js` (narrow 429 detection + marker + client-facing mapping gated on the *currently configured* free slug via registry `isConfiguredFreeSlug`); wired into both OpenRouter throw sites (aibitat provider `stream`/`complete`, connector `getChatCompletion`/`streamGetChatCompletion`/`handleStream`) and both client-facing points (aibitat `websocket` onError → `wssFailure`, `chat.js` SSE catches); 15 new tests, full suite 46/355 green; pre-existing frontend lint errors at HEAD documented (not a Step 4 regression) |
 | — | 5–6 | Not started |
 | — | 7 (merge gate) | Not started |
 

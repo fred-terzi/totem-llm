@@ -16,6 +16,7 @@ const { WorkspaceThread } = require("../models/workspaceThread");
 const { User } = require("../models/user");
 const { Credits } = require("../models/credits");
 const { OPTION_KEYS } = require("../utils/inferenceOptions");
+const { mapFreeModelRateLimitMessage } = require("../utils/freeModelRateLimit");
 
 /**
  * F7 credit-gate skip: a default-role user chatting on a workspace whose
@@ -122,7 +123,9 @@ function chatEndpoints(app) {
           textResponse: null,
           sources: [],
           close: true,
-          error: e.message,
+          // F8: a mapped free-model rate limit surfaces the exact F8 wording;
+          // every other error keeps the standard shape (N5).
+          error: mapFreeModelRateLimitMessage(e.message) ?? e.message,
         });
         response.end();
       }
@@ -238,7 +241,9 @@ function chatEndpoints(app) {
           textResponse: null,
           sources: [],
           close: true,
-          error: e.message,
+          // F8: a mapped free-model rate limit surfaces the exact F8 wording;
+          // every other error keeps the standard shape (N5).
+          error: mapFreeModelRateLimitMessage(e.message) ?? e.message,
         });
         response.end();
       }

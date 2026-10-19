@@ -2,6 +2,7 @@ const chalk = require("chalk");
 const { v4: uuidv4 } = require("uuid");
 const { safeJsonParse } = require("../../../http");
 const { skillIsAutoApproved } = require("../../../helpers/agents");
+const { mapFreeModelRateLimitMessage } = require("../../../freeModelRateLimit");
 const SOCKET_TIMEOUT_MS = 3600 * 1_000; // 1 hour
 const TOOL_APPROVAL_TIMEOUT_MS = 120 * 1_000; // 2 mins for tool approval
 const CLARIFICATION_DEFAULT_TIMEOUT_MS = 120 * 1_000; // 2 mins for clarifying questions
@@ -64,6 +65,12 @@ const websocket = {
           }
           let errorMessage =
             error?.message || "An error occurred while running the agent.";
+          // F8 (spec: totem_docs/default-user-inference-options): the only
+          // rate-limit error a user can see is the upstream-OpenRouter
+          // free-tier one, mapped to the exact F8 wording. Every other error
+          // keeps the standard shape (N5).
+          errorMessage =
+            mapFreeModelRateLimitMessage(errorMessage) ?? errorMessage;
           console.error(chalk.red(`   error: ${errorMessage}`), error);
           aibitat.introspect(
             `Error encountered while running: ${errorMessage}`

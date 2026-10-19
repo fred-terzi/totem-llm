@@ -14,9 +14,7 @@ const { AgentFlows } = require("../agentFlows");
 const MCPCompatibilityLayer = require("../MCP");
 const { getAndClearInvocationAttachments } = require("../chats/agents");
 const { DocumentManager } = require("../DocumentManager");
-const {
-  resolveOverrideForUser,
-} = require("../inferenceOptions");
+const { resolveOverrideForUser } = require("../inferenceOptions");
 
 class AgentHandler {
   #invocationUUID;

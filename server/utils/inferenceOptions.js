@@ -194,6 +194,29 @@ async function resolveOverrideForUser({ workspace = null, user = null } = {}) {
 }
 
 /**
+ * F8 narrow gate: is this model slug the *currently configured* free-option
+ * slug (read per request from `system_settings`)? Used by the upstream-429
+ * mapping so only free-option requests surface the F8 wording — a rate
+ * limit on any other OpenRouter model keeps the standard error shape.
+ * Any resolution problem → false (standard error, fail-closed to N5).
+ *
+ * @param {string|null} model
+ * @returns {Promise<boolean>}
+ */
+async function isConfiguredFreeSlug(model = null) {
+  if (!model) return false;
+  const freeOption = INFERENCE_OPTIONS.find(
+    (option) => option.key === OPTION_KEYS.FREE
+  );
+  try {
+    const configured = await getOptionSlug(freeOption);
+    return configured === model;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Admin slug update (F11). Accepts a partial map of option key → model slug;
  * only known option keys are written, values must be non-empty strings.
  *
@@ -227,6 +250,7 @@ module.exports = {
   getOptionSlug,
   resolveOption,
   resolveOverrideForUser,
+  isConfiguredFreeSlug,
   listInferenceOptions,
   setOptionSlugs,
 };
