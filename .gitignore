@@ -25,3 +25,6 @@ server/storage/chatgpt_import_example
 .agents/
 
 
+
+# jest runtime cache artifacts (context-window eager-loader)
+server/__tests__/utils/models/
