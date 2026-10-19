@@ -11,6 +11,8 @@ import {
   SAVE_LLM_SELECTOR_EVENT,
   PROVIDER_SETUP_EVENT,
 } from "../PromptInput/LLMSelector/action";
+import { ABORT_STREAM_EVENT } from "@/utils/chat";
+import { getAgentSessionActive } from "@/utils/chat/agent";
 import Workspace from "@/models/workspace";
 import System from "@/models/system";
 import ModelRouterAPI from "@/models/modelRouter";
@@ -175,6 +177,17 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
                   // the persisted selection, then close the panel.
                   setRefreshKey((k) => k + 1);
                   setShowSelector(false);
+                  // F16: an agent session pins (provider, model) at socket
+                  // connect time. If one is active, tear it down (ABORT
+                  // closes the socket; the close handler resets socketId) so
+                  // the next message opens a fresh agent session that
+                  // re-resolves the just-saved selection. History is not
+                  // lost — a fresh session loads the last 20 turns. Standard
+                  // chat (SSE) resolves its provider per request, so no
+                  // teardown is needed when no agent session is active.
+                  if (getAgentSessionActive()) {
+                    window.dispatchEvent(new CustomEvent(ABORT_STREAM_EVENT));
+                  }
                 }}
               />
             ) : (
