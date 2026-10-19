@@ -15,6 +15,22 @@ const { writeResponseChunk } = require("../utils/helpers/chat/responses");
 const { WorkspaceThread } = require("../models/workspaceThread");
 const { User } = require("../models/user");
 const { Credits } = require("../models/credits");
+const { OPTION_KEYS } = require("../utils/inferenceOptions");
+
+/**
+ * F7 credit-gate skip: a default-role user chatting on a workspace whose
+ * selected inference option is `totem-free` runs on a zero-rate model, so the
+ * pre-flight `Credits.hasCredits` check is skipped (AC 5). All other cases —
+ * no selection, Options 2/3, privileged roles — stay gated (AC 6). Fail-closed:
+ * any doubt (missing user/workspace, unknown option) → gate applies.
+ */
+function skipCreditGate({ user = null, workspace = null } = {}) {
+  return (
+    !!user &&
+    user.role === ROLES.default &&
+    workspace?.user_inference_option === OPTION_KEYS.FREE
+  );
+}
 
 function chatEndpoints(app) {
   if (!app) return;
@@ -41,9 +57,14 @@ function chatEndpoints(app) {
         }
 
         // Credit gate: user must have > 0 credits to send a message.
-        // Admins are exempt. This check runs before flushHeaders so we can
-        // return a proper 402 HTTP status.
-        if (multiUserMode(response) && user.role !== ROLES.admin) {
+        // Admins are exempt. Default-role users on the workspace's `totem-free`
+        // option are exempt (F7 — zero-rate model, AC 5). This check runs
+        // before flushHeaders so we can return a proper 402 HTTP status.
+        if (
+          multiUserMode(response) &&
+          user.role !== ROLES.admin &&
+          !skipCreditGate({ user, workspace })
+        ) {
           const hasCredits = await Credits.hasCredits(user.id, 1, user.role);
           if (!hasCredits) {
             response.status(402).json({
@@ -135,8 +156,13 @@ function chatEndpoints(app) {
         }
 
         // Credit gate: user must have > 0 credits to send a message.
-        // Admins are exempt.
-        if (multiUserMode(response) && user.role !== ROLES.admin) {
+        // Admins are exempt. Default-role users on the workspace's `totem-free`
+        // option are exempt (F7 — zero-rate model, AC 5).
+        if (
+          multiUserMode(response) &&
+          user.role !== ROLES.admin &&
+          !skipCreditGate({ user, workspace })
+        ) {
           const hasCredits = await Credits.hasCredits(user.id, 1, user.role);
           if (!hasCredits) {
             response.status(402).json({

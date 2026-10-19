@@ -14,6 +14,9 @@ const { AgentFlows } = require("../agentFlows");
 const MCPCompatibilityLayer = require("../MCP");
 const { getAndClearInvocationAttachments } = require("../chats/agents");
 const { DocumentManager } = require("../DocumentManager");
+const {
+  resolveOverrideForUser,
+} = require("../inferenceOptions");
 
 class AgentHandler {
   #invocationUUID;
@@ -461,12 +464,32 @@ class AgentHandler {
   }
 
   async #providerSetupAndCheck() {
-    this.provider = this.invocation.workspace.agentProvider ?? null; // set provider to workspace agent provider if it exists
-    this.model = this.#fetchModel();
+    // F12 default-user inference-option override: a default-role user's
+    // explicit selection takes priority over `agentProvider`/`agentModel` and
+    // the entire fallback chain (including the anythingllm-router). NULL
+    // selection / privileged roles / unresolvable option → legacy chain.
+    const user =
+      this.invocation?.user_id != null
+        ? await User.get({ id: Number(this.invocation.user_id) })
+        : null;
+    const optionOverride = await resolveOverrideForUser({
+      workspace: this.invocation?.workspace,
+      user,
+    });
+    if (optionOverride) {
+      this.log(
+        `Inference option override: ${optionOverride.option.key} → ${optionOverride.provider}:${optionOverride.model} (user #${user.id})`
+      );
+      this.provider = optionOverride.provider;
+      this.model = optionOverride.model;
+    } else {
+      this.provider = this.invocation.workspace.agentProvider ?? null; // set provider to workspace agent provider if it exists
+      this.model = this.#fetchModel();
 
-    // If provider resolved to model router, resolve the actual provider/model
-    if (this.provider === "anythingllm-router") {
-      await this.#resolveRouterProvider();
+      // If provider resolved to model router, resolve the actual provider/model
+      if (this.provider === "anythingllm-router") {
+        await this.#resolveRouterProvider();
+      }
     }
 
     if (!this.provider)

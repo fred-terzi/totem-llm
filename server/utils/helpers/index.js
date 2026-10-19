@@ -657,6 +657,29 @@ async function resolveProviderConnector({
   messageCountOverride = null,
   apiSessionId = null,
 }) {
+  // F12 default-user inference-option override (standard chat path).
+  // Per the Step 0 correction: Option 1 (free/OpenRouter, env-gated away from
+  // native tool calling) falls back to this path — without this, a default
+  // user's selection would be silently ignored here and routed to the
+  // workspace/system provider. Same guard + registry as the agent path
+  // (`AgentHandler.#providerSetupAndCheck`). NULL override → legacy routing
+  // below, unchanged. NOTE: this intentionally applies to ALL
+  // `resolveProviderConnector` consumers (SSE chat, API-key chat, embed,
+  // telegram, memory plugin) — the override is identity-guarded to default-
+  // role users with an explicit selection, which is the spec's contract.
+  const { resolveOverrideForUser } = require("../inferenceOptions");
+  const optionOverride = await resolveOverrideForUser({ workspace, user });
+  if (optionOverride) {
+    return {
+      connector: getLLMProvider({
+        provider: optionOverride.provider,
+        model: optionOverride.model,
+      }),
+      routingMetadata: null,
+      prefetchedContext: null,
+    };
+  }
+
   const effectiveProvider = workspace?.chatProvider || process.env.LLM_PROVIDER;
 
   if (effectiveProvider !== "anythingllm-router") {

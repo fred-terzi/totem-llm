@@ -156,6 +156,44 @@ async function listInferenceOptions(includeSettingLabel = false) {
 }
 
 /**
+ * F12 shared guard: resolve the routing override for a default-role user's
+ * explicit inference-option selection on a workspace.
+ *
+ * Returns null (→ caller uses legacy routing) when ANY of:
+ *  - the workspace has no selection (`user_inference_option` null — N4/OQ-4);
+ *  - the user is absent or not default-role (fail-closed per spec: privileged
+ *    users, deleted accounts, and system/scheduled invocations are unaffected;
+ *    ROLES.default === "default");
+ *  - the stored option key is not in the registry (unknown key → legacy).
+ *
+ * Resolution errors are caught and downgraded to null — a broken
+ * `system_settings` row must never hard-fail a chat (N5); the caller falls
+ * back to the existing provider chain.
+ *
+ * Consumers: `AgentHandler.#providerSetupAndCheck()` (agent path) and
+ * `resolveProviderConnector()` (standard chat path — Option 1 fallback, Step 0
+ * correction).
+ *
+ * @param {Object} params
+ * @param {Object|null} params.workspace - workspace record (needs `user_inference_option`)
+ * @param {Object|null} params.user - user record (needs `role`)
+ * @returns {Promise<{option: Object, provider: string, model: string}|null>}
+ */
+async function resolveOverrideForUser({ workspace = null, user = null } = {}) {
+  const optionKey = workspace?.user_inference_option;
+  if (!optionKey) return null;
+  if (!user || user.role !== "default") return null;
+  try {
+    return await resolveOption(optionKey);
+  } catch (e) {
+    console.log(
+      `\x1b[33m[inferenceOptions]\x1b[0m Failed to resolve option '${optionKey}': ${e.message} - falling back to legacy routing.`
+    );
+    return null;
+  }
+}
+
+/**
  * Admin slug update (F11). Accepts a partial map of option key → model slug;
  * only known option keys are written, values must be non-empty strings.
  *
@@ -188,6 +226,7 @@ module.exports = {
   getOptionByKey,
   getOptionSlug,
   resolveOption,
+  resolveOverrideForUser,
   listInferenceOptions,
   setOptionSlugs,
 };
