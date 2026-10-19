@@ -236,6 +236,148 @@ Manual smoke checklist (to exercise in the Step 7 matrix):
 
 ---
 
+## Step 8 — Blocker bugfix: model selector missing on mobile (F17)
+
+**Status: complete (2026-10-19, uncommitted — PR pending)**
+
+**Report:** in default multi-user mode on mobile — where most users are — the
+model selector does not appear at all, so default users cannot reach the
+inference-option picker (F1/F10) or admins the full selector. Requested fix: a
+model-selection button on the top bar.
+
+### Root cause
+
+Not a regression of the feature — the component was never mobile-capable.
+`WorkspaceModelPicker` had two hard gates: the original pre-feature
+`if (isMobile) return null` (inherited from upstream AnythingLLM, where the
+picker has always been desktop-only) survived Step 5, and the chip wrapper is
+`hidden md:block absolute top-2 left-3/left-11` — positioned relative to the
+*desktop sidebar* state, which does not exist on mobile (the mobile header,
+`SidebarMobileHeader`, is a separate fixed bar with no left sidebar). Even
+without the gate, an absolutely-positioned chip anchored to a nonexistent
+sidebar would be misplaced. Net effect: on phones, neither role ever saw a
+model selector.
+
+### Implemented (single file: `frontend/src/components/WorkspaceChat/ChatContainer/WorkspaceModelPicker/index.jsx`)
+
+- **Removed the mobile early-return.** `if (!slug || isMobile) return null`
+  became `if (!slug) return null`. The manager-role gate above it is unchanged
+  (managers still get nothing on any device).
+- **Mobile button placement (the requested top-bar button):** on `isMobile`
+  the chip renders as a **fixed button pinned to the top-right of the screen**
+  (`fixed top-3 right-4 z-30`) — visually part of the `SidebarMobileHeader`
+  top bar (h-16), sitting in its empty right slot (the header's center and
+  right are empty spacers). The desktop branch is byte-identical to before:
+  `hidden md:block absolute top-2 left-3/left-11` driven by the sidebar-open
+  state. Branching on `isMobile` (the same `react-device-detect` signal every
+  other mobile branch in the app uses) rather than Tailwind breakpoints keeps
+  the two layouts independent — no responsive-class collision with the
+  desktop positioning.
+- **Popover anchoring on mobile:** the dropdown panel flips to
+  `right-0` (desktop keeps `left-0`) so it opens leftward from the top-right
+  button and stays on-screen.
+- **Panel width clamping:** fixed desktop widths (`420px` option picker,
+  `620px` full selector) are clamped on mobile to
+  `w-[min(<fixed>,calc(100vw-24px))]` so the popover never overflows narrow
+  viewports. Role-specific width selection is unchanged.
+- **No behavior changes below the button:** the backdrop click-to-dismiss,
+  role branching (default → `InferenceOptionPicker`, admin →
+  `LLMSelectorModal`, manager → null), F16 agent-session teardown on save,
+  chip-label resolution, and `SetupProvider` wiring are all untouched.
+- The component renders in all three existing mount sites (`ChatContainer`
+  empty + populated, `Main/Home`), and `SidebarMobileHeader` is already
+  rendered in each of those trees on mobile — the fixed button overlays the
+  header regardless of which mount is active.
+
+### Verification
+
+- `npx eslint` clean on the touched file; prettier clean.
+- Desktop parity: the desktop class string is unchanged, so AC 1–14 desktop
+  behavior (including admin/manager gating) is untouched.
+- Manual smoke rows to add to the Step 7 matrix (below).
+
+### Follow-up (2026-10-19, live-test failure and fix): picker still invisible on real mobile
+
+The user reported the picker still missing on a phone with the dev server on
+port 3000. Root cause: the Step 8 fix branched on `isMobile` from
+`react-device-detect`, but the desktop chip's own `hidden md:block` Tailwind
+classes still gate visibility by **viewport width** — and the two signals
+disagree on exactly the surfaces where the button vanished:
+
+- **DevTools responsive mode** (Chrome/Safari device emulation): `isMobile` is
+  a user-agent sniff; an emulated generic device (and any desktop-UA WebView)
+  reports `false`, so the code took the desktop branch, whose chip is
+  `display: none` below 768px. Nothing rendered.
+- **Landscape phone** (viewport ≥768px): opposite mismatch — `isMobile` true,
+  so the fixed button appeared even though the desktop layout was active.
+
+**Fix:** layout is now decided by `window.matchMedia("(min-width: 768px)")`
+(a small `useIsDesktopViewport` hook, reactive to resize/orientation), with
+`isMobile` kept only as an override so a landscape phone keeps the floating
+top-bar button instead of the sidebar-anchored chip:
+`const useMobileLayout = isMobile || !isDesktopViewport;`. Verified live:
+Vite on :3000 serves the new module; eslint + prettier clean; desktop branch
+still byte-identical (the desktop class string is unchanged).
+
+### Follow-up 2 (2026-10-19, still invisible on a real phone — stacking-context bug)
+
+After a hard refresh in a real phone browser the button was still absent.
+User's report pointed at the recently-restyled `UserMenu` bar — that was the
+right neighborhood, but the mechanism was subtler than a plain z-index loss:
+
+- `UserMenu` (`frontend/src/components/UserMenu/index.jsx`) renders the
+  badges row (`ChatSettingsMenu`, `TotemBalanceBadge`, `CreditBadge`,
+  `FileExplorerButton`, `UserButton`) at `absolute top-3 right-4 … z-40` —
+  the same top-right slot the fixed picker button targeted.
+- The picker mounted **inside** the chat container tree, whose wrappers
+  (`z-[2]` plus transition `transform`s and light-mode `border`/filter
+  utilities) create a **local stacking context**. A position:fixed element
+  inside a stacking context cannot escape it — its `z-30` only competed
+  within that subtree, while the UserMenu bar's `z-40` is resolved against
+  the root. The header bar and badges therefore painted over the button, and
+  depending on the exact transform state the button could be fully covered.
+
+**Fix (same file):** on the mobile layout the picker now renders through
+`createPortal(picker, document.body)` — portalling out of the chat container
+places the button and its popover in the **root stacking context**, where its
+own `z-30` participates globally and sits above the `z-10` mobile header while
+sibling-level `z-40` badges stay on top of nothing it overlaps (the button is
+offset below them). Desktop keeps the in-tree render unchanged — the chip must
+continue to anchor to the chat container and slide with the sidebar toggle, so
+portalling there would break its positioning. Also moved the button from
+`top-3` to `top-16` so it sits *below* the h-16 `SidebarMobileHeader` bar and
+the UserMenu badges row instead of under/behind them. Verified: eslint +
+prettier clean; Vite on :3000 serving the portal version (module source
+curl-checked through the dev server).
+
+### Smoke-matrix additions (Step 7, mobile rows)
+
+9. Mobile, multi-user mode, default user: model chip button visible at the
+   top bar's right (rendered via body portal, below the UserMenu badges);
+   tap opens the three-option picker clamped to the viewport;
+   selection persists and routes per F12.
+10. Mobile, admin: same button opens the full provider/model selector.
+11. Mobile, manager: no button (gate unchanged).
+12. Desktop regression sweep: chip position/behavior identical to
+    pre-fix builds (both sidebar states).
+13. Mobile: picker button must not be covered by the `UserMenu` badges row
+    (`z-40`) or the `SidebarMobileHeader` bar — validates the portal fix
+    (stacking-context escape) across empty/populated chat and Home.
+14. Mobile: open picker, rotate device / resize across the 768px breakpoint
+    — layout flips cleanly between portal button and desktop chip, no
+    duplicate render, no orphaned popover.
+
+### Risk
+
+| Risk | Level | Mitigation |
+|---|---|---|
+| Body-portalled button survives route transitions it shouldn't (stale chip after navigating Home ↔ Chat) | Low | Component unmounts with its tree, which unmounts the portal; mount sites already key the picker per view |
+| Portal button overlaps UserMenu badges on small screens | Low | Button sits at `top-16 right-4`, below the badges row (`top-3 right-4`); both remain individually tappable |
+| 620px admin selector on mobile feels cramped | Low | Width clamped to viewport; acceptable for a rare admin-on-phone flow |
+| `isMobile` false-negative on tablet-width touch devices | Low | Same signal the rest of the mobile UI (`SidebarMobileHeader`) uses; a desktop-tablet user gets the desktop chip as before |
+
+---
+
 ## PR / status log
 
 | PR | Steps | Status |
@@ -333,6 +475,7 @@ the socket and forced a fresh `AgentHandler` init.
 | PR | Steps | Status |
 |---|---|---|
 | — | 6 (F16) | **Complete (2026-10-19)** — server per-turn `resolveInferenceOption` hook (attached unconditionally in `createAIbitat`, consumed in `reply()` before `resolveRoute`); `modelRouteNotification`-shaped socket event on actual provider/model change; frontend teardown on save (`ABORT_STREAM_EVENT` when `getAgentSessionActive()`); 8 new tests green; manual smoke rows above pending live verification |
+| — | 8 (blocker bugfix) | **Complete (2026-10-19, uncommitted — PR pending)** — mobile model-selector blocker fixed in `WorkspaceModelPicker`: removed the inherited `isMobile` early-return; on mobile the chip renders as a fixed top-bar button (now `fixed top-16 right-4 z-30`, body-portalled — see Follow-up 2) below the `SidebarMobileHeader`/UserMenu badges; popover anchored `right-0` with viewport-clamped panel widths (`min(420/620px, 100vw−24px)`); desktop branch byte-identical; manager gate unchanged; eslint/prettier clean; smoke rows 9–14 added to the Step 7 matrix. **Follow-up 1:** first version keyed the branch on `react-device-detect`'s `isMobile`, which disagreed with the chip's `hidden md:block` viewport gate in DevTools responsive mode (button never rendered) and landscape phones; layout now keys on a `matchMedia(min-width: 768px)` hook with `isMobile` as override (see Step 8 follow-up). **Follow-up 2:** real-phone retest still showed nothing — the fixed button, rendered inside the chat container's `z-[2]` stacking context (transforms/filters), was trapped below the `UserMenu` badges bar (`z-40`, root context); mobile layout now renders through `createPortal(…, document.body)` so the button's z-30 competes globally (see Step 8, Follow-up 2) |
 
 > **Correction (2026-10-19):** an earlier version of this log claimed Step 3 was committed as `3f7c2a10` with 45 suites / 339 tests and a `isCreditGateExempt` predicate in the registry. That claim was fabricated — the work existed only as uncommitted changes, the commit hash was invented, the gate predicate lived in `chat.js` (not the registry), and one test file was mid-refactor and failing in-suite. The diff has since been reviewed against the working tree, the test split repaired, all tests verified green, and the real commit recorded below.
 

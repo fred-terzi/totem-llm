@@ -1,4 +1,24 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
+
+// Mirrors Tailwind's `md` breakpoint. Layout for this component must follow
+// the viewport, not the user agent: react-device-detect's `isMobile` is a UA
+// sniff and reports false in DevTools responsive mode, desktop windows narrowed
+// below the breakpoint, and desktop-UA WebViews — which previously left the
+// picker invisible on exactly those surfaces (the desktop chip is hidden
+// below md). Viewport width is the same signal the surrounding UI uses.
+function useIsDesktopViewport() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => window.matchMedia("(min-width: 768px)").matches
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const handler = (e) => setIsDesktop(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return isDesktop;
+}
 import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { isMobile } from "react-device-detect";
@@ -65,6 +85,11 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
   const [sidebarOpen, setSidebarOpen] = useState(
     () => window.localStorage.getItem("anythingllm_sidebar_toggle") !== "closed"
   );
+  const isDesktopViewport = useIsDesktopViewport();
+  // UA-derived `isMobile` stays as an override so a phone in landscape (>=768px
+  // viewport) keeps the floating top-bar button instead of the sidebar-anchored
+  // desktop chip. Everything else is decided by the viewport breakpoint.
+  const useMobileLayout = isMobile || !isDesktopViewport;
 
   useEffect(() => {
     const handleToggle = (e) => setSidebarOpen(e.detail.open);
@@ -119,11 +144,25 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
   }, []);
 
   // This feature is hidden from unauthenticated states and from managers —
-  // default users get the option picker, admins the full selector.
+  // default users get the option picker, admins the full selector. On mobile
+  // the chip is rendered as a fixed button over the mobile header's right
+  // side (the desktop absolute-positioned chip is hidden below the md
+  // breakpoint), so default users can pick their inference option on phones.
   if (!!user && user.role !== "admin" && user.role !== "default") return null;
-  if (!slug || isMobile) return null;
+  if (!slug) return null;
 
-  return (
+  // Panel widths: the option picker is 420px on desktop and the full
+  // provider/model selector 620px. In the mobile layout both clamp to the
+  // viewport minus side gutters so the popover never overflows the screen.
+  const pickerPanelWidth = useMobileLayout
+    ? isInferenceOptionUser
+      ? "w-[min(420px,calc(100vw-24px))]"
+      : "w-[min(620px,calc(100vw-24px))]"
+    : isInferenceOptionUser
+      ? "w-[420px]"
+      : "w-[620px]";
+
+  const picker = (
     <>
       {showSelector && (
         <div
@@ -132,9 +171,13 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
         />
       )}
       <div
-        className={`hidden md:block absolute top-2 z-30 transition-all duration-500 ${
-          sidebarOpen ? "left-3" : "left-11"
-        }`}
+        className={
+          useMobileLayout
+            ? "fixed top-16 right-4 z-30"
+            : `hidden md:block absolute top-2 z-30 transition-all duration-500 ${
+                sidebarOpen ? "left-3" : "left-11"
+              }`
+        }
       >
         <button
           type="button"
@@ -162,11 +205,9 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
 
         {showSelector && (
           <div
-            className={`absolute left-0 top-full mt-1 border rounded-xl shadow-lg overflow-hidden ${
-              isInferenceOptionUser
-                ? "w-[420px] bg-zinc-800 light:bg-white border-zinc-700 light:border-slate-300"
-                : "w-[620px] bg-zinc-800 light:bg-white border-zinc-700 light:border-slate-300"
-            }`}
+            className={`absolute ${
+              useMobileLayout ? "right-0" : "left-0"
+            } top-full mt-1 border rounded-xl shadow-lg overflow-hidden ${pickerPanelWidth} bg-zinc-800 light:bg-white border-zinc-700 light:border-slate-300`}
           >
             {isInferenceOptionUser ? (
               <InferenceOptionPicker
@@ -213,4 +254,15 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
       />
     </>
   );
+
+  // Mobile renders through a portal to document.body: the chip is
+  // position:fixed, but the chat container tree gives it a local stacking
+  // context (z-[2] wrapper with transforms/filters during transitions), so
+  // its z-30 was scoped below the UserMenu bar (z-40) — the badges sat on
+  // top and the header's stacking buried the button. Portalling into the
+  // root body puts the chip in the global stacking context where its own
+  // z-30 wins. Desktop keeps the in-tree render so the chip still anchors
+  // to the chat container and slides with the sidebar toggle.
+  if (useMobileLayout) return createPortal(picker, document.body);
+  return picker;
 }
