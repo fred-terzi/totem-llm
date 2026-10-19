@@ -30,10 +30,13 @@ Planning and design documents for features live in subdirectories:
 |-------|-------|--------|
 | Per-user filesystem isolation | [per-user-filesystem/](per-user-filesystem/) | ✅ Implemented |
 | File Explorer & Viewer | [file-explorer/](file-explorer/) | ✅ Implemented |
+| Implementation planning workflow (method/skill) | [implementation-planning/SKILL.md](implementation-planning/SKILL.md) | ✅ Active |
 
 Each topic directory holds a `requirement-spec.md` (what & why, threat model,
 acceptance criteria) and an `implementation-plan.md` (step-by-step, against the
-current code). See `AGENTS.md` §5 for the doc-first workflow.
+current code). See `AGENTS.md` §5 and
+[implementation-planning/SKILL.md](implementation-planning/SKILL.md) for the
+implementation-planning workflow.
 
 ## Conventions Used in These Docs
 
