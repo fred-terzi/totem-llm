@@ -23,6 +23,10 @@ const {
   WorkspaceSuggestedMessages,
 } = require("../models/workspacesSuggestedMessages");
 const { validWorkspaceSlug } = require("../utils/middleware/validWorkspace");
+const {
+  isValidOptionKey,
+  listInferenceOptions,
+} = require("../utils/inferenceOptions");
 const { convertToChatHistory } = require("../utils/helpers/chat/responses");
 const { CollectorApi } = require("../utils/collectorApi");
 const {
@@ -94,6 +98,65 @@ function workspaceEndpoints(app) {
       } catch (e) {
         console.error(e.message, e);
         response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // Default-user inference option selection (spec F13). Member-gated and
+  // option-key-only: the body accepts just `option` (a registry key or null
+  // to clear), never raw provider/model values. Writes via the Step 1 helper,
+  // the ONLY sanctioned write path for `workspaces.user_inference_option`.
+  app.post(
+    "/workspace/:slug/inference-option",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      try {
+        const user = await userFromSession(request, response);
+        const { option = null } = reqBody(request);
+
+        // Allowlist validation BEFORE the membership check so unknown keys are
+        // rejected uniformly for every caller (AC 12).
+        if (option !== null && !isValidOptionKey(option)) {
+          return response.status(400).json({
+            success: false,
+            message: "Invalid inference option.",
+          });
+        }
+
+        // `validWorkspaceSlug` already scopes the workspace to the requesting
+        // user in multi-user mode (Workspace.getWithUser enforces
+        // workspace_users membership for non-privileged roles), so a
+        // non-member gets a 404 here — this branch is defense-in-depth for
+        // the resolved-workspace shape.
+        const workspace = response.locals.workspace;
+        if (!workspace?.id) {
+          return response
+            .status(404)
+            .json({ success: false, message: "Workspace does not exist." });
+        }
+
+        const { success, message } = await Workspace.setInferenceOption(
+          workspace.slug,
+          option
+        );
+        if (!success) {
+          return response.status(500).json({ success, message });
+        }
+
+        await EventLogs.logEvent(
+          "inference_option_set",
+          {
+            workspaceSlug: workspace.slug,
+            option: option ?? "legacy",
+          },
+          user?.id
+        );
+        return response
+          .status(200)
+          .json({ success: true, option, error: null });
+      } catch (e) {
+        console.error(e.message, e);
+        response.status(500).json({ success: false, error: "Server error" });
       }
     }
   );
@@ -1147,6 +1210,28 @@ function workspaceEndpoints(app) {
       } catch (error) {
         console.error("Error checking if agent command is available:", error);
         response.status(500).json({ showAgentCommand: true });
+      }
+    }
+  );
+
+  // Picker availability payload (spec F14) — authenticated so option
+  // availability is not leaked pre-auth (Step 0 finding: /setup-complete is
+  // unauthenticated and would leak it). Frontend filters on `available`;
+  // the F11 admin page reads slugs via the admin variant instead.
+  app.get(
+    "/workspace/:slug/inference-options",
+    [validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug],
+    async (request, response) => {
+      try {
+        const options = await listInferenceOptions(false);
+        response.status(200).json({
+          success: true,
+          options,
+          selected: response.locals.workspace.user_inference_option ?? null,
+        });
+      } catch (e) {
+        console.error(e.message, e);
+        response.status(500).json({ success: false, error: "Server error" });
       }
     }
   );

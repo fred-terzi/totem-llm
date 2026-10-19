@@ -83,14 +83,35 @@ Environment note: root `node_modules` was production-only in this checkout (`NOD
 
 ## Step 2 — Option configuration + read/write endpoints (F11 server side, F13, F14)
 
-**Status: not started**
+**Status: complete (2026-10-19)** — commit `feat(server): inference option registry + read/write endpoints` (dev-totem)
 
-- New module (e.g. `server/utils/inferenceOptions.js`): option registry — keys (`totem-free`, `totem-anon`, `totem-e2ee`), labels, descriptions, `system_settings` label per option (`default_user_inference_option_free` etc.), resolution helper `resolveOptionModel(optionKey)` reading slugs from `system_settings` per request (N6), availability flags (F14: Option 1 requires `process.env.OPENROUTER_API_KEY`). Seed initial slugs on first read if unset (same pattern as other `system_settings` consumers).
-- `POST /workspace/:slug/inference-option` in `server/endpoints/workspaces.js` — middleware `[validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspace]`; verify workspace membership for default users (check `workspace_users` for the requesting user; admins bypass); body accepts only `option`; writes via the Step 1 helper; rejects unknown keys with 400 (AC 12).
-- Read-only availability endpoint for the picker (F14): return the three options with label, description, reference slug, availability. Add to `server/endpoints/system.js` or the workspaces router — whichever the Step 0 investigation shows the frontend already polls for chat-config data.
-- F11 admin API: extend `server/endpoints/admin.js` with GET/POST for the three slugs (admin-gated), writing the `system_settings` labels.
+### Implemented
 
-**Tests:** endpoint tests following existing patterns in `server/__tests__/endpoints/` — member writes, non-member 403, invalid key 400, slug persistence, availability shape.
+- **Registry — `server/utils/inferenceOptions.js` (new module):**
+  - `INFERENCE_OPTIONS`: the three options in picker order (`totem-free`, `totem-anon`, `totem-e2ee`) with label, description, provider id (`openrouter` / `venice` / `venice`), `system_settings` label (`default_user_inference_option_{free,anon,e2ee}`), fallback slug, and `isAvailable()` (F14: Option 1 requires `OPENROUTER_API_KEY`, Options 2/3 require `VENICE_API_KEY`).
+  - `resolveOption(optionKey)` → `{ option, provider, model }` — reads the configured slug from `system_settings` **per request** (N6: admin slug changes apply without restart); null for unknown/null keys → callers fall back to legacy routing (OQ-4).
+  - `getOptionSlug` seeds the fallback slug into `system_settings` on first read (upsert via `SystemSettings._updateSettings`) — verified: after first read all three rows exist with the F11 initial slugs.
+  - `isValidOptionKey` (F13 allowlist), `listInferenceOptions(includeSettingLabel)` (F14 payload; label only in the admin variant), `setOptionSlugs` (F11 write, partial-map, rejects empty/unknown keys).
+- **F13 write endpoint — `POST /workspace/:slug/inference-option`** (`server/endpoints/workspaces.js`): middleware `[validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspaceSlug]`. Allowlist validation runs before the membership check (uniform 400 for unknown keys, AC 12). Membership enforcement reuses `validWorkspaceSlug`'s `Workspace.getWithUser` resolution — for default-role users this already joins on `workspace_users` (non-member ⇒ 404, no write); admins bypass via `Workspace.get`. Body accepts only `option`; write goes through `Workspace.setInferenceOption` (Step 1 helper). Logs `inference_option_set` to `EventLogs` (audit trail). `/update` remains admin/manager-only and untouched.
+- **F14 read endpoint — `GET /workspace/:slug/inference-options`** (same router): returns `{ success, options: [{key,label,description,provider,model,available}], selected }`. `selected` comes from the just-resolved workspace row, so the picker reflects the persisted selection. Deliberately **workspace-scoped and authenticated** per the Step 0 decision (not `/setup-complete`, which is unauthenticated and would leak availability pre-auth). The `settingLabel` field is omitted from this payload — only the admin variant exposes it.
+- **F11 admin API — `GET|POST /admin/inference-options`** (`server/endpoints/admin.js`, `strictMultiUserRoleValid([ROLES.admin])` — admin-only per spec F11): GET returns the full option list including current slugs + `settingLabel`s; POST accepts a partial `{ optionKey: slug }` map, validates via the registry, writes `system_settings`.
+
+### Deviations / decisions made during implementation
+
+- **Read endpoint placed in the workspaces router, not `system.js`:** it needs `validWorkspaceSlug` (to return the workspace's `selected` option) and is consumed in the chat context; the plan left the choice of router open pending Step 0. Availability-only data is still carried in every response, so the picker has everything it needs from one call.
+- **Admin POST returns 400 (not 200-with-error) for invalid payloads** so the admin UI can distinguish validation failure from success — consistent with how the registry's `setOptionSlugs` reports errors.
+
+### Tests
+
+`server/__tests__/endpoints/inferenceOptions.test.js` (new, 6 tests, all passing) — same harness pattern as `invite.test.js` (throwaway SQLite DB with full migration history; `updateENV` stubbed per `adminUserEmail.test.js` to avoid the transitive AWS-SDK load; handlers captured via a fake app and invoked with `response.locals.workspace` pre-set the way `validWorkspaceSlug` hands them over):
+- happy-path write + persistence (member, valid key, AC 12);
+- all three keys persist, `null` clears the selection (F5/N4);
+- unknown keys — including provider/model injection attempts like `openrouter|nvidia/…` — 400 and write nothing (AC 12);
+- non-member scoping: `Workspace.getWithUser` resolves null for an outsider and the handler 404s with no write;
+- availability payload shape: three options in registry order, current slugs, boolean `available`, `selected` reflects the persisted write, and **no `settingLabel` leak** in the member payload (F14);
+- `selected` is null for never-selected workspaces (legacy, N4).
+
+Registry smoke-checked live (key-gating flips correctly with/without the API keys; resolve/allowlist/seed behaviors verified against the dev DB). Full suite after Step 2: **42 suites / 326 tests passing**.
 
 ---
 
@@ -183,7 +204,7 @@ Environment note: root `node_modules` was production-only in this checkout (`NOD
 |---|---|---|
 | — | 0 | **Complete (2026-10-19)** — findings recorded; one correction to Step 3 (dual insertion point) |
 | — | 1 | **Complete (2026-10-19)** — migration `20261019162057_add_user_inference_option` applied + verified; per-model rate table in `credits.js` (fail-closed N7, zero-rate free slug); `Workspace.setInferenceOption` write helper; credits tests 6→23 passing; full server test suite green (41 suites / 320 tests) |
-| — | 2 | Not started |
+| — | 2 | **Complete (2026-10-19)** — registry `server/utils/inferenceOptions.js` (seed-on-first-read `system_settings` slugs, availability flags, fail-closed resolve); `POST /workspace/:slug/inference-option` (F13, member-gated option-key-only, EventLogs audit); `GET /workspace/:slug/inference-options` (F14 payload + `selected`); `GET\|POST /admin/inference-options` (F11, admin-only); 6 new endpoint tests; full suite 42/326 green |
 | — | 3–4 | Not started |
 | — | 5–6 | Not started |
 | — | 7 (merge gate) | Not started |

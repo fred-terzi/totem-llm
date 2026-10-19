@@ -31,6 +31,10 @@ const {
 const {
   workspaceDeletionProtection,
 } = require("../utils/middleware/workspaceDeletionProtection");
+const {
+  listInferenceOptions,
+  setOptionSlugs,
+} = require("../utils/inferenceOptions");
 
 function adminEndpoints(app) {
   if (!app) return;
@@ -535,6 +539,40 @@ function adminEndpoints(app) {
         });
       } catch (e) {
         console.error(e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  // Inference option slug configuration (spec F11). Admin-only: sets the
+  // model slug behind each of the three curated default-user options.
+  // Reads/writes `system_settings` via the registry; changes apply to
+  // already-selected workspaces on subsequent chats without a restart
+  // (selections store the option key, F5).
+  app.get(
+    "/admin/inference-options",
+    [validatedRequest, strictMultiUserRoleValid([ROLES.admin])],
+    async (_request, response) => {
+      try {
+        const options = await listInferenceOptions(true);
+        response.status(200).json({ options });
+      } catch (e) {
+        console.error(e.message, e);
+        response.sendStatus(500).end();
+      }
+    }
+  );
+
+  app.post(
+    "/admin/inference-options",
+    [validatedRequest, strictMultiUserRoleValid([ROLES.admin])],
+    async (request, response) => {
+      try {
+        const slugs = reqBody(request);
+        const { success, error } = await setOptionSlugs(slugs);
+        response.status(success ? 200 : 400).json({ success, error });
+      } catch (e) {
+        console.error(e.message, e);
         response.sendStatus(500).end();
       }
     }
