@@ -1,0 +1,172 @@
+# Default-User Inference Options — Implementation Plan
+
+> Companion to [`requirement-spec.md`](./requirement-spec.md). All paths are relative to repo root. Requirement IDs (F# / N#) refer to the spec. This plan is a journal: steps record what was implemented as it happened; deviations are documented in place, not silently rewritten.
+
+**Spec anchors verified (2026-10-19):**
+
+| Claim | Where | Verified |
+|---|---|---|
+| Agent-path provider resolution + fallback chain | `server/utils/agents/index.js:463` (`#providerSetupAndCheck`), `:401` (`#getFallbackProvider`), `:428` (`#fetchModel`) | ✅ |
+| Agent invocation decision (automatic mode) | `server/utils/agents/index.js:56` (`isAgentInvocation`) → `Workspace.supportsNativeToolCalling` (`server/models/workspace.js:659`) | ✅ |
+| Credit gate, both stream endpoints | `server/endpoints/chat.js:47`, `:140` | ✅ |
+| Agent-path debit site (only debit call site) | `server/utils/agents/aibitat/plugins/chat-history.js:247` (`_debitCredits`) → `Credits.debitUsage` | ✅ |
+| `debit()` skips `amount <= 0` (no ledger row) | `server/models/credits.js:121` | ✅ |
+| Single-model hardcoded rates | `server/models/credits.js:16-19` (`MODEL`, `INPUT_RATE`, `OUTPUT_RATE`, TODO comment) | ✅ |
+| `workspaces` table fields, no option column yet | `server/prisma/schema.prisma:121-153` (`chatProvider`, `chatModel`, `agentProvider`, `agentModel`) | ✅ |
+| `/update` is admin/manager-gated | `server/endpoints/workspaces.js:72-73` | ✅ |
+| `OpenRouterLLM` throws without key | `server/utils/AiProviders/openRouter/index.js:32` | ✅ |
+| Provider tool-calling support: Venice capability-based, OpenRouter env-gated | `server/utils/agents/aibitat/providers/venice.js:57`, `server/utils/agents/aibitat/providers/openrouter.js:51` | ✅ |
+| `system_settings` is label/value KV | `server/prisma/schema.prisma:49-55` | ✅ |
+
+---
+
+## Step 0 — Investigation (no code)
+
+**Status: complete (2026-10-19)**
+
+### Findings
+
+| # | Question | Finding | Citation |
+|---|---|---|---|
+| 1 | Full agent invocation chain + where role is available | Chain confirmed: `chat.js` POST → `streamChatWithWorkspace` → `grepAgents()` (`server/utils/chats/stream.js:43`) → returns `websocketUUID` to client → client opens WS `/agent-invocation/:uuid` → `new AgentHandler({uuid}).init()` (`server/endpoints/agentWebsocket.js:24`) → `#validInvocation()` → `#providerSetupAndCheck()` (`server/utils/agents/index.js:720-725`, `:463`). `invocation` (from `WorkspaceAgentInvocation.getWithWorkspace`, `server/models/workspaceAgentInvocation.js:54-66`) carries **`user_id` only, not role**. Role must be fetched: `User.get({ id: invocation.user_id })` — exactly the pattern `chat-history.js:_debitCredits` already uses (`chat-history.js:265`). Cost: one indexed PK lookup per agent session (init runs once per invocation, not per turn/token). Acceptable; no schema change needed. |
+| 2 | Venice slugs support native tool calling? | **LIVE-VERIFIED (2026-10-19, against api.venice.ai).** Both `z-ai-glm-5-3-flash` and `e2ee-glm-5-3-flash` return `tools: true` from `getModelCapabilities()` (`VeniceLLM.modelSpecs` populated from live `/models`; specs found for both slugs). `VeniceProvider.supportsNativeToolCalling()` delegates to this (`server/utils/agents/aibitat/providers/venice.js:57`) → **true**. Spec F3/F4 assumption holds. |
+| 3 | `metrics.model` plumbing | Chain confirmed: aibitat provider stamps `lastUsage.model = this.model` (`server/utils/agents/aibitat/providers/ai-provider.js:639`) → `chat-history.js` reads `lastCall.model` into `metrics.model` (`chat-history.js:121`) → `_debitCredits(invocation, prompt_tokens, completion_tokens, metrics.model, chatId)` (`chat-history.js:148-153`, `:224-229`) → `Credits.debitUsage({ model })`. So if the F12 override sets `this.model` on the handler → AIbitat config → `providerInstance.model`, the billing slug is correct automatically (F6 works with zero changes to the debit site). |
+| 4 | Where `OPENROUTER_API_KEY` presence is readable for F14 | No existing payload carries it. `GET /setup-complete` → `SystemSettings.currentSettings()` (`server/endpoints/system.js:107-116`, `systemSettings.js:456`) is what the frontend's `System.keys()` consumes, but it is **unauthenticated** and a large config dump — adding a key-presence boolean there works but is an odd fit. The picker's workspace data comes from `GET /workspace/:slug` (`server/endpoints/workspaces.js:365`, `ROLES.all`). **Decision: dedicated authenticated availability endpoint** (new, in `system.js` or `workspaces.js`), per spec F14 — piggybacking on `/setup-complete` would leak option availability pre-auth. |
+| 5 | Prisma migration workflow | Verified: `yarn prisma:generate` = `cd server && npx prisma generate`; `yarn prisma:migrate` = `cd server && npx prisma migrate dev --name init` (root `package.json:46-47`). A nullable `String?` with no default on `workspaces` is a plain `ALTER TABLE ... ADD COLUMN` in SQLite — no table rebuild (the rebuild pattern in `20261013170000_add_credit_usage_fields` was only needed because of FK/default constraints; we have none). Low risk. |
+| 6 | Frontend selector + role branch | The chat-area picker is `WorkspaceModelPicker` (`frontend/src/components/WorkspaceChat/ChatContainer/WorkspaceModelPicker/index.jsx`) — currently **hard-hidden for every non-admin**: `if (!!user && user.role !== "admin") return null;` (`index.jsx:96`). Note this also hides it from managers (current behavior — preserved). Role is available via `useUser()` → `AuthContext` (`frontend/src/hooks/useUser.js`). The default-user branch renders a new option-picker component at this gate instead of returning null. Selection currently saves via `Workspace.update` → admin-gated `POST /workspace/:slug/update` — confirming F13's new endpoint is required for default users. |
+
+### New finding (not anticipated by the plan): OpenRouter tool-calling is env-gated, not capability-based
+
+`OpenRouterProvider.supportsNativeToolCalling()` returns `false` unless `PROVIDER_SUPPORTS_NATIVE_TOOL_CALLING` (env) includes `"openrouter"` (`server/utils/agents/aibitat/providers/openrouter.js:51-56` → `ai-provider.js:160-172`). It does **not** query OpenRouter's `/models` capabilities. The env var is not set in this deployment's `.env.development`.
+
+Live check (2026-10-19): the configured free slug `nvidia/nemotron-3.5-lightning:free` **does** advertise `tools: true` (context 1M) on OpenRouter's `/models` — so the model itself is agent-capable; only the code path is gated.
+
+Consequence for Option 1 as configured: without the env flag, `Workspace.supportsNativeToolCalling()` returns false → `grepAgents` in automatic mode does not spawn an agent invocation → Option 1 chats run in the **standard chat mode path** (`stream.js` → `resolveLLMConnector`). The user approved this fallback ("fine for the free model"), but it means:
+
+- **Correction to Step 3:** the F12 routing override must ALSO be applied in the standard chat path's connector resolution (`resolveProviderConnector`, `server/utils/helpers/index.js:650-664`) — not only in `AgentHandler.#providerSetupAndCheck()` — otherwise a default user on Option 1 in chat-mode fallback silently routes to the workspace/system provider instead of the free slug. Same guard (default role + option set), same registry lookup; applied after the existing router/system-default resolution. Gate-skip (F7) already covers this path (both gates in `chat.js`).
+- Implementation may optionally set `PROVIDER_SUPPORTS_NATIVE_TOOL_CALLING=openrouter,...` at deploy time to force agent-path routing for Option 1 — behavior then matches Options 2/3. Either path satisfies the spec; chat-mode fallback is the default (no env change required).
+
+**Output:** findings table above appended to this step (2026-10-19). One correction recorded (Step 3 scope: standard-chat-path override for Option 1). No other later-step assumptions invalidated.
+
+---
+
+## Step 1 — Prisma migration + data layer
+
+**Status: not started**
+
+- Add `user_inference_option String?` to the `workspaces` model in `server/prisma/schema.prisma` (nullable, no default — N4).
+- Generate + run migration (`yarn prisma:generate`, `yarn prisma:migrate`). One migration, additive only.
+- Extend `server/models/workspace.js` with a narrow write helper (e.g. `setInferenceOption(slug, optionKey | null)`) used only by the F13 endpoint; validate the key against the allowed set server-side.
+- Add rate-table shape to `server/models/credits.js`: replace the single `MODEL`/`INPUT_RATE`/`OUTPUT_RATE` constants with a per-model map (default rate = e2ee's, per N7), update `calculateCost`/`debitUsage` to look up by model slug. Zero rates for the configured free slug yield cost 0 → existing early-returns produce no ledger row (F6/OQ-14, no code beyond the map needed).
+
+**Tests:** extend `server/__tests__/models/credits.test.js` — per-model lookup, zero-rate → no debit/no row, unknown slug → e2ee fallback (AC 14, 15).
+
+---
+
+## Step 2 — Option configuration + read/write endpoints (F11 server side, F13, F14)
+
+**Status: not started**
+
+- New module (e.g. `server/utils/inferenceOptions.js`): option registry — keys (`totem-free`, `totem-anon`, `totem-e2ee`), labels, descriptions, `system_settings` label per option (`default_user_inference_option_free` etc.), resolution helper `resolveOptionModel(optionKey)` reading slugs from `system_settings` per request (N6), availability flags (F14: Option 1 requires `process.env.OPENROUTER_API_KEY`). Seed initial slugs on first read if unset (same pattern as other `system_settings` consumers).
+- `POST /workspace/:slug/inference-option` in `server/endpoints/workspaces.js` — middleware `[validatedRequest, flexUserRoleValid([ROLES.all]), validWorkspace]`; verify workspace membership for default users (check `workspace_users` for the requesting user; admins bypass); body accepts only `option`; writes via the Step 1 helper; rejects unknown keys with 400 (AC 12).
+- Read-only availability endpoint for the picker (F14): return the three options with label, description, reference slug, availability. Add to `server/endpoints/system.js` or the workspaces router — whichever the Step 0 investigation shows the frontend already polls for chat-config data.
+- F11 admin API: extend `server/endpoints/admin.js` with GET/POST for the three slugs (admin-gated), writing the `system_settings` labels.
+
+**Tests:** endpoint tests following existing patterns in `server/__tests__/endpoints/` — member writes, non-member 403, invalid key 400, slug persistence, availability shape.
+
+---
+
+## Step 3 — Agent-path routing override (F12) + credit-gate skip (F7)
+
+**Status: not started**
+
+> **Step 0 correction applies:** the override below has TWO insertion points —
+> (a) `AgentHandler.#providerSetupAndCheck()` for the agent path, and
+> (b) `resolveProviderConnector()` (`server/utils/helpers/index.js:650-664`) for the standard chat path
+> (which Option 1 hits when `supportsNativeToolCalling()` is false for the free model). Same guard, same registry.
+
+- In `server/utils/agents/index.js` `#providerSetupAndCheck()` (line 463): before the `agentProvider ?? …` resolution, if the invocation's user is resolvable with role `default` **and** `workspace.user_inference_option` is set, resolve (provider, model) via the Step 2 registry and assign to `this.provider`/`this.model`, bypassing the fallback chain and the `anythingllm-router` resolution. Errors resolving the option (slug unset, provider check failure) fall back to the existing chain and log — the user sees the standard error shape (N5).
+- In `server/endpoints/chat.js` (both gates at `:47` and `:140`): skip `Credits.hasCredits()` when `user.role` is default **and** `workspace.user_inference_option === "totem-free"` (AC 5). All other branches unchanged (AC 6).
+- Do **not** touch `supportsNativeToolCalling()` (F15) or `chat-history.js` (F6 — model-keyed rates in Step 1 make the existing debit correct automatically).
+
+**Tests:** unit tests around `#providerSetupAndCheck` (option set → override wins over `agentProvider`; option NULL → legacy chain; non-default role → legacy chain; unknown option → fallback). Gate-skip tests for both chat endpoints.
+
+---
+
+## Step 4 — Upstream 429 mapping (F8)
+
+**Status: not started**
+
+- In the OpenRouter agent provider (`server/utils/agents/aibitat/providers/openrouter.js`) and/or the LLM connector (`server/utils/AiProviders/openRouter/index.js`) — wherever the upstream error is caught first — detect HTTP 429 / free-tier exhaustion and rethrow with a stable error marker.
+- Map that marker to the F8 wording at the point where agent errors reach the client, so the message shown is exactly: *"The free model is rate-limited right now. Switch to Anonymous or E2EE inference to continue."* No new error contract beyond the string (N5).
+
+**Tests:** unit test the 429 detection and message mapping (AC 7).
+
+---
+
+## Step 5 — Frontend picker (F1, F10, F14 consumer)
+
+**Status: not started**
+
+- Modify `frontend/src/components/WorkspaceChat/ChatContainer/PromptInput/LLMSelector/` (per Step 0 findings — likely `LLMSelector/LLMSelector/index.jsx` and `ChatModelSelection/`): when `user.role === "default"` (multiuser mode), render the three options from the F14 endpoint instead of the provider/model list; show reference model slug per option; show the tool-support caveat on Option 1 (N1 wording review for all three labels); hide unavailable options (AC 13).
+- Selection calls the F13 endpoint; optimistic UI update + refetch; no admin/manager-facing changes (AC 9).
+- Persisted state display: if the workspace already has an option set, show it as selected (read from the F14/workspace payload — confirm the workspace object the frontend already holds can carry `user_inference_option`, extend the workspace API response shape if needed).
+
+**Tests:** follow existing frontend test patterns (`frontend/__tests__/`) if a harness exists; otherwise manual smoke test recorded in this step.
+
+---
+
+## Step 6 — Admin UI for option slugs (F11 frontend)
+
+**Status: not started**
+
+- Add an admin page (candidate: a section under `frontend/src/pages/Admin/` following the existing panels' structure) presenting the three options with their current slugs and save actions against the Step 2 admin API. No rate editing (out of scope).
+
+**Tests:** manual smoke test recorded; admin gating exercised via API tests in Step 2.
+
+---
+
+## Step 7 — Tests, smoke test, merge gate
+
+**Status: not started**
+
+- Full suite: `yarn lint && yarn test` from root (lint before test per repo convention).
+- Manual smoke matrix (multiuser mode, source build profile, Venice + OpenRouter keys configured):
+  1. Default user sees exactly three options; admin sees full selector (AC 1, 9).
+  2. Option 1 chat end-to-end: routes to free slug, no 402 at zero credits, no ledger row, `metrics.model` = free slug (AC 2, 5, 14).
+  3. Option 2/3 chats: routes to Venice slugs, correct per-model debits, 402 at zero credits (AC 3, 4, 6).
+  4. Unselected workspace: pre-feature behavior (AC 8).
+  5. Admin slug change via F11 page applies to an already-selected workspace without restart (AC 10).
+  6. `agentProvider`-configured workspace: default user's selection wins (AC 11); admin user unaffected.
+  7. 429 path (simulate upstream error) shows F8 wording (AC 7).
+  8. Endpoint abuse: invalid key, non-member, unauthenticated (AC 12).
+- This step is the **merge gate**: no PR merges with a failing matrix entry.
+
+---
+
+## Risk table
+
+| Step | Risk | Level | Mitigation |
+|---|---|---|---|
+| 1 | `credits.js` rate-table refactor touches the billing core | Medium | Per-model map with e2ee fallback default (N7); existing `credits.test.js` extended before refactor merges; all other call sites unchanged (`debitUsage` signature stable) |
+| 1 | SQLite migration on `workspaces` (large table) | Low | Additive nullable column only; no default, no index, no relation |
+| 2 | Membership check on new endpoint too strict/loose | Medium | Reuse existing `validWorkspace` + explicit `workspace_users` check; endpoint tests cover non-member and cross-workspace cases (AC 12) |
+| 3 | Override injected into `#providerSetupAndCheck` affects non-agent paths | Low | Method is only reachable via agent invocation; change is guarded on role + option presence; NULL option is a no-op branch |
+| 3 | Role lookup per chat adds a User query | Low | Step 0 verifies whether `invocation` already carries enough identity; if a fetch is needed, it's one indexed PK lookup per agent session (not per token) |
+| 4 | 429 detection couples to OpenRouter error shape | Low | Detection is narrow (status code / marker); unmapped errors keep the standard shape (N5) |
+| 5 | Selector changes regress admin/manager picker | Medium | Role branch isolated; AC 9 in smoke matrix; no shared-component behavior change for privileged roles |
+| 7 | Smoke matrix depends on live Venice/OpenRouter keys | Medium | 429 and routing paths unit-tested in Steps 3–4; live checks can use admin-configured test slugs |
+
+---
+
+## PR / status log
+
+| PR | Steps | Status |
+|---|---|---|
+| — | 0 | **Complete (2026-10-19)** — findings recorded; one correction to Step 3 (dual insertion point) |
+| — | 1–2 | Not started |
+| — | 3–4 | Not started |
+| — | 5–6 | Not started |
+| — | 7 (merge gate) | Not started |
+
+*(Populate as work proceeds; record bugfix commits found during manual testing here.)*
