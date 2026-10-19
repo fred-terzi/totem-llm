@@ -240,6 +240,31 @@ const Admin = {
         return { apiKey: null, error: e.message };
       });
   },
+  // Inference option slug configuration (spec F11)
+  inferenceOptions: async function () {
+    return fetch(`${API_BASE}/admin/inference-options`, {
+      method: "GET",
+      headers: baseHeaders(),
+    })
+      .then((res) => res.json())
+      .catch((e) => {
+        console.error(e);
+        return { options: [], error: e.message };
+      });
+  },
+  setInferenceOptionSlugs: async function (slugs = {}) {
+    return fetch(`${API_BASE}/admin/inference-options`, {
+      method: "POST",
+      headers: baseHeaders(),
+      body: JSON.stringify(slugs),
+    })
+      .then((res) => res.json())
+      .catch((e) => {
+        console.error(e);
+        return { success: false, error: e.message };
+      });
+  },
+
   deleteApiKey: async function (apiKeyId = "") {
     return fetch(`${API_BASE}/admin/delete-api-key/${apiKeyId}`, {
       method: "DELETE",

@@ -163,6 +163,7 @@ export default {
       return `/settings/model-routers/${id}`;
     },
     systemPromptVariables: () => "/settings/system-prompt-variables",
+    inferenceOptions: () => "/settings/inference-options",
     logs: () => {
       return "/settings/event-logs";
     },

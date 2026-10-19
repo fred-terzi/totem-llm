@@ -331,6 +331,14 @@ const SidebarOptions = ({ user = null, t }) => {
                 flex: true,
                 roles: ["admin"],
               },
+              {
+                btnText: t("settings.inference-options.title", {
+                  defaultValue: "Inference Options",
+                }),
+                href: paths.settings.inferenceOptions(),
+                flex: true,
+                roles: ["admin"],
+              },
             ]}
           />
           {agentModeEnabled.enabled && (

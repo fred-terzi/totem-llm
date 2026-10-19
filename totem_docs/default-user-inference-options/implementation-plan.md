@@ -195,11 +195,27 @@ Manual smoke checklist (to exercise in the Step 7 matrix):
 
 ## Step 6 — Admin UI for option slugs (F11 frontend)
 
-**Status: not started**
+**Status: complete (2026-10-19, uncommitted — PR pending)**
 
-- Add an admin page (candidate: a section under `frontend/src/pages/Admin/` following the existing panels' structure) presenting the three options with their current slugs and save actions against the Step 2 admin API. No rate editing (out of scope).
+### Implemented
 
-**Tests:** manual smoke test recorded; admin gating exercised via API tests in Step 2.
+- **New page — `frontend/src/pages/Admin/InferenceOptions/index.jsx`** (structured after `Admin/DefaultSystemPrompt` / `Admin/SystemPromptVariables`):
+  - Fetches the admin payload via new `Admin.inferenceOptions()` model method (`GET /admin/inference-options`, Step 2 endpoint) — renders the three registry options in registry order (F1) with label, description, option key, provider id, and a live availability badge (green/red pill derived from the payload's `available` boolean, i.e. whether the provider API key is configured).
+  - Each option has an editable **model slug** field (monospace, pre-filled from the current `system_settings` value). Saving posts the full slug map to new `Admin.setInferenceOptionSlugs()` (`POST /admin/inference-options`); the registry validates values server-side (empty/unknown keys → 400 → error toast). On success: success toast + refetch so the fields reflect persisted state.
+  - **No rate editing** — out of scope per the plan; a comment in the page points at `server/models/credits.js` `MODEL_RATES` as the (deliberately non-admin) rate source.
+  - i18n: `settings.inference-options.*` keys in `locales/en/common.js` with `defaultValue` fallbacks in the component (same pattern as Step 5); other locales fall back to English.
+- **Route — `main.jsx`:** `/settings/inference-options`, lazy-loaded, wrapped in `AdminRoute` (client mirror of the server's `strictMultiUserRoleValid([ROLES.admin])` gate; managers excluded server-side already, and this is an admin-only surface per F11).
+- **Sidebar — `SettingsSidebar/index.jsx`:** new entry under the existing **Admin** section (below "Default System Prompt"), `roles: ["admin"]`, via new `paths.settings.inferenceOptions()` helper.
+
+### Tests
+
+Manual smoke test recorded (below); admin gating + payload/write semantics exercised via the Step 2 endpoint tests re-verified green. `npx eslint` + `npx prettier --check` clean on all five touched frontend files; full server suite 47 suites / 363 tests passing. Dev server on :3000 serves the new module (Vite module fetch verified).
+
+Manual smoke checklist (to fold into the Step 7 matrix, row 5):
+1. As admin: Settings → Admin → Inference Options shows the three options with current slugs and correct availability pills (toggle `OPENROUTER_API_KEY`/`VENICE_API_KEY` to flip).
+2. Change a slug → save → success toast; `system_settings` row updated; a default-user workspace with that option selected routes to the new slug on its next chat **without a server restart** (AC 10, N6 — this is the AC 10 verification path).
+3. Clear a slug → save → error toast, no write (server rejects empty values).
+4. Non-admin (default role) navigating directly to `/settings/inference-options` → blocked by `AdminRoute`; direct API call → 403 from `strictMultiUserRoleValid` (covered by Step 2 tests).
 
 ---
 
@@ -388,7 +404,7 @@ curl-checked through the dev server).
 | — | 3 | **Complete (2026-10-19)** — shared F12 guard `resolveOverrideForUser` in the registry (fail-closed: null option / non-default role / unknown key → null; resolution errors downgraded to null per N5); wired into both insertion points — `AgentHandler.#providerSetupAndCheck()` (role via `User.get({ id })` per Step 0) and `resolveProviderConnector()` (chat-path fallback per Step 0 correction); F7 gate-skip as a local `skipCreditGate` predicate in `chat.js`, both gates updated, admin-exemption semantics unchanged; test-file split (AgentHandler block vs chat-path block) to avoid jest.mock registry leakage; 14 routing/guard/chat-path tests; full suite 45/340 green; FILE_TREE regenerated |
 | — | 4 | **Complete (2026-10-19)** — `server/utils/freeModelRateLimit.js` (narrow 429 detection + marker + client-facing mapping gated on the *currently configured* free slug via registry `isConfiguredFreeSlug`); wired into both OpenRouter throw sites (aibitat provider `stream`/`complete`, connector `getChatCompletion`/`streamGetChatCompletion`/`handleStream`) and both client-facing points (aibitat `websocket` onError → `wssFailure`, `chat.js` SSE catches); 15 new tests, full suite 46/355 green; pre-existing frontend lint errors at HEAD documented (not a Step 4 regression) |
 | — | 5 | **Complete (2026-10-19)** — commit `4dcab67d`; new `InferenceOptionPicker` component (F14 consumer: three options in registry order, reference slugs, availability filter, apply-immediate F13 writes with optimistic UI + refetch + revert-on-error, server-provided labels so N1 wording ships from the registry); role branch in `WorkspaceModelPicker` (default → option picker, admin → unchanged full selector, manager → hidden per pre-feature behavior); `Workspace.inferenceOptions`/`setInferenceOption` model methods; `chat_window.inference_picker.*` en-i18n keys; no component test harness in the frontend (documented) — manual smoke checklist recorded for the Step 7 matrix; eslint/prettier clean on touched files; full server suite re-verified 46/355 green; FILE_TREE regenerated |
-| — | 6 | Not started |
+| — | 6 | **Complete (2026-10-19, uncommitted — PR pending)** — admin UI page `frontend/src/pages/Admin/InferenceOptions/index.jsx` (three registry options with editable model slugs, availability pills, save via F11 admin API with server-side validation + toast feedback, no rate editing); `Admin.inferenceOptions()`/`Admin.setInferenceOptionSlugs()` model methods; `/settings/inference-options` route under `AdminRoute`; sidebar entry under the Admin section (`roles: ["admin"]`); `settings.inference-options.*` en-i18n keys; manual smoke checklist recorded (AC 10 verification path included); eslint/prettier clean; full suite 47/363 green; FILE_TREE regenerated |
 | — | 7 (merge gate) | Not started |
 
 ---

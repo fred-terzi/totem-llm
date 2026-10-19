@@ -109,6 +109,19 @@ const TRANSLATIONS = {
     admin: "Admin",
     tools: "Tools",
     "system-prompt-variables": "System Prompt Variables",
+    "inference-options": {
+      title: "Inference Options",
+      description:
+        "Configure the model behind each default-user inference option. Changes apply to workspaces already using an option on their next chat, without a restart.",
+      available: "available",
+      unavailable: "unavailable",
+      "model-slug": "Model slug",
+      save: "Save Changes",
+      saving: "Saving...",
+      "toast-saved":
+        "Inference options updated. Changes apply to subsequent chats.",
+      "toast-save-failed": "Failed to save inference options.",
+    },
     "experimental-features": "Experimental Features",
     contact: "Contact Support",
     "browser-extension": "Browser Extension",

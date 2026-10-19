@@ -288,6 +288,16 @@ const router = createBrowserRouter([
           ]
         : []),
       {
+        path: "/settings/inference-options",
+        lazy: async () => {
+          const { default: AdminInferenceOptions } =
+            await import("@/pages/Admin/InferenceOptions");
+          return {
+            element: <AdminRoute Component={AdminInferenceOptions} />,
+          };
+        },
+      },
+      {
         path: "/settings/system-prompt-variables",
         lazy: async () => {
           const { default: SystemPromptVariables } =
