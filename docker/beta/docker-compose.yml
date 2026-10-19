@@ -134,6 +134,15 @@ services:
       # never lives in this file. Create at https://dashboard.reown.com.
       VITE_WC_PROJECT_ID: "${VITE_WC_PROJECT_ID:-}"
 
+      # ── OpenRouter ("Totem Free" inference option) ─────────────────────
+      # server/utils/inferenceOptions.js gates the Totem Free option on
+      # this env var — without it the picker hides the option entirely.
+      # The key lives in docker/beta/.env (gitignored) alongside the
+      # tunnel token. Takes precedence over the auto-generated
+      # server/.env.development (dotenv does not overwrite process.env).
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OPENROUTER_MODEL_PREF: "${OPENROUTER_MODEL_PREF:-nvidia/nemotron-3.5-lightning:free}"
+
       # ── $TOTEM on-chain token (Base) ───────────────────────────────────
       # Enables GET /wallet/balance — reads the user's TOTEM ERC-20 balance.
       # When unset the endpoint returns 204 and the UI hides the badge.
