@@ -2,18 +2,19 @@
 
 ## Unreleased (pending next version bump)
 
-- `feat(file-explorer)`: File Explorer & Viewer — read-only sandbox browser at `/settings/files` (dir listing, breadcrumb navigation, inline viewers for text/Markdown/image/PDF/audio/video, download for binary), powered by `GET /api/filesystem/list` + `GET /api/filesystem/read`
-  - Lightweight Markdown renderer (`markdown-it` + `highlight.js` + `DOMPurify`) with Rendered/Raw toggle
-  - Topbar `Files` button (all roles) in the user menu for direct access on mobile/desktop
-  - Reuses existing `getFilesystemFor`/`validatePath` authz — zero new attack surface
-- `feat(collector)`: markdown-mode web scraping with credit-saving truncation
-- `feat(wallet)`: replace AppKit mobile login with MetaMask Connect (`@metamask/connect-evm`)
 - `feat(beta)`: add beta feature profile and wire it into beta compose
-- `fix(wallet)`: alias `mobile-wallet-protocol-core` to its ESM build (fixes `SessionStore.create` crash)
-- `fix(wallet)`: correct `createEVMClient` config shape (hex chain IDs under `api.supportedNetworks`)
+- `feat(collector)`: markdown-mode web scraping with credit-saving truncation
+- `revert(auth)`: restore the proven beta-era wallet login — WalletConnect v2 mobile flow (`@walletconnect/sign-client`: QR + “Open in MetaMask” deep link) and the direct EIP-1193 desktop flow. Rolls back the MetaMask Connect (`@metamask/connect-evm`) and Reown AppKit experiments; the now-unused `@metamask/*` + `@reown/*` deps are removed
+  - `refactor(auth)`: remove the `/auth/wallet/ping` debug endpoint
+  - `docs`: add wallet login rollback plan and timeline (`WALLET_ROLLBACK_PLAN.md`)
+- `refactor(ui)`: replace full-page navigations with React Router; add service-worker app-shell caching (network-first → cached shell → offline page)
 - `fix(chat)`: clear context usage bar after `/reset`
-- `fix(chat-settings-menu)`: open text-size submenu to the right (Android cutoff fix)
-- `chore(lint)`: remove unused imports/vars, fix useless escape, lower coverage threshold to 9%
+- `fix(chat-settings-menu)`: open text-size submenu to the right to avoid cutoff on Android
+- `fix(file-explorer)`: register `@tailwindcss/typography` so `prose` styles apply
+- `chore(release)`: migrate to the CI-driven release workflow
+- `chore(lint)`: remove unused imports/vars, fix a useless escape, lower coverage threshold to 9%
+- `chore`: add file tree generator and `FILE_TREE.md` reference; drop unused `Toggle` import from WebScrapingNode
+- `docs(file-explorer)`: correct test count and list status code in the plan
 
 ---
 
