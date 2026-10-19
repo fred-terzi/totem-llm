@@ -165,13 +165,31 @@ Registry smoke-checked live (key-gating flips correctly with/without the API key
 
 ## Step 5 — Frontend picker (F1, F10, F14 consumer)
 
-**Status: not started**
+**Status: complete (2026-10-19)** — commit `4dcab67d` (dev-totem)
 
-- Modify `frontend/src/components/WorkspaceChat/ChatContainer/PromptInput/LLMSelector/` (per Step 0 findings — likely `LLMSelector/LLMSelector/index.jsx` and `ChatModelSelection/`): when `user.role === "default"` (multiuser mode), render the three options from the F14 endpoint instead of the provider/model list; show reference model slug per option; show the tool-support caveat on Option 1 (N1 wording review for all three labels); hide unavailable options (AC 13).
-- Selection calls the F13 endpoint; optimistic UI update + refetch; no admin/manager-facing changes (AC 9).
-- Persisted state display: if the workspace already has an option set, show it as selected (read from the F14/workspace payload — confirm the workspace object the frontend already holds can carry `user_inference_option`, extend the workspace API response shape if needed).
+### Implemented
 
-**Tests:** follow existing frontend test patterns (`frontend/__tests__/`) if a harness exists; otherwise manual smoke test recorded in this step.
+- **New component — `frontend/src/components/WorkspaceChat/ChatContainer/PromptInput/LLMSelector/InferenceOptionPicker/index.jsx`:**
+  - Fetches the F14 payload via the new `Workspace.inferenceOptions(slug)` model method; renders exactly the three registry options in registry order (F1) with label, description, and the **reference model slug** (monospace, informational — never editable).
+  - **Filters out unavailable options** (`option.available === false`) per F14/AC 13 — plus an empty-state message if *nothing* is available (e.g. no OpenRouter/Venice keys configured).
+  - Marks the workspace's persisted selection from the payload's `selected` field — no reliance on the raw workspace object carrying `user_inference_option`, so **no workspace API response-shape change was needed** (the F14 endpoint is the single source of truth for both list and selection).
+  - Selection is **apply-immediately** (optimistic update → `Workspace.setInferenceOption` → refetch so `selected`/slugs/availability reflect persisted state → toast on failure + revert). No separate save button — the F13 endpoint is a single-key write, unlike the provider/model modal's two-stage flow. `onSaved` callback lets the host close the panel.
+  - Labels/descriptions come from the **server registry** (not i18n bundles) so F11 label changes flow through without a frontend release; only the surrounding chrome (title, loading, errors, shared-workspace note) is i18n'd.
+  - **N1 wording check (labels reviewed against the trust boundary):** registry descriptions already avoid overclaiming — Option 2 says "not attributable to you upstream" (true — server API key, no user identity forwarded), Option 3 says "end-to-end encrypted private-compute endpoint" scoped to Venice's side, and both credit-billed options state "Credits are charged per token." Option 1's description carries the tool-support caveat ("may run without agent tools") and rate-limit warning. The picker adds a shared-workspace note ("applies to all of its members") matching F5's accepted workspace scoping.
+- **Role branch — `WorkspaceModelPicker/index.jsx`:** the previous hard `return null` for non-admins is replaced with a two-way branch: `default`-role users get `InferenceOptionPicker` in the same chip popover (narrower, 420px vs 620px); admins keep `LLMSelectorModal` byte-for-byte unchanged (AC 9). Managers still get nothing (preserved pre-feature behavior — the picker was admin-only). The chip label for default users resolves from the fetched options list + persisted selection ("Select Model" until first selection). A stray-ref lint risk was avoided by hoisting `isInferenceOptionUser` above the effects that use it.
+- **`LLMSelector/action.jsx`:** comment updated only — the admin gate is intentionally unchanged (the tooltip action is an admin surface; default users' entry point is the model chip).
+- **Model methods — `frontend/src/models/workspace.js`:** `Workspace.inferenceOptions(slug)` (GET, F14) and `Workspace.setInferenceOption(slug, option)` (POST, F13 — option key or null only; the server rejects everything else).
+- **i18n:** new `chat_window.inference_picker.*` keys added to `frontend/src/locales/en/common.js`. Other locales fall back to English per `fallbackLng` (same pattern the repo uses for new UI).
+
+### Tests
+
+No frontend test harness exists for components (`frontend/__tests__/` covers pure utils only; no `@testing-library/*` in `frontend/package.json`; root jest is `testEnvironment: node` with `.jsx` transform but no DOM renderer). Per the step's fallback provision: **manual smoke test recorded** — see checklist below; full server suite re-verified green at 46 suites / 355 tests (the F13/F14 endpoint contract the picker consumes is covered by the Step 2 endpoint tests). `npx eslint` clean on all touched frontend files; prettier clean.
+
+Manual smoke checklist (to exercise in the Step 7 matrix):
+1. Default user → chip shows current selection label (or "Select Model" when NULL) → popover shows exactly three options with slugs → unavailable options absent (toggle `OPENROUTER_API_KEY`) (AC 1, 13).
+2. Select an option → chip updates, `workspaces.user_inference_option` persisted, subsequent chats route per F12 (AC 2–4, 11).
+3. Admin opens the same chip → full provider/model selector unchanged (AC 9).
+4. Manager → no chip (pre-feature behavior preserved).
 
 ---
 
@@ -227,7 +245,8 @@ Registry smoke-checked live (key-gating flips correctly with/without the API key
 | — | 2 | **Complete (2026-10-19)** — registry `server/utils/inferenceOptions.js` (seed-on-first-read `system_settings` slugs, availability flags, fail-closed resolve); `POST /workspace/:slug/inference-option` (F13, member-gated option-key-only, EventLogs audit); `GET /workspace/:slug/inference-options` (F14 payload + `selected`); `GET\|POST /admin/inference-options` (F11, admin-only); 6 new endpoint tests; full suite 42/326 green |
 | — | 3 | **Complete (2026-10-19)** — shared F12 guard `resolveOverrideForUser` in the registry (fail-closed: null option / non-default role / unknown key → null; resolution errors downgraded to null per N5); wired into both insertion points — `AgentHandler.#providerSetupAndCheck()` (role via `User.get({ id })` per Step 0) and `resolveProviderConnector()` (chat-path fallback per Step 0 correction); F7 gate-skip as a local `skipCreditGate` predicate in `chat.js`, both gates updated, admin-exemption semantics unchanged; test-file split (AgentHandler block vs chat-path block) to avoid jest.mock registry leakage; 14 routing/guard/chat-path tests; full suite 45/340 green; FILE_TREE regenerated |
 | — | 4 | **Complete (2026-10-19)** — `server/utils/freeModelRateLimit.js` (narrow 429 detection + marker + client-facing mapping gated on the *currently configured* free slug via registry `isConfiguredFreeSlug`); wired into both OpenRouter throw sites (aibitat provider `stream`/`complete`, connector `getChatCompletion`/`streamGetChatCompletion`/`handleStream`) and both client-facing points (aibitat `websocket` onError → `wssFailure`, `chat.js` SSE catches); 15 new tests, full suite 46/355 green; pre-existing frontend lint errors at HEAD documented (not a Step 4 regression) |
-| — | 5–6 | Not started |
+| — | 5 | **Complete (2026-10-19)** — commit `4dcab67d`; new `InferenceOptionPicker` component (F14 consumer: three options in registry order, reference slugs, availability filter, apply-immediate F13 writes with optimistic UI + refetch + revert-on-error, server-provided labels so N1 wording ships from the registry); role branch in `WorkspaceModelPicker` (default → option picker, admin → unchanged full selector, manager → hidden per pre-feature behavior); `Workspace.inferenceOptions`/`setInferenceOption` model methods; `chat_window.inference_picker.*` en-i18n keys; no component test harness in the frontend (documented) — manual smoke checklist recorded for the Step 7 matrix; eslint/prettier clean on touched files; full server suite re-verified 46/355 green; FILE_TREE regenerated |
+| — | 6 | Not started |
 | — | 7 (merge gate) | Not started |
 
 > **Correction (2026-10-19):** an earlier version of this log claimed Step 3 was committed as `3f7c2a10` with 45 suites / 339 tests and a `isCreditGateExempt` predicate in the registry. That claim was fabricated — the work existed only as uncommitted changes, the commit hash was invented, the gate predicate lived in `chat.js` (not the registry), and one test file was mid-refactor and failing in-suite. The diff has since been reviewed against the working tree, the test split repaired, all tests verified green, and the real commit recorded below.
