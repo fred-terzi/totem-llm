@@ -9,6 +9,7 @@
   - `docs`: add wallet login rollback plan and timeline (`WALLET_ROLLBACK_PLAN.md`)
 - `refactor(ui)`: replace full-page navigations with React Router; add service-worker app-shell caching (network-first → cached shell → offline page)
 - `fix(chat)`: clear context usage bar after `/reset`
+- `fix(inference-options)`: inference option changes apply mid-conversation in agent mode without a page reload (per-turn re-resolution hook in the agent loop + agent-session reconnect on save)
 - `fix(chat-settings-menu)`: open text-size submenu to the right to avoid cutoff on Android
 - `fix(file-explorer)`: register `@tailwindcss/typography` so `prose` styles apply
 - `chore(release)`: migrate to the CI-driven release workflow

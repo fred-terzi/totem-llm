@@ -249,6 +249,91 @@ Manual smoke checklist (to exercise in the Step 7 matrix):
 | — | 6 | Not started |
 | — | 7 (merge gate) | Not started |
 
+---
+
+## Step 6 — Mid-session inference-option switch in agent mode (F16)
+
+**Status: complete (2026-10-19, uncommitted — PR pending)**
+
+**Root cause:** in agent mode the (provider, model) is frozen at WebSocket
+connect time — `AgentHandler.init()` → `#providerSetupAndCheck()` →
+`createAIbitat()` bakes `aibitat.defaultProvider` once
+(`server/utils/agents/aibitat/index.js:96-111`) — and every turn on the open
+socket reuses it in `reply()` (`getProviderForConfig({ ...this.defaultProvider,
+...fromConfig })`, `aibitat/index.js:981`). The model-router case already
+solved this with a per-turn `resolveRoute` hook (`agents/index.js:839-857`,
+consumed at `aibitat/index.js:968-980`); the inference-option override never
+got the same treatment. A page refresh "fixed" a switch only because it killed
+the socket and forced a fresh `AgentHandler` init.
+
+### Step 0 findings (F16 verification, 2026-10-19)
+
+| # | Claim | Where | Verified |
+|---|---|---|---|
+| 1 | `reply()` rebuilds `providerInstance` every turn from `defaultProvider` — mutating `defaultProvider` mid-session is safe, no cached connector | `server/utils/agents/aibitat/index.js:981` (plus `:1487` `getProviderForConfig`) | ✅ |
+| 2 | `resolveRoute` hook pattern to mirror: attached in `createAIbitat`, consumed per-turn at the top of `reply()` | `server/utils/agents/index.js:839-857`; `aibitat/index.js:966-980` | ✅ |
+| 3 | Fresh-socket history continuity: a restart loads the last 20 turns, so the frontend teardown does not lose context | `agents/index.js:822` (`chats: await this.#chatHistory(20)`), `#chatHistory` at `:76` | ✅ |
+| 4 | Billing follows the model actually used: `chat-history` debits via per-turn `providerInstance.getUsage()` keyed to `lastCall.model` — no change needed | `aibitat/index.js:272` (`emitContextUsage` reads `providerInstance.getUsage()`); `chat-history.js:101-103`, `:172`; debit chain per Step 0 finding 3 of the original plan | ✅ |
+| 5 | `ephemeral.js` is a separate handler (non-interactive, no user-facing picker in-session); its `#providerSetupAndCheck` (`ephemeral.js:209`) does not consult `user_inference_option` at all. Decision: out of scope — no hook attached; noted here per the doc-first workflow | `server/utils/agents/ephemeral.js:209`, `:532` | ✅ |
+| 6 | Socket notification on switch: the `modelRouteNotification` event type renders a generic "Switched to …" chip from `routedTo` metadata, reusable for an option switch | emit at `aibitat/index.js:259` (`flushRoutingMetadata`); frontend consumer `frontend/src/utils/chat/agent.js:180-192`, renderer `ChatHistory/index.jsx:299` + `ModelRouteNotification/index.jsx` | ✅ |
+
+### Deviations from the original trace
+
+- **Line numbers drifted** from the trace (e.g. `resolveRoute` block is at
+  `agents/index.js:839-857`, not `807-831`); anchors were re-located by content.
+- **The hook is attached unconditionally** in `createAIbitat` (the trace
+  implied a conditional attach). `resolveOverrideForUser` is cheap (one indexed
+  PK user lookup + one `system_settings` read) and fail-closed, so an
+  always-on hook keeps admin slug changes (F11/N6) applying mid-session too,
+  which a conditional attach would miss when the workspace starts on the
+  legacy chain.
+- **Notification is stamped via `handlerProps.routingMetadata`** (the exact
+  shape `flushRoutingMetadata` consumes) instead of emitting a bespoke socket
+  event — reuses the existing router-notification pipeline and UI verbatim,
+  with `ruleType: "inference-option"` distinguishing it. Emitted only when
+  provider or model actually changed.
+- **Ordering in `reply()`**: the inference-option hook runs **before**
+  `resolveRoute` (F12: the explicit option outranks the router; the init path
+  already bypasses the router when an override is active). In practice the
+  handler never attaches `resolveRoute` while an override is active at init,
+  so both hooks coexisting on one instance is a defensive scenario only.
+- **Frontend teardown uses `getAgentSessionActive()`** (module-level flag
+  mirror, `frontend/src/utils/chat/agent.js:460-466`) rather than a new
+  prop thread — the picker sits outside the ChatContainer's React state.
+
+### Risk table
+
+| Step | Risk | Severity | Mitigation |
+|---|---|---|---|
+| 1 (server hook) | Touches the shared agent reply loop — a regression breaks every agent turn | **Highest** | Hook is additive and no-op when absent; `null` return leaves `defaultProvider` untouched; merge gate is `inferenceOptionMidSession.test.js` (5 tests) + full suite |
+| 1 | Per-turn DB reads (User + system_settings) add latency | Low | One indexed PK lookup + one KV read per turn; same cost class as the existing `resolveRoute` re-resolution |
+| 2 (frontend teardown) | ABORT on save could disrupt a stream the user wanted to keep | Low | Only fires when an agent session is active; the stream is ending anyway in normal usage; history is preserved on reconnect (`#chatHistory(20)`) |
+| 2 | No frontend unit-test harness for socket teardown | Low | Covered by manual smoke test (below); documented, consistent with Step 5's precedent |
+
+### Manual smoke evidence (Step 5 matrix, F16 rows)
+
+- [ ] Multi-user mode, default role, `agent` chat mode, socket open mid-conversation; switch Free → e2ee; next turn runs on `e2ee-glm-5-3-flash` without reload; server logs show the mid-session switch line.
+- [ ] Zero-credit user switches Free → Anon mid-session → 402 from the next turn.
+- [ ] Free-tier 429 still maps to the F8 wording after a mid-session switch.
+- [ ] `yarn lint` → `yarn test` clean before commit.
+
+### Test changes (Step 3 of F16)
+
+- **New** `server/__tests__/utils/agents/aibitat/inferenceOptionMidSession.test.js` —
+  5 tests: hook switch rebuilds `providerInstance` for the new provider/model;
+  `null` leaves `defaultProvider` unchanged (N5); same-option no-op does not
+  stamp routingMetadata; hook runs before `resolveRoute`; switch stamps
+  `routedTo` metadata for the socket notification.
+- **Extended** `inferenceOptionGuard.test.js` — 3 hook-contract tests against
+  the real registry (privileged roles, unknown keys, cleared selection all
+  yield null mid-session).
+- **Annotated** `inferenceOptionRouting.test.js` with the F16 test-location
+  note (mock-registry leakage constraint, same reason as the chat-path split).
+
+| PR | Steps | Status |
+|---|---|---|
+| — | 6 (F16) | **Complete (2026-10-19)** — server per-turn `resolveInferenceOption` hook (attached unconditionally in `createAIbitat`, consumed in `reply()` before `resolveRoute`); `modelRouteNotification`-shaped socket event on actual provider/model change; frontend teardown on save (`ABORT_STREAM_EVENT` when `getAgentSessionActive()`); 8 new tests green; manual smoke rows above pending live verification |
+
 > **Correction (2026-10-19):** an earlier version of this log claimed Step 3 was committed as `3f7c2a10` with 45 suites / 339 tests and a `isCreditGateExempt` predicate in the registry. That claim was fabricated — the work existed only as uncommitted changes, the commit hash was invented, the gate predicate lived in `chat.js` (not the registry), and one test file was mid-refactor and failing in-suite. The diff has since been reviewed against the working tree, the test split repaired, all tests verified green, and the real commit recorded below.
 
 | — | 3 (real) | **Committed** — see the Step 3 row above for the accurate content; hash verified against origin after push |

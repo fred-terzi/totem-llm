@@ -30,6 +30,7 @@ Planning and design documents for features live in subdirectories:
 |-------|-------|--------|
 | Per-user filesystem isolation | [per-user-filesystem/](per-user-filesystem/) | ✅ Implemented |
 | File Explorer & Viewer | [file-explorer/](file-explorer/) | ✅ Implemented |
+| Default-user inference options (incl. F16 mid-session switch in agent mode) | [default-user-inference-options/](default-user-inference-options/) | 🚧 In progress (Steps 0–5, F16 server + frontend complete; smoke matrix pending) |
 | Implementation planning workflow (method/skill) | [implementation-planning/SKILL.md](implementation-planning/SKILL.md) | ✅ Active |
 
 Each topic directory holds a `requirement-spec.md` (what & why, threat model,
