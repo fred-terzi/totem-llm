@@ -286,6 +286,41 @@ const Workspace = {
     }
   },
 
+  /**
+   * Set (or clear) the default-user inference option for a workspace.
+   * The ONLY sanctioned write path for `user_inference_option` — called from
+   * the F13 endpoint (`POST /workspace/:slug/inference-option`). The option
+   * key MUST be validated against the registry allowlist before calling this
+   * (`inferenceOptions.isValidOptionKey`); `null` clears the selection and
+   * restores legacy behavior (spec N4/OQ-4).
+   *
+   * Deliberately NOT in `writable` / `validations`: a forged generic
+   * `/update` body can never set this field, so default users can only ever
+   * write an option key — never raw provider/model values (spec F13).
+   *
+   * @param {string} slug - workspace slug
+   * @param {string|null} optionKey - registry option key or null to clear
+   * @returns {Promise<{success: boolean, message: string|null}>}
+   */
+  setInferenceOption: async function (slug, optionKey = null) {
+    if (optionKey !== null && typeof optionKey !== "string") {
+      return { success: false, message: "Invalid inference option." };
+    }
+    try {
+      await prisma.workspaces.update({
+        where: { slug },
+        data: {
+          user_inference_option: optionKey,
+          lastUpdatedAt: new Date(),
+        },
+      });
+      return { success: true, message: null };
+    } catch (error) {
+      console.error(error.message);
+      return { success: false, message: error.message };
+    }
+  },
+
   getWithUser: async function (user = null, clause = {}) {
     if ([ROLES.admin, ROLES.manager].includes(user.role))
       return this.get(clause);

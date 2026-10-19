@@ -52,14 +52,32 @@ Consequence for Option 1 as configured: without the env flag, `Workspace.support
 
 ## Step 1 — Prisma migration + data layer
 
-**Status: not started**
+**Status: complete (2026-10-19)**
 
-- Add `user_inference_option String?` to the `workspaces` model in `server/prisma/schema.prisma` (nullable, no default — N4).
-- Generate + run migration (`yarn prisma:generate`, `yarn prisma:migrate`). One migration, additive only.
-- Extend `server/models/workspace.js` with a narrow write helper (e.g. `setInferenceOption(slug, optionKey | null)`) used only by the F13 endpoint; validate the key against the allowed set server-side.
-- Add rate-table shape to `server/models/credits.js`: replace the single `MODEL`/`INPUT_RATE`/`OUTPUT_RATE` constants with a per-model map (default rate = e2ee's, per N7), update `calculateCost`/`debitUsage` to look up by model slug. Zero rates for the configured free slug yield cost 0 → existing early-returns produce no ledger row (F6/OQ-14, no code beyond the map needed).
+### Implemented
 
-**Tests:** extend `server/__tests__/models/credits.test.js` — per-model lookup, zero-rate → no debit/no row, unknown slug → e2ee fallback (AC 14, 15).
+- **Schema:** `user_inference_option String?` added to the `workspaces` model (`server/prisma/schema.prisma`) — nullable, no default, no index/relation (N4: NULL = legacy behavior).
+- **Migration:** `20261019162057_add_user_inference_option` — verified to be the plain `ALTER TABLE "workspaces" ADD COLUMN "user_inference_option" TEXT;` predicted in Step 0. Applied to the dev DB (`server/.env` points at `file:../storage/totem-llm.db` relative to `server/`, which resolves to `$HOME/totem-llm/totem-llm.db`); all 9 existing workspaces verified with `user_inference_option: null`. Prisma Client regenerated (v5.3.1).
+  - **Environment gotcha (recorded):** `server/.env.development` points at a *different* SQLite file than `server/.env` in this checkout. `migrate deploy` against `.env.development` reported "no pending" only because that second DB is stale/unused — `prisma migrate dev` (which loads `.env` first) applied the migration correctly. Whoever touches migrations here should confirm which `.env` their shell is loading.
+- **Data layer — `server/models/credits.js` (billing-core refactor):**
+  - Single `MODEL`/`INPUT_RATE`/`OUTPUT_RATE` constants + the old TODO replaced with a per-model `MODEL_RATES` map: `z-ai-glm-5-3-flash` (0.5/1.0, OQ-11), `e2ee-glm-5-3-flash` (0.5/1.0), `nvidia/nemotron-3.5-lightning:free` (0/0 — the free slug, MUST stay zero while configured).
+  - New `ratesForModel(model)` — exact-slug lookup, unknown/undefined/null slugs fall back to `DEFAULT_MODEL` (=`e2ee-glm-5-3-flash`) rates. Fail-closed per N7: an unknown slug can never bill at 0.
+  - `calculateCost(inputTokens, outputTokens, model = DEFAULT_MODEL)` — third param added; existing two-arg call sites are unchanged in behavior (backwards compatible).
+  - `debitUsage` passes the model through to `calculateCost` and to the ledger row's `model` field; zero-rate models cost 0 → existing early-return (`cost <= 0`) yields **no `credit_transactions` row** (F6/OQ-14) with zero extra code, as predicted.
+  - Exported `ratesForModel`, `DEFAULT_MODEL`, `MODEL_RATES` for tests/admin reuse.
+  - Call-site audit: the only `debitUsage` caller is `chat-history.js:266` (signature unchanged); `credits.js` endpoint + `system.js` welcome-bonus untouched.
+- **Data layer — `server/models/workspace.js`:**
+  - New `setInferenceOption(slug, optionKey | null)` — the only sanctioned write path for the column; bumps `lastUpdatedAt`; validates `optionKey` is `null` or string (allowlist validation itself lives in the Step 2 registry, which this helper's docs reference). Returns `{ success, message }` per the file's error-shape convention.
+  - Deliberately **not** added to `writable`/`validations`: a forged generic `/update` body can never set `user_inference_option` (spec F13 — default users write option keys only, never raw provider values).
+
+### Tests
+
+`server/__tests__/models/credits.test.js` extended 6 → 23 tests, all passing:
+- per-model lookup (e2ee, anon, free slugs); unknown/undefined/null slug → `DEFAULT_MODEL` fallback that is asserted to be **non-zero** (AC 15 / N7);
+- free slug at exactly 0 for arbitrary token counts (AC 14 — `debitUsage` early-return → no ledger row);
+- backwards-compat two-arg `calculateCost`; ceil-per-token-type preserved under per-model rates.
+
+Environment note: root `node_modules` was production-only in this checkout (`NODE_ENV=production` at install time), so `jest`/`babel` were missing from `.bin` — fixed with a dev-mode `yarn install --ignore-scripts`; `yarn.lock` restored to committed state afterward (no lockfile changes in the commit).
 
 ---
 
@@ -164,7 +182,8 @@ Consequence for Option 1 as configured: without the env flag, `Workspace.support
 | PR | Steps | Status |
 |---|---|---|
 | — | 0 | **Complete (2026-10-19)** — findings recorded; one correction to Step 3 (dual insertion point) |
-| — | 1–2 | Not started |
+| — | 1 | **Complete (2026-10-19)** — migration `20261019162057_add_user_inference_option` applied + verified; per-model rate table in `credits.js` (fail-closed N7, zero-rate free slug); `Workspace.setInferenceOption` write helper; credits tests 6→23 passing; full server test suite green (41 suites / 320 tests) |
+| — | 2 | Not started |
 | — | 3–4 | Not started |
 | — | 5–6 | Not started |
 | — | 7 (merge gate) | Not started |

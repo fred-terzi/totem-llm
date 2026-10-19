@@ -1,7 +1,7 @@
 const prisma = require("../utils/prisma");
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pricing — e2ee-glm-5-3-flash
+// Pricing — per-model rate table (microdollars)
 //
 //   input:   $0.50 / 1M tokens  →  0.5 microdollars per token
 //   output:  $1.00 / 1M tokens  →  1.0 microdollar  per token
@@ -11,12 +11,45 @@ const prisma = require("../utils/prisma");
 //
 //   $10 top-up              = 10_000_000
 //   150 in + 320 out tokens =    75 + 320 = 395  (= $0.000395)
+//
+// Rate lookup is by exact model slug (the slug recorded in
+// `workspace_chats.response.metrics.model` / passed to `debitUsage`).
+// Unknown slugs fall back to the DEFAULT_MODEL rates — fail-closed so a
+// mistyped slug can never bill at 0 (spec N7).
+//
+// Rates are code-configured (spec N3): edit this table to change pricing.
+// Admins configure WHICH slug each inference option resolves to via
+// `system_settings` (see server/utils/inferenceOptions.js) — if you change a
+// slug there, add a matching rate entry here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const MODEL = "e2ee-glm-5-3-flash";
-const INPUT_RATE = 0.5; // microdollars per input  token
-const OUTPUT_RATE = 1.0; // microdollars per output token
-// TODO: per-model rates keyed on model (currently single-model pricing).
+const DEFAULT_MODEL = "e2ee-glm-5-3-flash";
+
+/**
+ * Per-model rates in microdollars per token.
+ * Unknown models fall back to DEFAULT_MODEL's rates (fail-closed, N7).
+ * A model with 0/0 rates (free) costs 0 → `debitUsage` early-returns and
+ * no `credit_transactions` row is written (spec F6/OQ-14).
+ */
+const MODEL_RATES = {
+  // Credited options — Anonymous + E2EE (same rate initially, per OQ-11)
+  "z-ai-glm-5-3-flash": { input: 0.5, output: 1.0 },
+  "e2ee-glm-5-3-flash": { input: 0.5, output: 1.0 },
+
+  // Free option (Option 1) — zero rate. MUST stay 0/0 while this slug is the
+  // configured `totem-free` model, otherwise default users get billed.
+  "nvidia/nemotron-3.5-lightning:free": { input: 0, output: 0 },
+};
+
+/**
+ * Resolve the rate pair for a model slug. Unknown slugs bill at the
+ * DEFAULT_MODEL rate (fail-closed — never 0, spec N7).
+ * @param {string} [model]
+ * @returns {{input: number, output: number}}
+ */
+function ratesForModel(model) {
+  return MODEL_RATES[model] ?? MODEL_RATES[DEFAULT_MODEL];
+}
 
 /**
  * Welcome bonus for newly created accounts (microdollars).
@@ -31,12 +64,14 @@ const WELCOME_BONUS = 100_000;
  *
  * @param {number} inputTokens
  * @param {number} outputTokens
+ * @param {string} [model] - model slug for rate lookup (unknown → DEFAULT_MODEL rates)
  * @returns {number} cost in microdollars (integer ≥ 0)
  */
-function calculateCost(inputTokens, outputTokens) {
+function calculateCost(inputTokens, outputTokens, model = DEFAULT_MODEL) {
+  const { input: inputRate, output: outputRate } = ratesForModel(model);
   const i = Math.max(0, inputTokens);
   const o = Math.max(0, outputTokens);
-  return Math.ceil(i * INPUT_RATE) + Math.ceil(o * OUTPUT_RATE);
+  return Math.ceil(i * inputRate) + Math.ceil(o * outputRate);
 }
 
 /**
@@ -68,9 +103,12 @@ const Credits = {
   // NOTE: microToDisplay is internal-only (see JSDoc) — do not render to end users.
 
   calculateCost,
+  ratesForModel,
   dollarsToMicro,
   microToDisplay,
   WELCOME_BONUS,
+  DEFAULT_MODEL,
+  MODEL_RATES,
 
   // ── balance ────────────────────────────────────────────────────────────────
 
@@ -146,7 +184,7 @@ const Credits = {
           amount: -amount, // negative = debit; record full requested cost
           type: "debit",
           reference,
-          model: usage?.model ?? MODEL,
+          model: usage?.model ?? DEFAULT_MODEL,
           input_tokens: usage?.input_tokens ?? 0,
           output_tokens: usage?.output_tokens ?? 0,
         },
@@ -170,9 +208,14 @@ const Credits = {
    */
   async debitUsage(
     userId,
-    { inputTokens = 0, outputTokens = 0, model = MODEL, reference = null }
+    {
+      inputTokens = 0,
+      outputTokens = 0,
+      model = DEFAULT_MODEL,
+      reference = null,
+    }
   ) {
-    const cost = calculateCost(inputTokens, outputTokens);
+    const cost = calculateCost(inputTokens, outputTokens, model);
     if (cost <= 0) return { userId, debited: 0, newBalance: 0, cost: 0 };
 
     const result = await this.debit(userId, cost, reference, {

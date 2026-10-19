@@ -140,6 +140,7 @@ model workspaces {
   agentModel                   String?
   queryRefusalResponse         String?
   vectorSearchMode             String?                        @default("default")
+  user_inference_option        String? // Default-user inference option key ("totem-free" | "totem-anon" | "totem-e2ee"); null = legacy behavior (system default routing)
   router_id                    Int? // No relation to prevent whole table migration (SQLite limitation)
   workspace_users              workspace_users[]
   documents                    workspace_documents[]
