@@ -5,6 +5,7 @@ import { isMobile } from "react-device-detect";
 import useUser from "@/hooks/useUser";
 import { useModal } from "@/hooks/useModal";
 import LLMSelectorModal from "../PromptInput/LLMSelector/index";
+import InferenceOptionPicker from "../PromptInput/LLMSelector/InferenceOptionPicker";
 import SetupProvider from "../PromptInput/LLMSelector/SetupProvider";
 import {
   SAVE_LLM_SELECTOR_EVENT,
@@ -45,6 +46,9 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
   const { slug: urlSlug } = useParams();
   const slug = urlSlug ?? workspaceSlug;
   const { user } = useUser();
+  // Default-role users get the curated three-option picker (F1/F10); every
+  // other role gets the existing full provider/model selector (AC 9).
+  const isInferenceOptionUser = !!user && user.role === "default";
   const [showSelector, setShowSelector] = useState(false);
   const [modelName, setModelName] = useState("");
   const {
@@ -54,6 +58,8 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
   } = useModal();
   const [config, setConfig] = useState({ settings: {}, provider: null });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedInferenceOption, setSelectedInferenceOption] = useState(null);
+  const [inferenceOptionsList, setInferenceOptionsList] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(
     () => window.localStorage.getItem("anythingllm_sidebar_toggle") !== "closed"
   );
@@ -68,6 +74,24 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
   useEffect(() => {
     fetchModelName(slug, setModelName, t);
   }, [slug]);
+
+  // Default-role users pick from the curated inference options instead of
+  // the provider/model list — load the persisted selection so the chip
+  // label shows the chosen option (spec F1/F10). Options come from the
+  // server registry (F14); this local mirror only maps key → label for the
+  // chip and is refreshed whenever the picker refetches.
+  useEffect(() => {
+    if (!slug || !isInferenceOptionUser) return;
+    let cancelled = false;
+    Workspace.inferenceOptions(slug).then((result) => {
+      if (cancelled || !result?.success) return;
+      setSelectedInferenceOption(result.selected ?? null);
+      setInferenceOptionsList(result.options ?? []);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [slug, isInferenceOptionUser, refreshKey]);
 
   // Close selector and refresh model name when model is saved
   useEffect(() => {
@@ -92,8 +116,9 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
       window.removeEventListener(PROVIDER_SETUP_EVENT, handleProviderSetup);
   }, []);
 
-  // This feature is disabled for multi-user instances where the user is not an admin
-  if (!!user && user.role !== "admin") return null;
+  // This feature is hidden from unauthenticated states and from managers —
+  // default users get the option picker, admins the full selector.
+  if (!!user && user.role !== "admin" && user.role !== "default") return null;
   if (!slug || isMobile) return null;
 
   return (
@@ -125,17 +150,40 @@ export default function WorkspaceModelPicker({ workspaceSlug = null }) {
                 : "text-zinc-500 light:text-slate-500 group-hover:text-white light:group-hover:text-slate-800"
             }`}
           >
-            {modelName || t("chat_window.select_model")}
+            {isInferenceOptionUser
+              ? inferenceOptionsList.find(
+                  (o) => o.key === selectedInferenceOption
+                )?.label || t("chat_window.select_model")
+              : modelName || t("chat_window.select_model")}
           </span>
         </button>
 
         {showSelector && (
-          <div className="absolute left-0 top-full mt-1 bg-zinc-800 light:bg-white border border-zinc-700 light:border-slate-300 rounded-xl shadow-lg w-[620px] overflow-hidden">
-            <LLMSelectorModal
-              key={refreshKey}
-              workspaceSlug={slug}
-              initialProvider={config.provider?.value}
-            />
+          <div
+            className={`absolute left-0 top-full mt-1 border rounded-xl shadow-lg overflow-hidden ${
+              isInferenceOptionUser
+                ? "w-[420px] bg-zinc-800 light:bg-white border-zinc-700 light:border-slate-300"
+                : "w-[620px] bg-zinc-800 light:bg-white border-zinc-700 light:border-slate-300"
+            }`}
+          >
+            {isInferenceOptionUser ? (
+              <InferenceOptionPicker
+                key={refreshKey}
+                workspaceSlug={slug}
+                onSaved={() => {
+                  // Bump the refresh key so the chip-label effect refetches
+                  // the persisted selection, then close the panel.
+                  setRefreshKey((k) => k + 1);
+                  setShowSelector(false);
+                }}
+              />
+            ) : (
+              <LLMSelectorModal
+                key={refreshKey}
+                workspaceSlug={slug}
+                initialProvider={config.provider?.value}
+              />
+            )}
           </div>
         )}
       </div>

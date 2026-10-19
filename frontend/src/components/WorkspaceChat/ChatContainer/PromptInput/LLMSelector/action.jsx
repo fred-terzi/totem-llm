@@ -87,8 +87,9 @@ export default function LLMSelectorAction({ workspaceSlug = null }) {
       );
   }, []);
 
-  // This feature is disabled for multi-user instances where the user is not an admin
-  // This is because of the limitations of model selection currently and other nuances in controls.
+  // This feature is disabled for multi-user instances where the user is not an
+  // admin. Default-role users instead get the curated three-option inference
+  // picker (F1/F10), rendered by WorkspaceModelPicker (same model chip).
   if (!!user && user.role !== "admin") return null;
   if (!slug) return null;
 

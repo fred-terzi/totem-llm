@@ -1607,6 +1607,20 @@ const TRANSLATIONS = {
       missing_credentials: "This provider is missing credentials!",
       missing_credentials_description: "Set up now",
     },
+    inference_picker: {
+      title: "Inference",
+      description:
+        "Choose how this workspace runs your chats. Your selection applies to this workspace for everyone who uses it.",
+      loading: "Loading inference options...",
+      saving: "Saving...",
+      selected: "Selected",
+      save_error: "Could not save your selection. Please try again.",
+      load_error: "Could not load inference options.",
+      none_available:
+        "No inference options are currently available. Ask your administrator to configure a provider.",
+      shared_note:
+        "The selection is saved for this workspace and applies to all of its members.",
+    },
     agent_invocation: {
       model_wants_to_call: "Model wants to call",
       approve: "Approve",

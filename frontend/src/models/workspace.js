@@ -615,6 +615,39 @@ const Workspace = {
       });
   },
 
+  /**
+   * Default-user inference option picker payload (spec F14 consumer).
+   * Returns the three curated options (key, label, description, reference
+   * model slug, availability) plus the workspace's currently selected key.
+   * @param {string} slug - workspace slug
+   * @returns {Promise<{success: boolean, options: Array<Object>, selected: string|null}>}
+   */
+  inferenceOptions: async function (slug = "") {
+    return await fetch(`${API_BASE}/workspace/${slug}/inference-options`, {
+      headers: baseHeaders(),
+    })
+      .then((res) => res.json())
+      .catch(() => ({ success: false, options: [], selected: null }));
+  },
+  /**
+   * Persist the default-user inference option for a workspace (spec F13).
+   * Accepts ONLY a registry option key (or null to clear) — the server
+   * rejects anything else, so raw provider/model values can never be written
+   * through this path.
+   * @param {string} slug - workspace slug
+   * @param {string|null} option - registry option key or null to clear
+   * @returns {Promise<{success: boolean, option: string|null, error: string|null}>}
+   */
+  setInferenceOption: async function (slug = "", option = null) {
+    return await fetch(`${API_BASE}/workspace/${slug}/inference-option`, {
+      method: "POST",
+      body: JSON.stringify({ option }),
+      headers: baseHeaders(),
+    })
+      .then((res) => res.json())
+      .catch((e) => ({ success: false, error: e.message }));
+  },
+
   threads: WorkspaceThread,
 };
 
