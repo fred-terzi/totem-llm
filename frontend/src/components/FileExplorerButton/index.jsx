@@ -50,7 +50,7 @@ export default function FileExplorerButton() {
       to={paths.settings.files()}
       data-tooltip-id="footer-item"
       data-tooltip-content={t("settings.files", "File Explorer")}
-      className="rounded-full bg-transparent text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 h-9 flex items-center gap-1.5 px-3 transition-colors"
+      className="rounded-full bg-transparent text-white hover:bg-gray-100 dark:hover:bg-gray-800 h-9 flex items-center gap-1.5 px-3 transition-colors"
       aria-label="File Explorer"
     >
       <Files size={22} weight="bold" />
