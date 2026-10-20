@@ -19,6 +19,23 @@ const { safeJsonParse } = require("../../../../http");
  */
 
 /**
+ * Resolve the tool_choice value for a request from the TOOL_CHOICE env var.
+ * - "auto" (default, and the provider-side default anyway) - model decides
+ * - "none" - never call tools
+ * - "required" - model must call a tool (OpenAI-compatible; OpenRouter passes
+ *   this through for models tagged Tool Choice).
+ * Returns undefined when unset/invalid so the request payload is unchanged.
+ * @returns {string|undefined}
+ */
+function getToolChoice() {
+  const raw = process.env.TOOL_CHOICE;
+  if (raw === undefined || raw === "") return undefined;
+  const value = raw.trim().toLowerCase();
+  if (["auto", "none", "required"].includes(value)) return value;
+  return undefined;
+}
+
+/**
  * Convert aibitat function definitions to the OpenAI tools format.
  * @param {Array<{name: string, description: string, parameters: object}>} functions
  * @returns {Array<{type: "function", function: {name: string, description: string, parameters: object}}>}
@@ -189,6 +206,7 @@ async function tooledStream(
   const msgUUID = v4();
   const formattedMessages = formatMessagesForTools(messages, formatOptions);
   const tools = formatFunctionsToTools(functions);
+  const toolChoice = getToolChoice();
 
   const stream = await client.chat.completions.create(
     {
@@ -196,7 +214,9 @@ async function tooledStream(
       stream: true,
       stream_options: { include_usage: true },
       messages: formattedMessages,
-      ...(tools.length > 0 ? { tools } : {}),
+      ...(tools.length > 0
+        ? { tools, ...(toolChoice ? { tool_choice: toolChoice } : {}) }
+        : {}),
     },
     { signal: signal || undefined }
   );
@@ -362,13 +382,16 @@ async function tooledComplete(
 
   const formattedMessages = formatMessagesForTools(messages, formatOptions);
   const tools = formatFunctionsToTools(functions);
+  const toolChoice = getToolChoice();
 
   const response = await client.chat.completions.create(
     {
       model,
       stream: false,
       messages: formattedMessages,
-      ...(tools.length > 0 ? { tools } : {}),
+      ...(tools.length > 0
+        ? { tools, ...(toolChoice ? { tool_choice: toolChoice } : {}) }
+        : {}),
     },
     { signal: signal || undefined }
   );
@@ -428,6 +451,7 @@ async function tooledComplete(
 module.exports = {
   formatFunctionsToTools,
   formatMessagesForTools,
+  getToolChoice,
   tooledStream,
   tooledComplete,
 };
