@@ -33,6 +33,7 @@ Planning and design documents for features live in subdirectories:
 | Default-user inference options (incl. F16 mid-session switch in agent mode) | [default-user-inference-options/](default-user-inference-options/) | 🚧 In progress (Steps 0–5, F16 server + frontend complete; smoke matrix pending) |
 | Implementation planning workflow (method/skill) | [implementation-planning/SKILL.md](implementation-planning/SKILL.md) | ✅ Active |
 | Venice image generation agent skill | [venice-image-generate/](venice-image-generate/) | 🔲 Planned (spec + plan drafted) |
+| Node 22 LTS ratification (runtime pin across Docker/CI/engines/docs) | [node22-ratification/](node22-ratification/) | ✅ Implemented |
 
 Each topic directory holds a `requirement-spec.md` (what & why, threat model,
 acceptance criteria) and an `implementation-plan.md` (step-by-step, against the

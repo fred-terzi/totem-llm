@@ -3,6 +3,9 @@
 ## Unreleased (pending next version bump)
 
 - `feat(beta)`: add beta feature profile and wire it into beta compose
+- `chore(node22)`: ratify Node 22 LTS (22.23.3) as the runtime — all Dockerfiles on `node:22-slim`, release CI reads `.nvmrc` instead of a hardcoded Node 18, `engines.node >=22` across root/server/collector, AGENTS.md + Docker docs updated
+- `fix(server)`: regenerate `server/package-lock.json` to include the `ethers` tree (missing since the wallet-login commit)
+- `fix(docker/beta)`: persist `STORAGE_DIR` on the `totem-beta-data` volume — beta data (DB, user file sandboxes, vector cache) was previously wiped on container recreation
 - `feat(collector)`: markdown-mode web scraping with credit-saving truncation
 - `revert(auth)`: restore the proven beta-era wallet login — WalletConnect v2 mobile flow (`@walletconnect/sign-client`: QR + “Open in MetaMask” deep link) and the direct EIP-1193 desktop flow. Rolls back the MetaMask Connect (`@metamask/connect-evm`) and Reown AppKit experiments; the now-unused `@metamask/*` + `@reown/*` deps are removed
   - `refactor(auth)`: remove the `/auth/wallet/ping` debug endpoint

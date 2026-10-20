@@ -22,7 +22,7 @@
 #   docker compose -f docker/hosted/docker-compose.yml up --build
 # ──────────────────────────────────────────────────────────────────────────────
 
-FROM node:18-slim AS base
+FROM node:22-slim AS base
 
 # ── System dependencies ──────────────────────────────────────────────────────
 # Required for:

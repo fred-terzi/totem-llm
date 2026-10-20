@@ -120,7 +120,7 @@ This is the security model for the hosted deployment:
 
 ## Build notes
 
-- Base: `node:18-slim`. Installs the published `totem-llm` npm package
+- Base: `node:22-slim`. Installs the published `totem-llm` npm package
   (frontend pre-built, Prisma client generated via postinstall).
 - `.env` is created from `.env.template` with `sed` replacing the secret
   placeholders (heredocs don't work in a Dockerfile `RUN` under dash).

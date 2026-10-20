@@ -272,7 +272,7 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 | `TOTEM_SYMBOL` | `TOTEM` | Display symbol |
 | `VITE_INFURA_API_KEY` | *(unset — mobile wallet off)* | Infura API key (free tier OK) — required for the mobile MetaMask Connect path |
 
-> **Frontend/Vite version note:** Vite was upgraded **Vite 4 → Vite 5** (esbuild ≥0.21) when wallet SDKs were adopted — their dist code requires esbuild ≥0.20. Don't downgrade Vite below 5. Also note: `frontend/package.json` pins `@wallet-standard/base` to `1.1.0` via `resolutions` — its `1.1.1` declares `engines: node >=22`, which yarn 1 hard-fails on under our Node 18.18 pin.
+> **Frontend/Vite version note:** Vite was upgraded **Vite 4 → Vite 5** (esbuild ≥0.21) when wallet SDKs were adopted — their dist code requires esbuild ≥0.20. Don't downgrade Vite below 5. Also note: `frontend/package.json` pins `@wallet-standard/base` to `1.1.0` via `resolutions` — retain this pin (its `1.1.1` may raise its engine floor). The pin predates the Node 22 ratification; do not unpin without re-testing.
 
 **Key files:**
 
@@ -423,7 +423,7 @@ Auto-generated on server start/restart by nodemon event hook in `server/nodemon.
 
 ## Node Version
 
-Pinned to **v18.18.0** via `.nvmrc`. Server and collector require `>=18.12.1`.
+Pinned to **v22.23.3** (Node 22 LTS, supported to April 2027) via `.nvmrc`. Server and collector require `>=22`. Ratified by the `totem_docs/node22-ratification/` workstream — all Dockerfiles, release CI (`node-version-file: .nvmrc`), and package `engines` derive from this pin. Use `nvm use` in the repo root to pick it up.
 
 ## Conventional Commits
 

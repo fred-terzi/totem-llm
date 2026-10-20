@@ -10,7 +10,7 @@ Totem LLM ships as a single Docker container that includes both the app (via the
 │                                                         │
 │  ┌───────────────┐         ┌────────────────────────┐  │
 │  │  Totem LLM    │  calls  │      Ollama            │  │
-│  │  (node:18)    │────────►│  (GPU inference)       │  │
+│  │  (node:22)    │────────►│  (GPU inference)       │  │
 │  │  :8686        │  :11434 │  auto-detects CUDA     │  │
 │  └───────────────┘         └────────────────────────┘  │
 │                                                         │

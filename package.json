@@ -15,7 +15,7 @@
   },
   "homepage": "https://github.com/fred-terzi/totem-llm#readme",
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "bin": {
     "totem-llm": "bin/totem-llm.js"

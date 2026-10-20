@@ -41,7 +41,7 @@
 #   • All of `yarn dev:all`'s debug output (server, collector, frontend)
 # ──────────────────────────────────────────────────────────────────────────────
 
-FROM node:24-slim AS base
+FROM node:22-slim AS base
 
 # ── System dependencies ──────────────────────────────────────────────────────
 # Same set as the other Dockerfiles (Chromium libs, ffmpeg, tesseract, git).
@@ -68,13 +68,12 @@ RUN curl -fsSL -o /usr/local/bin/cloudflared \
     && chmod +x /usr/local/bin/cloudflared \
     && cloudflared --version
 
-# ── Yarn classic (via corepack, bundled with Node 18) ────────────────────────
-# The repo's package.json uses yarn v1 (classic). corepack ships with node:18.
+# ── Yarn classic (via corepack, bundled with Node) ──────────────────────────
+# The repo's package.json uses yarn v1 (classic). corepack ships with Node 22.
 # We set `ignore-engines=true` as a Yarn config so every `yarn install`
-# (root, server, collector, frontend) skips the Node version check — the
-# root package.json devDeps (e.g. @babel/core@8) declare an engines range
-# newer than the pinned Node 18 runtime, but they work fine at runtime
-# for the subset of the code the dev:all flow actually touches.
+# (root, server, collector, frontend) skips the engines check — dependency
+# engine ranges elsewhere in the tree may exceed the ratified Node version,
+# and the install step only needs to succeed, not match runtime exactly.
 RUN corepack enable && corepack prepare yarn@1.22.22 --activate \
     && yarn config set ignore-engines true --global \
     && yarn --version

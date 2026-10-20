@@ -234,11 +234,11 @@ Other models (27B, 32B, etc.) are **pulled on demand** at runtime when your GPU 
 |---|---|
 | **Registry** | `docker.io/fredterzi/totem-llm` |
 | **Tags** | `latest` (rolling), `0.17.0` (pinned) |
-| **Base** | `node:18-slim` + Ollama + system deps (tesseract, ffmpeg, GTK libs) |
+| **Base** | `node:22-slim` + Ollama + system deps (tesseract, ffmpeg, GTK libs) |
 | **Size** | ~9 GB (with pre-baked models) |
 | **Entrypoint** | `/usr/local/bin/run.sh` — GPU detect → start Ollama → start server |
 | **Healthcheck** | `/api/health` every 30s |
-| **Node.js** | v18.18.0 |
+| **Node.js** | v22.23.3 (Node 22 LTS) |
 | **LLM Runtime** | Ollama (CUDA, multi-GPU aware) |
 
 ---

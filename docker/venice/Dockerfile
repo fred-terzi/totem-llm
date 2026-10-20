@@ -25,7 +25,7 @@
 # Image size: ~700 MB – 1.2 GB (vs ~9 GB for the GPU image)
 # ──────────────────────────────────────────────────────────────────────────────
 
-FROM node:18-slim AS base
+FROM node:22-slim AS base
 
 # ── Build args ───────────────────────────────────────────────────────────────
 ARG TOTEM_LLM_VERSION=latest
