@@ -148,6 +148,13 @@ services:
       # When unset the endpoint returns 204 and the UI hides the badge.
       TOTEM_ADDRESS: "0x0F8ac22B85076F9BfE0b93Cc49FB6426CB150F88"
 
+      # ── Storage ─────────────────────────────────────────────────────────
+      # All persistent data (user file sandboxes, uploads, vector cache,
+      # models) MUST live on the totem-beta-data volume. Without this the
+      # server falls back to /root/totem-llm (ephemeral container layer),
+      # which is wiped when the container is recreated.
+      STORAGE_DIR: "/app/totem-storage"
+
       # ── Telemetry ───────────────────────────────────────────────────────
       DISABLE_TELEMETRY: "true"
 
