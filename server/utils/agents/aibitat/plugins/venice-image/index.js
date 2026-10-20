@@ -18,15 +18,24 @@ const REFINE_AND_CONFIRM_MANDATE =
   "(1) refine the user's idea into a detailed image prompt covering subject, style, " +
   "composition, lighting, and aspect ratio; (2) present that refined prompt to the user " +
   "along with the exact credit cost of the generation (state the number of credits; ask " +
-  "the tool handler for nothing — the cost is N credits per image, times the number of " +
+  "the tool handler for nothing — the cost is " +
+  pricing.COST_PER_IMAGE +
+  " credits per image, times the number of " +
   "variants); and (3) wait for the user's explicit confirmation. NEVER call this tool in " +
   "the same turn the idea is first proposed. This refine-and-confirm contract applies to " +
   "EVERY user, including users who have enabled auto-generation via the approval card's " +
   "'Always allow' option — that option removes the approval card, not this conversation. " +
   "Pass the user-confirmed refined prompt as the `prompt` parameter.";
 
-const veniceImage = {
-  name: SKILL_NAME,
+// Sub-plugin convention (mirrors filesystem-agent): the parent skill's `plugin`
+// is an ARRAY of child plugin defs. `agentSkillsFromSystemSettings()` then emits
+// `venice-image-generate#generate-image` / `venice-image-generate#list-image-styles`,
+// which aibitat's #parseFunctionName resolves to the registered tool names. A bare
+// `plugin: function()` makes the agent look up the skill name itself in the
+// function map (`venice-image-generate`) and silently drop both tools from the LLM's
+// tool list — the plugin attaches but the model never sees it.
+const generateImageTool = {
+  name: "generate-image",
   startupConfig: {
     params: {},
   },
@@ -36,12 +45,15 @@ const veniceImage = {
       setup(aibitat) {
         aibitat.function({
           super: aibitat,
-          name: "generate-image",
+          name: this.name,
           description:
             "Generate an image from a text prompt using Venice AI and save it to the user's " +
             "files. The user can view and download the image from the File Explorer and a " +
             "download card in this chat. Supports negative prompts, dimensions or aspect " +
-            "ratio, style presets, seeds, and up to 4 variants. " +
+            "ratio, style presets, seeds, and up to 4 variants. Images are always generated " +
+            "with the Venice AI image model 'z-image-turbo'; model selection is not " +
+            "available — if the user asks which image models are available, tell them this " +
+            "tool uses z-image-turbo exclusively. " +
             REFINE_AND_CONFIRM_MANDATE,
           examples: [
             {
@@ -106,8 +118,7 @@ const veniceImage = {
               },
               variants: {
                 type: "integer",
-                description:
-                  "Number of images to generate, 1-4. Costs N credits per variant.",
+                description: `Number of images to generate, 1-4. Costs ${pricing.COST_PER_IMAGE} credits per variant.`,
               },
               style_preset: {
                 type: "string",
@@ -283,10 +294,23 @@ const veniceImage = {
             }
           },
         });
+      },
+    };
+  },
+};
 
+const listImageStylesTool = {
+  name: "list-image-styles",
+  startupConfig: {
+    params: {},
+  },
+  plugin: function () {
+    return {
+      name: this.name,
+      setup(aibitat) {
         aibitat.function({
           super: aibitat,
-          name: "list-image-styles",
+          name: this.name,
           description:
             "List the available Venice AI image style presets. Use this to discover valid " +
             "values for the style_preset parameter of the generate-image tool.",
@@ -323,6 +347,14 @@ const veniceImage = {
       },
     };
   },
+};
+
+const veniceImage = {
+  name: SKILL_NAME,
+  startupConfig: {
+    params: {},
+  },
+  plugin: [generateImageTool, listImageStylesTool],
 };
 
 module.exports = { veniceImage };

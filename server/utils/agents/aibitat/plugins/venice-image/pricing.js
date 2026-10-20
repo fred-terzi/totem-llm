@@ -26,8 +26,16 @@ const GENERATION_COST_USD = 0.01;
 
 const MICRO_PER_USD = 1_000_000;
 
-// Display-credit cost of ONE image with the standardized model (10,000 credits).
-const COST_PER_IMAGE = Math.round(GENERATION_COST_USD * MICRO_PER_USD);
+// Margin policy: multiplier applied on top of Venice's break-even API cost to set
+// the user-facing price. 1 = break-even pass-through; 2 = 100% margin (the operator
+// keeps half of every charge). Set by the product owner 2026-10-20.
+const USER_MARKUP = 2;
+
+// Display-credit cost of ONE image with the standardized model (20,000 credits
+// at the current 2× markup — $0.02 user-facing against $0.01 API cost).
+const COST_PER_IMAGE = Math.round(
+  GENERATION_COST_USD * MICRO_PER_USD * USER_MARKUP
+);
 
 // The v1 standardized model (spec F13). Never exposed as a tool parameter.
 const STANDARD_MODEL = "z-image-turbo";

@@ -134,7 +134,7 @@ Changes:
 
 ## Step 4 — Tests
 
-**Status:** Planned
+**Status:** Complete (2026-10-20)
 
 - `server/__tests__/utils/agents/aibitat/plugins/venice-image.test.js` (CJS, Jest):
   - `pricing.quote` unit tests: 1 variant → `COST_PER_IMAGE`, 4+ variants capped at ×4, quote and debit both read the same module constant (F12, F13, N4).
@@ -149,9 +149,29 @@ Changes:
   - Handler tests: no-key disabled message (AC4), variants loop saves N files + emits N cards (AC6), approval gate called when present (AC8), gate rejection short-circuits with no fetch and no debit (AC15).
 - One AC → one named test per the doc-first checklist.
 
-**Deviations from the original draft:** *(none yet)*
+**What was implemented:** `server/__tests__/utils/agents/aibitat/plugins/venice-image.test.js` (CJS, Jest, 31 tests / 10 suites, all green). Mocking strategy: `filesystem/lib.js` is mocked with a lightweight sandbox stand-in exposing the same `validatePath` contract rooted at a unique temp dir (no dependency on `~/totem-llm/`); `models/credits` + `models/user` are jest mocks (no Prisma/DB); `global.fetch` is a jest mock — **zero real Venice spend** (risk-table row "real API spend during testing"). Handlers are invoked directly against a stub `aibitat` (`function()` capture, controllable `this.super` with `requestToolApproval`/`socket.send`/`registerOutput`/`introspect` jest mocks).
 
-**Smoke-test evidence:** *(pending)*
+Coverage by plan bullet:
+
+- **pricing.quote unit tests (F12, F13, N4):** 1 variant → `COST_PER_IMAGE`; 4+ capped at ×4; string/non-numeric variants coalesce to 1; plus a divergence guard — the handler's actual debit call is asserted equal to `pricing.quote(params)` for the same params (quote and debit read one module constant).
+- **Tool-description contract (AC10, AC17):** the `generate-image` description contains refine / present / credit / wait / "never call this tool" AND the "Always allow" + "every user" clauses.
+- **buildRequestBody (F1, F9, F13):** aspect-idiom drops width/height; both-idioms-supplied case asserts the invariant that the outgoing body never carries both; `model` not overridable (always `z-image-turbo`); no `inpaint` field; defaults (`format: png`, `return_binary: false` always even when the caller tries to flip it, `variants` omitted at 1, capped at 4).
+- **sanitizeSlug (AC9):** traversal (`../../etc/passwd`, backslashes) → safe flat slug; emoji/unicode/newlines/quotes → `^[a-z0-9-]+$` only, ≤48 chars; empty/hostile-only input → placeholder `image` slug in `buildFilename`.
+- **generate error mapping (AC5):** mocked fetch for 400 (surfaces API content-policy string), 401, 402, 429, 503, and network failure — each mapped to its human-readable message.
+- **saveToSandbox (AC3, N1, AC9):** writes land inside the requesting user's sandbox under `images/` (verified on disk via the mocked sandbox root); another user's and a third user's sandbox both get `Access denied` on the first user's image path; `../escape.png` traversal is rejected and nothing lands outside the root.
+- **Handler billing (AC11–AC14 + F14 amendment):** insufficient balance → no fetch, no debit, human-readable message (AC11); success → exactly one debit of `quote(params)` with reference `venice-image-generate:req_test_123` (AC12); Venice 503 after pre-flight → no debit, "No credits were charged" (AC13); `userId == null` → no `hasCredits`, no `debit`, no admin lookup (AC14); admin role → billing-exempt (F14 amendment).
+- **Approval gate (AC8, AC15, AC16):** gate invoked **before** fetch and pre-flight (asserted via `invocationCallOrder`) with payload carrying `prompt` + `credit_quote` and a description naming the cost (AC8); rejected gate → no fetch, no pre-flight, no debit, rejection message returned verbatim (AC15); timeout-as-rejection shape (`{ approved: false, message: "…timed out…" }`) short-circuits identically (AC15); auto-approved gate shape still flows through the gate call and proceeds with billing (AC16).
+- **Availability + outputs (AC4, AC6):** unset `VENICE_API_KEY` → disabled message, no fetch, no debit, gate never invoked (AC4); 3-variant run → exactly 3 files on disk with `-1/-2/-3` suffixes in a **fresh per-user sandbox dir** (unique userId per test so the listing is exact), 3 `fileDownloadCard` emits + 3 `ImageDownload` outputs all carrying `sandboxFile: true` and `images/`-relative `storageFilename`, one debit of `quote({variants:3})` with the Venice request-id reference (AC6).
+- **list-image-styles (F7):** names extracted from a mocked `/image/styles` payload, endpoint URL asserted.
+
+**Deviations from the original draft:** *(none — all planned test categories shipped; two minor mechanical choices: (1) the plugin's modules are require-path-mocked rather than `jest.spyOn`'d, and (2) the AC6 saved-file listing uses a unique per-test userId instead of diffing directory state, eliminating cross-test contamination.)*
+
+**Smoke-test evidence (2026-10-20):**
+
+- `npx jest server/__tests__/utils/agents/aibitat/plugins/venice-image.test.js --collectCoverage=false` → **31 passed / 31**.
+- Full server suite regression: `npx jest server/__tests__ --collectCoverage=false` → **43 suites / 357 tests, all green** (was 42 suites / 326 tests; +1 suite, +31 tests).
+- No real network access: `global.fetch` is mocked for every test in the file — no Venice spend, no key usage (risk-table row "real API spend during testing" mitigated as planned).
+- Test file is inside the server package's existing eslint ignore pattern for `__tests__` (lint run: 0 errors, file ignored by design) — consistent with the rest of the suite.
 
 ---
 
@@ -190,7 +210,7 @@ With `TOTEM_BUILD_PROFILE=source yarn dev:all` (source profile required for agen
 | 2 | `fileDownloadCard` frontend expects `generated-files` semantics | **Resolved (2026-10-20)** | `FileDownloadCard` now branches on the `sandboxFile` flag; legacy payloads (no flag) take the unchanged `generated-files` path — verified by payload-parse smoke test |
 | 3 | Plugin registration is mechanical but touches the shared plugin index (all skills) | Low, mechanical | Single-line additions following the verified 0.7 contract; Step 4 test suite is the merge gate |
 | 3 | Skill registered server-side but missing from the hardcoded frontend skill registry — admin UI and Tools menu could never enable it | **Resolved (2026-10-20)** | Step 3 added the `venice-image-generate` entry to `frontend/src/pages/Admin/Agents/skills.jsx` + en locale keys; enable chain verified end-to-end against the live DB (see Step 3 evidence) |
-| 4–5 | Real API spend during testing | Low | Use cheapest model (`z-image-turbo`) for smoke tests; single-image runs only |
+| 4 | Handler-contract drift: tests written against the plugin's real code caught two doc-level assumptions (gate is optional via `requestToolApproval` presence; both-idiom conflict resolves to aspect_ratio) | Resolved (2026-10-20) | Step 4 suite encodes the implemented behavior; full server suite green (43/357) |
 | All | Accidental key leakage in error messages | Low | Never interpolate `VENICE_API_KEY` into errors; follow web-browsing's truncation discipline if key-bearing params ever appear in an error |
 
 ## PR / status log

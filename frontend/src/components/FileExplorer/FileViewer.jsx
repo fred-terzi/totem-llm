@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   FileText,
@@ -10,6 +10,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { API_BASE } from "@/utils/constants";
+import { baseHeaders } from "@/utils/request";
 import MarkdownIt from "markdown-it";
 import hljs from "highlight.js";
 import "highlight.js/styles/github-dark.css";
@@ -20,14 +21,65 @@ import DOMPurify from "@/utils/chat/purify";
  * (the server's `downloadUrl` assumes `/api`, which breaks if the client is
  * pointed at a different origin in dev).
  *
+ * NOTE: this URL alone cannot be used directly in <img>/<embed>/<video>/<a>
+ * elements — `/filesystem/read` is session-authenticated (multi-user mode
+ * enforces the JWT `Authorization` header) and native browser element
+ * requests cannot attach headers. Binary previews must fetch the bytes with
+ * `baseHeaders()` via `useRawBlobUrl` and render from the object URL.
+ *
  * @param {string} filePath - relative sandbox path
- * @returns {string} absolute-ish URL usable by <img>/<video>/<a>
+ * @returns {string} absolute-ish URL (only usable with an auth header attached)
  */
 function rawUrl(filePath) {
   const base = API_BASE.endsWith("/") ? API_BASE.slice(0, -1) : API_BASE;
   return `${base}/filesystem/read?path=${encodeURIComponent(
     filePath
   )}&raw=true`;
+}
+
+/**
+ * Authenticated raw-bytes loader for binary previews.
+ *
+ * Fetches `/filesystem/read?raw=true` with the session's baseHeaders and
+ * yields an object URL for the blob. Needed because multi-user mode enforces
+ * the JWT Authorization header on this endpoint, and <img>/<embed>/<video>
+ * elements cannot send headers — a plain `src={rawUrl(...)}` 401s.
+ *
+ * @param {string|null} filePath - relative sandbox path (null = don't fetch)
+ * @param {boolean} enabled - only fetch when true
+ * @returns {string|null} object URL for the fetched bytes, or null while loading
+ */
+function useRawBlobUrl(filePath, enabled) {
+  const [objectUrl, setObjectUrl] = useState(null);
+
+  useEffect(() => {
+    if (!filePath || !enabled) {
+      setObjectUrl(null);
+      return;
+    }
+    let revoked = false;
+    let createdUrl = null;
+    async function load() {
+      try {
+        const res = await fetch(rawUrl(filePath), { headers: baseHeaders() });
+        if (!res.ok) throw new Error(`Failed to load file (${res.status})`);
+        const blob = await res.blob();
+        if (revoked) return;
+        createdUrl = URL.createObjectURL(blob);
+        setObjectUrl(createdUrl);
+      } catch (e) {
+        console.error("[FileViewer] raw fetch failed:", e);
+      }
+    }
+    load();
+    return () => {
+      revoked = true;
+      if (createdUrl) URL.revokeObjectURL(createdUrl);
+      setObjectUrl(null);
+    };
+  }, [filePath, enabled]);
+
+  return objectUrl;
 }
 
 function basename(p) {
@@ -156,11 +208,21 @@ function TextViewer({ content, truncated }) {
   );
 }
 
-function ImageViewer({ url, name }) {
+function ImageViewer({ path, name }) {
+  const blobUrl = useRawBlobUrl(path, !!path);
+  if (!blobUrl) {
+    return (
+      <div className="flex items-center justify-center bg-black/10 light:bg-slate-100 rounded-md p-4 max-h-[60vh] overflow-auto">
+        <span className="text-xs text-theme-text-secondary">
+          Loading image...
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="flex items-center justify-center bg-black/10 light:bg-slate-100 rounded-md p-4 max-h-[60vh] overflow-auto">
       <img
-        src={url}
+        src={blobUrl}
         alt={name}
         className="max-w-full max-h-[60vh] object-contain"
       />
@@ -168,59 +230,105 @@ function ImageViewer({ url, name }) {
   );
 }
 
-function PdfViewer({ url }) {
+function PdfViewer({ path, name }) {
+  const blobUrl = useRawBlobUrl(path, !!path);
   return (
     <div className="flex flex-col gap-y-2">
       <div className="rounded-md bg-black/10 light:bg-slate-100 overflow-hidden">
-        <embed
-          src={url}
-          type="application/pdf"
-          className="w-full h-[60vh]"
-          style={{ border: "none" }}
-        />
+        {blobUrl ? (
+          <embed
+            src={blobUrl}
+            type="application/pdf"
+            className="w-full h-[60vh]"
+            style={{ border: "none" }}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-[60vh]">
+            <span className="text-xs text-theme-text-secondary">
+              Loading PDF...
+            </span>
+          </div>
+        )}
       </div>
-      <a
-        href={url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-2 self-start text-xs text-theme-text-secondary hover:text-theme-text-primary"
-      >
-        <FilePdf className="h-4 w-4" />
-        Open PDF in a new tab
-      </a>
+      {blobUrl && (
+        <a
+          href={blobUrl}
+          download={name}
+          className="inline-flex items-center gap-2 self-start text-xs text-theme-text-secondary hover:text-theme-text-primary"
+        >
+          <FilePdf className="h-4 w-4" />
+          Open PDF in a new tab
+        </a>
+      )}
     </div>
   );
 }
 
-function AudioPlayer({ url }) {
+function AudioPlayer({ path }) {
+  const blobUrl = useRawBlobUrl(path, !!path);
   return (
     <div className="flex flex-col gap-y-2 p-3">
-      <div className="flex items-center gap-2 text-theme-text-primary">
+      <div className="flex items-center gap-x-2 text-theme-text-primary">
         <MusicNote className="h-5 w-5 text-sky-400" />
         <span className="text-sm">Audio preview</span>
       </div>
-      <audio controls src={url} className="w-full" />
+      {blobUrl ? (
+        <audio controls src={blobUrl} className="w-full" />
+      ) : (
+        <span className="text-xs text-theme-text-secondary">
+          Loading audio...
+        </span>
+      )}
     </div>
   );
 }
 
-function VideoPlayer({ url }) {
+function VideoPlayer({ path }) {
+  const blobUrl = useRawBlobUrl(path, !!path);
   return (
     <div className="flex flex-col gap-y-2 p-3">
-      <div className="flex items-center gap-2 text-theme-text-primary">
+      <div className="flex items-center gap-x-2 text-theme-text-primary">
         <Video className="h-5 w-5 text-fuchsia-400" />
         <span className="text-sm">Video preview</span>
       </div>
-      <video
-        controls
-        src={url}
-        className="w-full max-h-[60vh] rounded-md bg-black"
-      />
+      {blobUrl ? (
+        <video
+          controls
+          src={blobUrl}
+          className="w-full max-h-[60vh] rounded-md bg-black"
+        />
+      ) : (
+        <span className="text-xs text-theme-text-secondary">
+          Loading video...
+        </span>
+      )}
     </div>
   );
 }
 
 function BinaryNotice({ size, sizeFormatted, url, name }) {
+  const [downloading, setDownloading] = useState(false);
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      // Authenticated fetch — a plain href 401s in multi-user mode because
+      // native navigations cannot attach the Authorization header.
+      const res = await fetch(url, { headers: baseHeaders() });
+      if (!res.ok) throw new Error(`Failed to download file (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = name || "file";
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+    } catch (e) {
+      console.error("[FileViewer] download failed:", e);
+    } finally {
+      setDownloading(false);
+    }
+  };
   return (
     <div className="flex flex-col gap-y-3 p-4 rounded-md bg-black/10 light:bg-slate-100 border border-white/10 light:border-slate-300">
       <div className="flex items-center gap-2">
@@ -238,14 +346,15 @@ function BinaryNotice({ size, sizeFormatted, url, name }) {
             : ""}
         {" · "}This file type can't be previewed inline.
       </p>
-      <a
-        href={url}
-        download={name}
-        className="inline-flex items-center gap-2 self-start h-9 px-4 rounded-lg bg-zinc-50 text-zinc-950 light:bg-slate-900 light:text-white text-sm font-medium hover:bg-zinc-200 light:hover:bg-slate-800 transition-colors"
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={downloading}
+        className="inline-flex items-center gap-2 self-start h-9 px-4 rounded-lg bg-zinc-50 text-zinc-950 light:bg-slate-900 light:text-white text-sm font-medium hover:bg-zinc-200 light:hover:bg-slate-800 transition-colors disabled:opacity-50"
       >
         <ArrowDown className="h-4 w-4" />
-        Download
-      </a>
+        {downloading ? "Downloading..." : "Download"}
+      </button>
     </div>
   );
 }
@@ -294,13 +403,13 @@ export default function FileViewer({ data, onClose }) {
       <TextViewer content={data.content || ""} truncated={!!data.truncated} />
     );
   } else if ((data.mime || "").startsWith("image/")) {
-    body = <ImageViewer url={url} name={name} />;
+    body = <ImageViewer path={data.path} name={name} />;
   } else if (data.mime === "application/pdf") {
-    body = <PdfViewer url={url} />;
+    body = <PdfViewer path={data.path} name={name} />;
   } else if ((data.mime || "").startsWith("audio/")) {
-    body = <AudioPlayer url={url} />;
+    body = <AudioPlayer path={data.path} />;
   } else if ((data.mime || "").startsWith("video/")) {
-    body = <VideoPlayer url={url} />;
+    body = <VideoPlayer path={data.path} />;
   } else {
     body = (
       <BinaryNotice
