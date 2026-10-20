@@ -13,6 +13,7 @@ const { outlookAgent } = require("./outlook/index.js");
 const { googleCalendarAgent } = require("./google-calendar/index.js");
 const { requestUserInput } = require("./request-user-input.js");
 const { terminalAccess } = require("./terminal-access.js");
+const { veniceImage } = require("./venice-image/index.js");
 
 module.exports = {
   webScraping,
@@ -30,6 +31,7 @@ module.exports = {
   googleCalendarAgent,
   requestUserInput,
   terminalAccess,
+  veniceImage,
 
   // Plugin name aliases so they can be pulled by slug as well.
   [webScraping.name]: webScraping,
@@ -47,4 +49,5 @@ module.exports = {
   [googleCalendarAgent.name]: googleCalendarAgent,
   [requestUserInput.name]: requestUserInput,
   [terminalAccess.name]: terminalAccess,
+  [veniceImage.name]: veniceImage,
 };

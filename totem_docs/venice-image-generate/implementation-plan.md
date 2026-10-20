@@ -26,7 +26,7 @@ All paths are relative to repo root (`totem-llm/`).
 
 ## Step 1 — Create the plugin skeleton and lib (`venice-image/lib.js`, `pricing.js`)
 
-**Status:** Planned
+**Status:** Complete (2026-10-20)
 
 Create `server/utils/agents/aibitat/plugins/venice-image/` with three files:
 
@@ -50,11 +50,23 @@ Also add an example exchange demonstrating the confirm-then-generate turn split,
 
 **Handler billing flow (F14 + F10), in order:** availability check → `pricing.quote(params)` → **approval gate** (`requestToolApproval` with payload `{ prompt, credit_quote, variants, … }` and description naming the cost — rejection/timeout returns the gate's message before any API call, AC15) → if `userId != null`: `Credits.hasCredits(userId, quote)` (fail → "insufficient credits, this image costs N credits", no API call) → `generate()` → save files → if `userId != null`: `Credits.debit(userId, quote, \`venice-image-generate:${requestId}\`)` → download cards → result string includes the debited amount. Any failure after pre-flight returns before the debit (AC13). The gate runs **before** pre-flight so the user is never shown an internal balance error before seeing the card; pre-flight then protects the API call.
 
-**Step 0.10 follow-up — pin the cost:** run one real `GET /models?type=image` call against the deployment's `VENICE_API_KEY` during this step and record the returned `pricing.generation.usd` for `z-image-turbo` here, plus the display-credit conversion used. The constant must be pinned from the API, not guessed.
+**Step 0.10 follow-up — pin the cost:** ✅ DONE (2026-10-20). Ran real `GET /models?type=image` against the deployment's `VENICE_API_KEY`. Returned for `z-image-turbo`: `model_spec.pricing.generation.usd = 0.01`. Display-credit conversion: this deployment's `users.credits_balance` stores microdollars and the CreditBadge renders that integer directly, so **1 display credit = 1 microdollar** → `COST_PER_IMAGE = 0.01 × 1_000_000 = 10_000 credits per image`. Pinned in `pricing.js` as `GENERATION_COST_USD = 0.01` + `MICRO_PER_USD` (not a magic literal), so the derivation is auditable.
 
-**Deviations from the original draft:** *(none yet)*
+**Deviations from the original draft:**
 
-**Smoke-test evidence:** *(pending)*
+- **Admin billing exemption (F14 amendment):** implementation revealed the existing credit gate exempts admins (`server/endpoints/chat.js:66-69` passes `user.role` and `hasCredits` auto-passes admins, `models/credits.js:135`). The handler now resolves the session user's role and skips pre-flight + debit for admins, matching house convention. Spec F14 amended accordingly.
+- **`registerOutput` call shape:** the plan assumed `createFilesLib.registerOutput` would be reused, but that helper only pushes into `aibitat._pendingOutputs` — the same shape `ephemeral.js#GetPendingOutputs` and `chat-history.js` consume. The handler pushes `{ type: "ImageDownload", payload }` into `aibitat._pendingOutputs` directly via an optional `this.super.registerOutput?.(...)` shim, keeping the consumed contract identical without importing create-files into this plugin.
+- **Download-card payload carries `sandboxFile: true` + sandbox-relative `storageFilename`:** Step 2's correction (0.6) applies — the frontend `FileDownloadCard` currently fetches via `/agent-skills/generated-files/:filename`, which cannot serve sandbox files. Step 2 must make the card resolve sandbox files through `GET /filesystem/read?path=…&raw=true` (endpoint exists, `filesystem.js:436`, authenticated, sandbox-scoped). Until Step 2, the card's download button would 400 on these files — expected interim state, gated before merge.
+
+**Smoke-test evidence (2026-10-20, all via `node -e` against the real repo):**
+
+- `pricing.quote({})` → `10000`; `quote({variants:3})` → `30000`; `quote({variants:99})` → `40000` (cap 4 ✓).
+- `buildRequestBody`: `aspect_ratio:"16:9"` + `width/height` supplied together → body contains ONLY `aspect_ratio` (idiom exclusivity ✓); minimal params → `{model:"z-image-turbo", prompt, return_binary:false, format:"png"}` and nothing else ✓; no `inpaint` field possible ✓.
+- `sanitizeSlug('../../etc/passwd lighthouse at dusk')` → `etc-passwd-lighthouse-at-dusk`; emoji/quotes prompt → safe slug ✓ (AC9 construction half).
+- `saveToSandbox` with `userId: 9999` (nonexistent user) → created `users/9999/images/…png` lazily via `validatePath` + `mkdir(recursive)`; file size verified on disk; cross-user check — `getFilesystemFor(13).validatePath()` on user 9999's path throws `Access denied` ✓ (AC3, N1).
+- Plugin registration: `AgentPlugins['venice-image-generate']` slug + `.veniceImage` named export both resolve; `setup()` registers both tools.
+- Full handler dry-run (mocked fetch returning 2 base64 images, mocked `Credits`, real sandbox, real gate stub): approval card fired FIRST with description `"Generate an image via Venice AI — costs 20000 credits (2 images)"` and payload `{prompt, credit_quote: 20000, variants: 2, …}` (F10/F12 ✓) → pre-flight `hasCredits(9999, 20000)` → 2 files saved to `users/9999/images/` with `-1`/`-2` suffixes (F9 ✓) → 2 download cards + 2 `ImageDownload` outputs → exactly one `debit(9999, 20000, "venice-image-generate:req_test_123")` (F14b ✓) → success string reports debited amount. Test sandbox cleaned up after run.
+- Regression guard: existing server test suite (`server/__tests__` filesystem-related, 42 suites / 324 tests) still green after `plugins/index.js` edit.
 
 ---
 
