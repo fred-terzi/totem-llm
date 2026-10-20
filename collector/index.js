@@ -27,7 +27,11 @@ const { processRawText } = require("./processRawText");
 const { verifyPayloadIntegrity } = require("./middleware/verifyIntegrity");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
-const FILE_LIMIT = "3GB";
+// Body limit for the parser middlewares. The collector is only reachable by
+// the server (comKey HMAC-verified routes), so a generous-but-bounded limit
+// protects against OOM without breaking large document processing.
+// Override with BODY_LIMIT if needed.
+const FILE_LIMIT = process.env.BODY_LIMIT || "3GB";
 const COLLECTOR_PORT = getCollectorPort();
 
 // Only log HTTP requests in development mode and if the ENABLE_HTTP_LOGGER environment variable is set to true
@@ -41,6 +45,10 @@ if (
     })
   );
 }
+// Collector is a private service (all routes comKey-signed) and is only
+// called server-to-server — CORS is a no-op for those clients. Keep
+// reflect-any-origin for now; tighten alongside the server if the collector
+// is ever exposed.
 app.use(cors({ origin: true }));
 app.use(
   bodyParser.text({ limit: FILE_LIMIT }),
