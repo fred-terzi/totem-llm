@@ -87,6 +87,10 @@
     "terminalAccess": {
       "label": "Terminal Access",
       "tier": "L2"
+    },
+    "profilePicture": {
+      "label": "Profile Picture",
+      "tier": "L1"
     }
   },
   "PROFILES": {
@@ -112,7 +116,8 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": true
+      "terminalAccess": true,
+      "profilePicture": false
     },
     "L1": {
       "communityHub": false,
@@ -136,7 +141,8 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": true
+      "terminalAccess": true,
+      "profilePicture": false
     },
     "L2": {
       "communityHub": false,
@@ -160,7 +166,8 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": true
+      "terminalAccess": true,
+      "profilePicture": false
     },
     "hosted": {
       "communityHub": false,
@@ -184,7 +191,8 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": false
+      "terminalAccess": false,
+      "profilePicture": false
     },
     "beta": {
       "communityHub": false,
@@ -208,7 +216,8 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": false
+      "terminalAccess": false,
+      "profilePicture": false
     },
     "source": {
       "communityHub": true,
@@ -232,7 +241,8 @@
       "appIntegrations": false,
       "agentFlows": false,
       "mcpServers": true,
-      "terminalAccess": true
+      "terminalAccess": true,
+      "profilePicture": false
     }
   }
 }

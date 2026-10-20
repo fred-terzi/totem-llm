@@ -97,45 +97,47 @@ export default function AccountModal({ user, hideModal }) {
           style={{ maxHeight: "calc(100vh - 200px)" }}
         >
           <form onSubmit={handleUpdate} className="space-y-6">
-            <div className="flex flex-col md:flex-row items-center justify-center gap-8">
-              <div className="flex flex-col items-center">
-                <label className="group w-48 h-48 flex flex-col items-center justify-center bg-theme-bg-primary hover:bg-theme-bg-secondary transition-colors duration-300 rounded-full mt-8 border-2 border-dashed border-white light:border-[#686C6F] light:bg-[#E0F2FE] light:hover:bg-transparent cursor-pointer hover:opacity-60">
-                  <input
-                    id="logo-upload"
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                  {pfp ? (
-                    <img
-                      src={pfp}
-                      alt="User profile picture"
-                      className="w-48 h-48 rounded-full object-cover bg-white"
+            {__TOTEM_FEATURES__.profilePicture && (
+              <div className="flex flex-col md:flex-row items-center justify-center gap-8">
+                <div className="flex flex-col items-center">
+                  <label className="group w-48 h-48 flex flex-col items-center justify-center bg-theme-bg-primary hover:bg-theme-bg-secondary transition-colors duration-300 rounded-full mt-8 border-2 border-dashed border-white light:border-[#686C6F] light:bg-[#E0F2FE] light:hover:bg-transparent cursor-pointer hover:opacity-60">
+                    <input
+                      id="logo-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileUpload}
                     />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-3">
-                      <Plus className="w-8 h-8 text-theme-text-secondary m-2" />
-                      <span className="text-theme-text-secondary text-opacity-80 text-sm font-semibold">
-                        {t("profile_settings.profile_picture")}
-                      </span>
-                      <span className="text-theme-text-secondary text-opacity-60 text-xs">
-                        800 x 800
-                      </span>
-                    </div>
+                    {pfp ? (
+                      <img
+                        src={pfp}
+                        alt="User profile picture"
+                        className="w-48 h-48 rounded-full object-cover bg-white"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center p-3">
+                        <Plus className="w-8 h-8 text-theme-text-secondary m-2" />
+                        <span className="text-theme-text-secondary text-opacity-80 text-sm font-semibold">
+                          {t("profile_settings.profile_picture")}
+                        </span>
+                        <span className="text-theme-text-secondary text-opacity-60 text-xs">
+                          800 x 800
+                        </span>
+                      </div>
+                    )}
+                  </label>
+                  {pfp && (
+                    <button
+                      type="button"
+                      onClick={handleRemovePfp}
+                      className="mt-3 text-theme-text-secondary text-opacity-60 text-sm font-medium hover:underline"
+                    >
+                      {t("profile_settings.remove_profile_picture")}
+                    </button>
                   )}
-                </label>
-                {pfp && (
-                  <button
-                    type="button"
-                    onClick={handleRemovePfp}
-                    className="mt-3 text-theme-text-secondary text-opacity-60 text-sm font-medium hover:underline"
-                  >
-                    {t("profile_settings.remove_profile_picture")}
-                  </button>
-                )}
+                </div>
               </div>
-            </div>
+            )}
             <div className="flex flex-col gap-y-4 px-6">
               <div>
                 <label

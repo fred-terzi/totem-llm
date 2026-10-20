@@ -9,6 +9,7 @@ export function PfpProvider({ children }) {
   const { user } = useUser();
 
   useEffect(() => {
+    if (!__TOTEM_FEATURES__.profilePicture) return;
     async function fetchPfp() {
       if (!user?.id) return;
       try {
