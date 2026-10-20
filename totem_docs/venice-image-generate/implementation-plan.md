@@ -105,15 +105,30 @@ Changes:
 
 ## Step 3 — Registration + whitelisting
 
-**Status:** Planned
+**Status:** Complete (2026-10-20)
 
 - `plugins/index.js`: import `veniceImage`, add named export and `[veniceImage.name]` alias (verified contract, 0.7).
 - Confirm the skill appears in the admin agent-skills UI and is opt-in (not in `default_agent_skills`).
 - No frontend changes required (N7): download cards and File Explorer image previews already render.
 
-**Deviations from the original draft:** *(none yet)*
+**What was implemented:** the server-side registration was already in place from the Step 1 commit (`plugins/index.js` import + named export + slug alias); Step 3 verified the full enable chain and closed one real gap the plan missed — the admin agent-skills UI and the chat Tools menu list skills from hardcoded frontend registries, so without a frontend entry the skill could never be toggled on anywhere. Changes:
 
-**Smoke-test evidence:** *(pending)*
+- `frontend/src/pages/Admin/Agents/skills.jsx` — added a `venice-image-generate` entry to `getConfigurableSkills()` (title/description via the new `agent.skill.imageGeneration` i18n keys, `GenericSkillPanel` component — it is a pure-toggle skill with no config, same panel as `create-chart` and `terminal-access` — and the `Image` phosphor icon aliased to `ImageIcon`). Being in `configurableSkills` wires it into both the **admin Agent Skills page** (list card + On/Off toggle writing `default_agent_skills`) and the **chat Tools menu** Agent Skills section (`useAgentSkillsState` treats every configurable skill as enabled-iff-present-in-`default_agent_skills`), matching the server's `agentSkillsFromSystemSettings()` exactly.
+- `frontend/src/locales/en/common.js` — added `agent.skill.imageGeneration.title` / `.description`.
+
+**Deviations from the original draft:**
+
+- **Frontend change required after all (N7 amendment):** the plan's "no frontend changes required" held for download cards and File Explorer previews (Step 2 covered those), but NOT for the enable surface — the admin agent-skills UI and chat Tools menu enumerate skills from `frontend/src/pages/Admin/Agents/skills.jsx`, which is a hardcoded registry, not a reflection of `plugins/index.js`. Without this entry the skill is registerable server-side but invisible/unreachable in every UI. Recorded as a deviation; spec N7 amended to "no frontend changes beyond skill-registry + locale entries and the Step 2 download-card support".
+
+**Smoke-test evidence (2026-10-20):**
+
+- Registration contract (0.7) re-verified live: `AgentPlugins.veniceImage` resolves; `AgentPlugins['venice-image-generate'] === AgentPlugins.veniceImage` (slug alias); `plugin().setup` registers both tools (`generate-image`, `list-image-styles`) via `aibitat.function()`; `generate-image` description carries the F11 refine-and-confirm mandate incl. the "Always allow" clause; `required: ['prompt']`.
+- Opt-in verified against the **live DB**: `default_agent_skills` = `['terminal-access','filesystem-agent','web-browsing']` — no venice entry. `DEFAULT_SKILLS` in `defaults.js` does not name it either, so the skill is off until an admin enables it (F8).
+- Enable chain simulated against the **live DB**: appended `venice-image-generate` to `default_agent_skills` via `SystemSettings.updateSettings` → `agentSkillsFromSystemSettings()` returns it (full list emitted `web-scraping, terminal-access, filesystem-agent#* ×10, web-browsing, venice-image-generate`) → `#attachPlugins` resolves it via `AgentPlugins.hasOwnProperty` → plugin loads. DB restored to the original 3-skill set afterward (verified).
+- Per-user whitelist path ("Always allow", AC16) verified against the **live DB**: `AgentSkillWhitelist.add('venice-image-generate', 9999)` → `isWhitelisted` true for user 9999, **false for user 13** (per-user scoping) → same for real user 6. Test settings rows deleted afterward (verified null). This is the exact check `websocket.js#requestToolApproval` runs, so a whitelisted user's gate auto-approves with no card.
+- Env auto-approve path verified: `AGENT_AUTO_APPROVED_SKILLS=venice-image-generate` and `=<all>` both make `skillIsAutoApproved` return true; unset → false.
+- Translation verify diffed before/after the change: identical output (the checker's pre-existing `importData` noise is unchanged); no new missing keys in any of the 24 non-en locales (they fall back to en by design).
+- `npx eslint` clean on both frontend files; `npx vite build` succeeds; `npx jest server/__tests__` → **42 suites / 326 tests, all green** (unchanged from Step 2).
 
 ---
 
@@ -174,6 +189,7 @@ With `TOTEM_BUILD_PROFILE=source yarn dev:all` (source profile required for agen
 | 1 | "Always allow" users get no approval card, so spend relies on the conversational contract (F11) | Accepted (by design) | User explicitly opted into auto-generation; F11 refine-and-confirm + quote still mandatory in conversation (AC17), F14 billing still runs in every mode; opting out (admin whitelist removal) restores the card |
 | 2 | `fileDownloadCard` frontend expects `generated-files` semantics | **Resolved (2026-10-20)** | `FileDownloadCard` now branches on the `sandboxFile` flag; legacy payloads (no flag) take the unchanged `generated-files` path — verified by payload-parse smoke test |
 | 3 | Plugin registration is mechanical but touches the shared plugin index (all skills) | Low, mechanical | Single-line additions following the verified 0.7 contract; Step 4 test suite is the merge gate |
+| 3 | Skill registered server-side but missing from the hardcoded frontend skill registry — admin UI and Tools menu could never enable it | **Resolved (2026-10-20)** | Step 3 added the `venice-image-generate` entry to `frontend/src/pages/Admin/Agents/skills.jsx` + en locale keys; enable chain verified end-to-end against the live DB (see Step 3 evidence) |
 | 4–5 | Real API spend during testing | Low | Use cheapest model (`z-image-turbo`) for smoke tests; single-image runs only |
 | All | Accidental key leakage in error messages | Low | Never interpolate `VENICE_API_KEY` into errors; follow web-browsing's truncation discipline if key-bearing params ever appear in an error |
 

@@ -15,6 +15,7 @@ import {
   FolderOpen,
   FilePlus,
   Terminal,
+  Image as ImageIcon,
 } from "@phosphor-icons/react";
 import RAGImage from "@/media/agents/rag-memory.png";
 import SummarizeImage from "@/media/agents/view-summarize.png";
@@ -110,6 +111,13 @@ export const getConfigurableSkills = (
       icon: Terminal,
     },
   }),
+  "venice-image-generate": {
+    title: t("agent.skill.imageGeneration.title"),
+    description: t("agent.skill.imageGeneration.description"),
+    component: GenericSkillPanel,
+    skill: "venice-image-generate",
+    icon: ImageIcon,
+  },
 });
 
 export const getAppIntegrationSkills = (t) => ({

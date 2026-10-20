@@ -1,6 +1,6 @@
 # Venice Image Generation Skill
 
-**Status:** 🔲 Planned (spec drafted, plan Step 0 complete, implementation not started)
+**Status:** 🚧 In progress (Steps 0–3 complete; Step 4 tests + Step 5 E2E pending)
 **Spec:** [requirement-spec.md](requirement-spec.md) · **Plan:** [implementation-plan.md](implementation-plan.md)
 
 ## What it does
@@ -105,6 +105,8 @@ server/utils/agents/aibitat/plugins/venice-image/
 ├── lib.js      # VeniceImageManager: request build, error map, sandbox save
 └── pricing.js  # STANDARD_MODEL, COST_PER_IMAGE, quote(params), operations map
 ```
+
+Enable surface (added in plan Step 3): `frontend/src/pages/Admin/Agents/skills.jsx` registers the skill card under `getConfigurableSkills()` so admins can toggle it (writes `default_agent_skills`); the chat Tools menu reads the same registry.
 
 No schema changes (the debit writes to the existing `credit_transactions` table via `server/models/credits.js`). No new env vars. Reuses the existing `VENICE_API_KEY`.
 

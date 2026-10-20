@@ -352,6 +352,11 @@ const TRANSLATIONS = {
         description:
           "Enable your agent to execute shell commands with working directory tracking and safety guards. Useful for running tests, builds, git operations, package installs, and other command-line tasks.",
       },
+      imageGeneration: {
+        title: "Image Generation",
+        description:
+          "Enable your agent to generate images from a text prompt using Venice AI. Images are saved to your files and can be downloaded directly from the chat. Each generation costs credits.",
+      },
       filesystem: {
         title: "File System Access",
         description:
