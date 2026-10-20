@@ -72,15 +72,34 @@ Also add an example exchange demonstrating the confirm-then-generate turn split,
 
 ## Step 2 — Download-card wiring for sandbox files
 
-**Status:** Planned
+**Status:** Complete (2026-10-20)
 
 Emit `fileDownloadCard` + `registerOutput(this.super, "ImageDownload", …)` per image (pattern verified in 0.5), with payload `{ filename: <sandbox-relative display name>, storageFilename: <sanitized storage name>, fileSize }`.
 
+**What was implemented:** a third option — neither of the two originally listed. The card payload from Step 1 already carries `sandboxFile: true` + sandbox-relative `storageFilename`; Step 2 taught the **existing** `FileDownloadCard` component to route such payloads through the already-shipped, already-tested sandbox read endpoint (`GET /filesystem/read?path=…&raw=true`, `server/endpoints/filesystem.js` — session-authenticated, `resolveFsForRequest`-scoped, streams with `Content-Disposition: inline`). No new server endpoint and no file-explorer deep link needed.
+
+Changes:
+
+- `frontend/src/models/files.js` — `StorageFiles.download(storageFilename, sandboxFile = false)`: when `sandboxFile` is true, fetches `/api/filesystem/read?path=<encoded>&raw=true` (session `baseHeaders()` auth) instead of `/agent-skills/generated-files/…`.
+- `frontend/src/components/WorkspaceChat/ChatContainer/ChatHistory/FileDownloadCard/index.jsx`:
+  - destructures `sandboxFile` from the card payload and routes the download through the new flag (`!!sandboxFile`) — legacy create-files cards (no flag) are unaffected.
+  - for sandbox images, fetches the blob once on mount and renders a 48x48 **inline thumbnail preview** in place of the extension badge (blob object URL, revoked on unmount). Server-side sandbox scoping is the only authorization check — the card cannot read files the session's sandbox doesn't own (403/404).
+  - adds an `IMG` badge case + `isImageFile()` helper (png/jpg/jpeg/webp/gif/bmp).
+- `server/__tests__/endpoints/filesystem.test.js` — two new tests covering the exact card path: (1) `images/…png` streams with `Content-Type: image/png`, `Content-Disposition: inline`, and intact PNG magic bytes; (2) cross-user isolation — user B requesting user A's generated image via the same raw URL gets 404.
+
 **Deviations from the original draft:**
 
-- **Correction to Step 2 (from Step 0 finding 0.6):** `agentFileServer.js` only serves `storage/generated-files/` with `{fileType}-{uuid}.{ext}` names. For sandbox images the card must deep-link to the File Explorer's file view for the image's sandbox path (already shipped in the file-explorer workstream), so the user clicks through to the image preview and downloads from there. If, during implementation, the file-explorer route is not addressable from the agent socket payload, fall back to adding a narrow authenticated read endpoint for sandbox files under `/api/agent-skills/sandbox-file/` — decided at implementation time, recorded here either way.
+- **Correction to Step 2 (from Step 0 finding 0.6):** `agentFileServer.js` only serves `storage/generated-files/` with `{fileType}-{uuid}.{ext}` names. Resolved by routing sandbox-file cards through the existing `GET /filesystem/read?raw=true` endpoint rather than the two originally listed options (file-explorer deep link vs. new sandbox-file endpoint) — the raw-read endpoint shipped with the file-explorer workstream already provides everything the deep-link option wanted, without coupling the card to File Explorer routing state.
+- **Thumbnail preview added (scope addition):** a download card showing only an "IMG" badge for an image felt like a dead end for a media file; the inline preview costs one extra already-authenticated fetch per card and makes the chat card immediately meaningful. Documented here as a deliberate UX addition; spec F3 requires "no dead link" — the preview is strictly additive.
+- **Test-harness note:** `callRead(..., { raw: "true" })` awaits a stream `finish` event that never fires on the JSON error branch (404), so the cross-user isolation test invokes the captured handler directly — same pattern as the existing T10 symlink test.
 
-**Smoke-test evidence:** *(pending)*
+**Smoke-test evidence (2026-10-20):**
+
+- Endpoint contract verified against source: `/filesystem/read` route registered, `raw === "true"` streaming branch, `Content-Disposition: inline` — all present in `server/endpoints/filesystem.js`.
+- URL construction matches the endpoint exactly: `images/20261020-090000-lighthouse-at-dusk.png` -> `/api/filesystem/read?path=images%2F20261020-090000-lighthouse-at-dusk.png&raw=true`.
+- Card payload parse verified: sandbox image payload (`sandboxFile: true`) routes to the raw endpoint; legacy payload (no flag) unaffected.
+- `npx eslint` clean on both frontend files; `npx vite build` succeeds.
+- `npx jest server/__tests__` -> **42 suites / 326 tests, all green** (was 324; +2 new endpoint tests). The new tests are the merge gate for this step's risk row ("card must never render without a working target" — the card now has a tested, session-scoped, streaming target).
 
 ---
 
@@ -151,9 +170,9 @@ With `TOTEM_BUILD_PROFILE=source yarn dev:all` (source profile required for agen
 | 1 | Refine-and-confirm is instruction-level only; a non-compliant LLM could generate without presenting prompt/quote | Medium | F11 explicitly documented as soft enforcement; the approval card (F10) is the hard layer for users who have not opted into auto-generation; AC10/AC17 cover the description-contract test |
 | 1 | Mis-pinned `COST_PER_IMAGE` (guessed instead of read from Venice `/models`) would over/under-charge users | Medium | Step 1 requires recording the API-returned price in the plan before merging; quote and debit read one constant so they cannot diverge (N4) |
 | 1 | Debit/pre-flight race lets a concurrent spend overdraw slightly | Low | Accepted (same exposure as chat-turn billing); `Credits.debit` caps at available balance, never negative |
-| 2 | Download card dead-link risk (generated-files endpoint can't serve sandbox files) | High (user-visible) | Identified in Step 0 (0.6); Step 2 resolves the link target before merge; card must never render without a working target |
+| 2 | Download card dead-link risk (generated-files endpoint can't serve sandbox files) | **Resolved (2026-10-20)** | Step 2 routes sandbox cards through the existing `GET /filesystem/read?raw=true` endpoint; covered by 2 new endpoint tests (image streaming + cross-user 404) |
 | 1 | "Always allow" users get no approval card, so spend relies on the conversational contract (F11) | Accepted (by design) | User explicitly opted into auto-generation; F11 refine-and-confirm + quote still mandatory in conversation (AC17), F14 billing still runs in every mode; opting out (admin whitelist removal) restores the card |
-| 2 | `fileDownloadCard` frontend expects `generated-files` semantics | Medium | Verify against file-explorer card rendering during Step 2 smoke test; payload keys kept identical to create-files pattern |
+| 2 | `fileDownloadCard` frontend expects `generated-files` semantics | **Resolved (2026-10-20)** | `FileDownloadCard` now branches on the `sandboxFile` flag; legacy payloads (no flag) take the unchanged `generated-files` path — verified by payload-parse smoke test |
 | 3 | Plugin registration is mechanical but touches the shared plugin index (all skills) | Low, mechanical | Single-line additions following the verified 0.7 contract; Step 4 test suite is the merge gate |
 | 4–5 | Real API spend during testing | Low | Use cheapest model (`z-image-turbo`) for smoke tests; single-image runs only |
 | All | Accidental key leakage in error messages | Low | Never interpolate `VENICE_API_KEY` into errors; follow web-browsing's truncation discipline if key-bearing params ever appear in an error |

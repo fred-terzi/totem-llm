@@ -81,9 +81,26 @@ beforeAll(() => {
   fs.mkdirSync(path.join(pathRootA, "empty"), { recursive: true });
 
   fs.writeFileSync(path.join(pathRootA, "hello.txt"), "Hello, sandbox!\n");
-  fs.writeFileSync(path.join(pathRootA, "notes.md"), "# Title\n\nSome **md**.\n");
+  fs.writeFileSync(
+    path.join(pathRootA, "notes.md"),
+    "# Title\n\nSome **md**.\n"
+  );
   fs.writeFileSync(path.join(pathRootA, "docs", "guide.md"), "# Guide\n");
   fs.writeFileSync(path.join(pathRootA, "blob.bin"), Buffer.from([0, 1, 2, 3]));
+
+  // A generated image inside images/ — the path the venice-image-generate
+  // skill saves to and its FileDownloadCard fetches via ?raw=true.
+  fs.mkdirSync(path.join(pathRootA, "images"), { recursive: true });
+  // Minimal valid PNG (1x1 transparent pixel) so the bytes are real.
+  fs.writeFileSync(
+    path.join(pathRootA, "images", "20261020-090000-lighthouse.png"),
+    Buffer.from(
+      "89504e470d0a1a0a0000000d4948445200000001000000010806000000" +
+        "1f15c4890000000d4944415478da63fcffff3f030005fe02fea72d3eb5" +
+        "0000000049454e44ae426082",
+      "hex"
+    )
+  );
 
   // > 1 MiB text file for the truncation test.
   const bigSize = 2 * 1024 * 1024;
@@ -117,8 +134,12 @@ beforeAll(() => {
   filesystemEndpoints(fakeApp);
 
   global.__fsHandlers = {
-    list: routes.find((r) => r.path === "/filesystem/list" && r.method === "get"),
-    read: routes.find((r) => r.path === "/filesystem/read" && r.method === "get"),
+    list: routes.find(
+      (r) => r.path === "/filesystem/list" && r.method === "get"
+    ),
+    read: routes.find(
+      (r) => r.path === "/filesystem/read" && r.method === "get"
+    ),
   };
   if (!global.__fsHandlers.list)
     throw new Error("GET /filesystem/list route not found");
@@ -218,19 +239,23 @@ describe("GET /filesystem/list", () => {
 
     const names = body.entries.map((e) => e.name);
     // Dirs come before files (the two dirs: "docs", "empty").
-    const dirIdx = names.map((n, i) =>
-      body.entries[i].type === "dir" ? i : -1
-    ).filter((i) => i >= 0);
-    const fileIdx = names.map((n, i) =>
-      body.entries[i].type === "file" ? i : -1
-    ).filter((i) => i >= 0);
+    const dirIdx = names
+      .map((n, i) => (body.entries[i].type === "dir" ? i : -1))
+      .filter((i) => i >= 0);
+    const fileIdx = names
+      .map((n, i) => (body.entries[i].type === "file" ? i : -1))
+      .filter((i) => i >= 0);
     if (dirIdx.length && fileIdx.length) {
       expect(Math.max(...dirIdx)).toBeLessThan(Math.min(...fileIdx));
     }
 
     // Both dirs present, both sorted alphabetically among themselves.
-    const dirNames = body.entries.filter((e) => e.type === "dir").map((e) => e.name);
-    expect(dirNames).toEqual(["docs", "empty"]);
+    const dirNames = body.entries
+      .filter((e) => e.type === "dir")
+      .map((e) => e.name);
+    // "images" is present because the venice-image-generate test seed below
+    // creates it in user A's sandbox.
+    expect(dirNames).toEqual(["docs", "empty", "images"]);
 
     // Files present.
     expect(names).toContain("hello.txt");
@@ -364,9 +389,42 @@ describe("GET /filesystem/read", () => {
     expect(res.status).toBe(200); // no .status() override in the raw path
     expect(res.headers["content-type"]).toBe("text/plain");
     expect(res.headers["content-length"]).toBe(String(res.rawBody.length));
-    expect(res.headers["content-disposition"]).toMatch(/^inline; filename="hello\.txt"$/);
+    expect(res.headers["content-disposition"]).toMatch(
+      /^inline; filename="hello\.txt"$/
+    );
     expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.rawBody.toString("utf-8")).toContain("Hello, sandbox!");
+  });
+
+  it("streams a generated image from images/ with image/png content type and inline disposition (venice-image download card path)", async () => {
+    const res = await callRead(
+      USER_A,
+      "images/20261020-090000-lighthouse.png",
+      { raw: "true" }
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toBe("image/png");
+    expect(res.headers["content-disposition"]).toMatch(
+      /^inline; filename="20261020-090000-lighthouse\.png"$/
+    );
+    // Real PNG magic bytes came through the stream intact.
+    expect(res.rawBody.subarray(0, 8)).toEqual(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    );
+  });
+
+  it("cannot read another user's generated image from images/ (download-card isolation)", async () => {
+    // 404 is returned before any streaming starts, so we must NOT go through
+    // callRead's raw path here — it awaits a stream "finish" event that never
+    // fires for the JSON error branch (same pattern as the T10 test).
+    const request = makeRequest({
+      path: "images/20261020-090000-lighthouse.png",
+      raw: "true",
+    });
+    const response = makeResponse(USER_B);
+    await global.__fsHandlers.read.handler(request, response);
+    // Resolves inside B's sandbox where the file doesn't exist → 404.
+    expect(response.statusCode).toBe(404);
   });
 
   it("rejects a symlink that escapes the sandbox with 403 (T10)", async () => {
