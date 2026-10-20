@@ -9,7 +9,15 @@ if (!process.env.STORAGE_DIR) {
   process.env.STORAGE_DIR = path.join(os.homedir(), "totem-llm");
 }
 // Ensure all required storage subdirectories exist
-for (const sub of ["documents", "vector-cache", "models", "direct-uploads", "generated-files", "comkey", "tmp"]) {
+for (const sub of [
+  "documents",
+  "vector-cache",
+  "models",
+  "direct-uploads",
+  "generated-files",
+  "comkey",
+  "tmp",
+]) {
   mkdirSync(path.join(process.env.STORAGE_DIR, sub), { recursive: true });
 }
 
@@ -154,7 +162,11 @@ app.post(
   async function (request, response) {
     const { link, captureAs = "text" } = reqBody(request);
     try {
-      const { success, content = null, title = null } = await getLinkText(link, captureAs);
+      const {
+        success,
+        content = null,
+        title = null,
+      } = await getLinkText(link, captureAs);
       response.status(200).json({ url: link, success, content, title });
     } catch (e) {
       console.error(e);
