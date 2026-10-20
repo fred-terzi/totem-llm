@@ -72,7 +72,12 @@ const { creditEndpoints } = require("./endpoints/credits");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
 const apiRouter = express.Router();
-const FILE_LIMIT = "3GB";
+// Body limit is bounded by default to protect against OOM under concurrent
+// large payloads. Document uploads go through multer (multipart) and are not
+// affected by this — this only bounds the JSON/text/urlencoded parsers.
+// Override with BODY_LIMIT (e.g. BODY_LIMIT="3GB") if huge payloads through
+// those parsers are genuinely required.
+const FILE_LIMIT = process.env.BODY_LIMIT || "50MB";
 
 // Only log HTTP requests in development mode and if the ENABLE_HTTP_LOGGER environment variable is set to true
 if (
@@ -85,7 +90,45 @@ if (
     })
   );
 }
-app.use(cors({ origin: true }));
+// CORS allowlist. Previously `origin: true` reflected any Origin header back
+// (effective wildcard-with-credentials), which allowed any website on the
+// internet to make credentialed cross-origin requests against the API.
+// Allowed origins are now configured via CORS_ORIGIN (comma-separated), e.g.:
+//   CORS_ORIGIN="https://beta.totem.xyz"
+// Requests without an Origin header (curl, server-to-server, same-origin
+// fetches) are unaffected — only browsers send Origin.
+// NOTE: /api/embed/* routes are intentionally public cross-origin widgets and
+// enforce their own per-config domain allowlists (see canRespond middleware),
+// so they keep the old reflect-any-origin behavior.
+const CORS_ORIGINS = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(function corsHandler(req, res, next) {
+  const isEmbedRoute = req.path.startsWith("/api/embed/");
+  cors({
+    origin: isEmbedRoute
+      ? true
+      : (origin, callback) => {
+          // Allow same-origin / non-browser clients (no Origin header).
+          if (!origin) return callback(null, true);
+          if (CORS_ORIGINS.includes(origin)) return callback(null, true);
+          return callback(
+            new Error(`CORS: origin ${origin} not allowed`),
+            false
+          );
+        },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  })(req, res, next);
+});
+
+// Baseline security headers (API-wide). Static file serving additionally sets
+// X-Frame-Options: DENY on static responses. Kept dependency-free (vs helmet)
+// — a strict CSP needs frontend testing before it can be enabled.
+app.use(require("./utils/middleware/securityHeaders"));
 app.use(bodyParser.text({ limit: FILE_LIMIT }));
 app.use(bodyParser.json({ limit: FILE_LIMIT }));
 app.use(
