@@ -153,6 +153,12 @@ const TRANSLATIONS = {
   },
   "main-page": {
     greeting: "TOTEM - Your Mind Leads.",
+    availableTools: {
+      label: "Available tools:",
+      mcpTools: "MCP tools",
+      importedSkills: "Custom skills",
+      flows: "Agent flows",
+    },
     quickActions: {
       createAgent: "Create an Agent",
       editWorkspace: "Edit Workspace",

@@ -976,6 +976,38 @@ const System = {
   },
 
   /**
+   * Fetches the list of agent tools currently available on this instance.
+   * Unlike the admin-only skill preference endpoints, this is readable by any
+   * authenticated user — used by the empty-thread view to display available
+   * tools to users who cannot open the Agent Skills menu.
+   * @returns {Promise<{skills: string[], importedSkills: {hubId: string, name: string}[], flows: {uuid: string, name: string}[], mcpServers: {name: string, tools: string[]}[], isMultiUser: boolean}>}
+   */
+  availableAgentTools: async function () {
+    return fetch(`${API_BASE}/agent-skills/available`, {
+      method: "GET",
+      headers: baseHeaders(),
+    })
+      .then((res) =>
+        res.ok
+          ? res.json()
+          : {
+              skills: [],
+              importedSkills: [],
+              flows: [],
+              mcpServers: [],
+              isMultiUser: false,
+            }
+      )
+      .catch(() => ({
+        skills: [],
+        importedSkills: [],
+        flows: [],
+        mcpServers: [],
+        isMultiUser: false,
+      }));
+  },
+
+  /**
    * Checks if the create-files-agent skill is available.
    * The create-files-agent skill is only available when running in a Docker container.
    * @returns {Promise<boolean>}

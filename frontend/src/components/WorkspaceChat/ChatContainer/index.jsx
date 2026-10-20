@@ -37,6 +37,7 @@ import paths from "@/utils/paths";
 import QuickActions from "@/components/lib/QuickActions";
 import SuggestedMessages from "@/components/lib/SuggestedMessages";
 import WorkspaceModelPicker from "./WorkspaceModelPicker";
+import AvailableTools from "./AvailableTools";
 import SourcesSidebar from "./SourcesSidebar";
 import MemoriesSidebar from "./MemoriesSidebar";
 
@@ -440,6 +441,7 @@ export default function ChatContainer({
                 <h1 className="text-white text-xl md:text-2xl mb-11 text-center">
                   {t("main-page.greeting")}
                 </h1>
+                <AvailableTools />
                 <PromptInput
                   workspace={workspace}
                   submit={handleSubmit}
