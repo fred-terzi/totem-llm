@@ -108,9 +108,9 @@ describe("rateLimiter middleware", () => {
   });
 
   it("prefers the first X-Forwarded-For hop when present", async () => {
-    expect(clientIp({ headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" } })).toBe(
-      "1.2.3.4"
-    );
+    expect(
+      clientIp({ headers: { "x-forwarded-for": "1.2.3.4, 5.6.7.8" } })
+    ).toBe("1.2.3.4");
     expect(clientIp({ headers: {}, ip: "9.9.9.9" })).toBe("9.9.9.9");
     expect(clientIp({ headers: {} })).toBe("unknown");
   });

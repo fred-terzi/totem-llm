@@ -6,6 +6,7 @@ const { totemConfig, fetchTotemBalance } = require("../utils/totemBalance");
 const { Workspace } = require("../models/workspace");
 const { EventLogs } = require("../models/eventLogs");
 const { CacheData } = require("../models/cacheData");
+const { rateLimiter } = require("../utils/middleware/rateLimiter");
 const prisma = require("../utils/prisma");
 
 // Nonce + replay state is persisted in the DB (cache_data table) instead of an
@@ -69,6 +70,17 @@ function buildWalletMessage(domain, origin, nonce) {
 
 function walletEndpoints(app) {
   if (!app) return;
+
+  // Shared rate-limit policy for unauthenticated auth-adjacent endpoints.
+  // Reuses the existing per-IP limiter (see utils/middleware/rateLimiter.js).
+  const authRateLimiter = rateLimiter({
+    max: parseInt(process.env.WALLET_AUTH_RATE_LIMIT || "20", 10),
+    windowMs: parseInt(
+      process.env.WALLET_AUTH_RATE_WINDOW_MS || String(15 * 60 * 1000),
+      10
+    ),
+    message: "Too many authentication attempts. Please try again later.",
+  });
 
   /**
    * GET /api/wallet/balance
@@ -134,48 +146,54 @@ function walletEndpoints(app) {
    * Body: { origin?: string }
    * Response: { nonce, message }
    */
-  app.post("/auth/wallet/nonce", async (request, response) => {
-    try {
-      const { origin } = reqBody(request);
-      console.log(
-        `[wallet:nonce] request from ip=${request.ip} host=${request.headers.host} origin=${origin || "(none)"}`
-      );
+  app.post(
+    "/auth/wallet/nonce",
+    [authRateLimiter],
+    async (request, response) => {
+      try {
+        const { origin } = reqBody(request);
+        console.log(
+          `[wallet:nonce] request from ip=${request.ip} host=${request.headers.host} origin=${origin || "(none)"}`
+        );
 
-      // Derive domain from origin or request host
-      let domain;
-      if (origin) {
-        try {
-          domain = new URL(origin).hostname;
-        } catch {
-          domain = request.headers.host;
+        // Derive domain from origin or request host
+        let domain;
+        if (origin) {
+          try {
+            domain = new URL(origin).hostname;
+          } catch {
+            domain = request.headers.host;
+          }
+        } else {
+          domain = request.headers.host || "totem.local";
         }
-      } else {
-        domain = request.headers.host || "totem.local";
+
+        const nonce = uuidv4();
+        const message = buildWalletMessage(domain, origin, nonce);
+
+        // Persist the exact message so verify can check against it. Stored in
+        // the DB (cache_data) so it survives server restarts during the flow.
+        await CacheData.new({
+          name: nonceKey(nonce),
+          data: JSON.stringify({ message }),
+          expiresAt: new Date(Date.now() + NONCE_TTL_MS),
+        });
+        const activeCount = await CacheData.count({
+          name: { startsWith: "wallet:nonce:" },
+        });
+        console.log(
+          `[wallet:nonce] issued nonce=${nonce} for domain=${domain} (active nonces: ${activeCount})`
+        );
+
+        response.status(200).json({ nonce, message });
+      } catch (e) {
+        console.error("[wallet] nonce error:", e.message);
+        response
+          .status(500)
+          .json({ error: "Failed to generate wallet nonce." });
       }
-
-      const nonce = uuidv4();
-      const message = buildWalletMessage(domain, origin, nonce);
-
-      // Persist the exact message so verify can check against it. Stored in
-      // the DB (cache_data) so it survives server restarts during the flow.
-      await CacheData.new({
-        name: nonceKey(nonce),
-        data: JSON.stringify({ message }),
-        expiresAt: new Date(Date.now() + NONCE_TTL_MS),
-      });
-      const activeCount = await CacheData.count({
-        name: { startsWith: "wallet:nonce:" },
-      });
-      console.log(
-        `[wallet:nonce] issued nonce=${nonce} for domain=${domain} (active nonces: ${activeCount})`
-      );
-
-      response.status(200).json({ nonce, message });
-    } catch (e) {
-      console.error("[wallet] nonce error:", e.message);
-      response.status(500).json({ error: "Failed to generate wallet nonce." });
     }
-  });
+  );
 
   /**
    * POST /api/auth/wallet/verify
@@ -187,202 +205,209 @@ function walletEndpoints(app) {
    * Body: { signature: string, nonce: string }
    * Response: { valid, user, token, message }  (same shape as /request-token)
    */
-  app.post("/auth/wallet/verify", async (request, response) => {
-    try {
-      const { signature, nonce } = reqBody(request);
-
-      // --- Input validation ---
-      if (!signature || !nonce) {
-        console.error("[wallet] verify: missing signature or nonce");
-        response.status(400).json({
-          valid: false,
-          user: null,
-          token: null,
-          message: "Missing required fields: signature and nonce.",
-        });
-        return;
-      }
-      console.log(
-        `[wallet:verify] attempt nonce=${String(nonce).slice(0, 8)}… sigLen=${String(signature).length} ip=${request.ip}`
-      );
-
-      // --- Nonce lookup (single-use, DB-backed, with 30 s replay window) ---
-      let entry = await readWalletState(nonceKey(nonce));
-      let isReplay = false;
-      if (!entry) {
-        const consumed = await readWalletState(consumedKey(nonce));
-        if (consumed) {
-          entry = consumed;
-          isReplay = true;
-        }
-      }
-      if (!entry) {
-        const activeCount = await CacheData.count({
-          name: { startsWith: "wallet:nonce:" },
-        });
-        const consumedCount = await CacheData.count({
-          name: { startsWith: "wallet:consumed:" },
-        });
-        console.error(
-          `[wallet:verify] REJECTED nonce=${String(nonce).slice(0, 8)}… reason=invalid-or-expired (active: ${activeCount}, recently-consumed: ${consumedCount})`
-        );
-        response.status(401).json({
-          valid: false,
-          user: null,
-          token: null,
-          message: "Invalid or expired nonce. Please request a new one.",
-        });
-        return;
-      }
-
-      // --- Recover address from signature ---
-      let recoveredAddress;
+  app.post(
+    "/auth/wallet/verify",
+    [authRateLimiter],
+    async (request, response) => {
       try {
-        recoveredAddress = ethers.verifyMessage(entry.message, signature);
-      } catch (e) {
-        console.error(
-          `[wallet:verify] REJECTED nonce=${String(nonce).slice(0, 8)}… reason=bad-signature (${e.message})`
+        const { signature, nonce } = reqBody(request);
+
+        // --- Input validation ---
+        if (!signature || !nonce) {
+          console.error("[wallet] verify: missing signature or nonce");
+          response.status(400).json({
+            valid: false,
+            user: null,
+            token: null,
+            message: "Missing required fields: signature and nonce.",
+          });
+          return;
+        }
+        console.log(
+          `[wallet:verify] attempt nonce=${String(nonce).slice(0, 8)}… sigLen=${String(signature).length} ip=${request.ip}`
         );
-        // Consume nonce even on failure to prevent replay of a bad sig
-        await CacheData.delete({ name: nonceKey(nonce) });
-        response.status(401).json({
-          valid: false,
-          user: null,
-          token: null,
-          message: "Invalid signature.",
-        });
-        return;
-      }
 
-      const normalizedAddress = recoveredAddress.toLowerCase();
-
-      // Consume the nonce: move from the active store to the consumed store
-      // (30 s replay window so a post-reload recovery re-verify succeeds).
-      await CacheData.delete({ name: nonceKey(nonce) });
-      await CacheData.new({
-        name: consumedKey(nonce),
-        data: JSON.stringify({ message: entry.message }),
-        expiresAt: new Date(Date.now() + CONSUMED_TTL_MS),
-      });
-      console.log(
-        `[wallet:verify] signature valid → address=${normalizedAddress}${isReplay ? " (REPLAY within 30s window)" : ""}`
-      );
-
-      // --- Find or create user ---
-      let user = await User._get({ wallet_address: normalizedAddress });
-      console.log(
-        `[wallet:verify] user lookup: ${user ? `existing user id=${user.id} username=${user.username}` : "NEW wallet — creating account"}`
-      );
-
-      if (!user) {
-        // New user: welcome bonus of 100,000 microdollars (~100k output tokens)
-        const WELCOME_BONUS = 100_000; // microdollars
-
-        const placeholderPassword = uuidv4() + uuidv4();
-        const username = `wallet_${normalizedAddress.slice(2, 8)}`;
-
-        try {
-          const newUser = await prisma.users.create({
-            data: {
-              username,
-              password: placeholderPassword,
-              wallet_address: normalizedAddress,
-              credits_balance: WELCOME_BONUS,
-              role: "default",
-            },
-          });
-
-          await prisma.credit_transactions.create({
-            data: {
-              user_id: newUser.id,
-              type: "credit",
-              amount: WELCOME_BONUS,
-              reference: `signup_${normalizedAddress}`,
-            },
-          });
-
-          user = newUser;
-
-          // --- Auto-create a default workspace for the new user ---
-          try {
-            const { workspace: _workspace, message: wsError } =
-              await Workspace.new("My Workspace", user.id);
-            if (wsError) {
-              console.error(
-                "[wallet] default workspace creation failed:",
-                wsError
-              );
-            }
-          } catch (wsErr) {
-            // Non-fatal: user can still log in and create a workspace manually.
-            console.error(
-              "[wallet] default workspace creation error:",
-              wsErr.message
-            );
+        // --- Nonce lookup (single-use, DB-backed, with 30 s replay window) ---
+        let entry = await readWalletState(nonceKey(nonce));
+        let isReplay = false;
+        if (!entry) {
+          const consumed = await readWalletState(consumedKey(nonce));
+          if (consumed) {
+            entry = consumed;
+            isReplay = true;
           }
-
-          await EventLogs.logEvent(
-            "wallet_account_created",
-            { wallet_address: normalizedAddress, ip: request.ip || "unknown" },
-            user.id
+        }
+        if (!entry) {
+          const activeCount = await CacheData.count({
+            name: { startsWith: "wallet:nonce:" },
+          });
+          const consumedCount = await CacheData.count({
+            name: { startsWith: "wallet:consumed:" },
+          });
+          console.error(
+            `[wallet:verify] REJECTED nonce=${String(nonce).slice(0, 8)}… reason=invalid-or-expired (active: ${activeCount}, recently-consumed: ${consumedCount})`
           );
+          response.status(401).json({
+            valid: false,
+            user: null,
+            token: null,
+            message: "Invalid or expired nonce. Please request a new one.",
+          });
+          return;
+        }
+
+        // --- Recover address from signature ---
+        let recoveredAddress;
+        try {
+          recoveredAddress = ethers.verifyMessage(entry.message, signature);
         } catch (e) {
           console.error(
-            "[wallet] user creation failed, retrying lookup:",
-            e.message
+            `[wallet:verify] REJECTED nonce=${String(nonce).slice(0, 8)}… reason=bad-signature (${e.message})`
           );
-          // Race condition: another request created the user concurrently. Re-fetch.
-          user = await User._get({ wallet_address: normalizedAddress });
-          if (!user) throw e;
+          // Consume nonce even on failure to prevent replay of a bad sig
+          await CacheData.delete({ name: nonceKey(nonce) });
+          response.status(401).json({
+            valid: false,
+            user: null,
+            token: null,
+            message: "Invalid signature.",
+          });
+          return;
         }
-      }
 
-      if (user.suspended) {
-        console.error("[wallet] verify: user suspended");
-        response.status(403).json({
+        const normalizedAddress = recoveredAddress.toLowerCase();
+
+        // Consume the nonce: move from the active store to the consumed store
+        // (30 s replay window so a post-reload recovery re-verify succeeds).
+        await CacheData.delete({ name: nonceKey(nonce) });
+        await CacheData.new({
+          name: consumedKey(nonce),
+          data: JSON.stringify({ message: entry.message }),
+          expiresAt: new Date(Date.now() + CONSUMED_TTL_MS),
+        });
+        console.log(
+          `[wallet:verify] signature valid → address=${normalizedAddress}${isReplay ? " (REPLAY within 30s window)" : ""}`
+        );
+
+        // --- Find or create user ---
+        let user = await User._get({ wallet_address: normalizedAddress });
+        console.log(
+          `[wallet:verify] user lookup: ${user ? `existing user id=${user.id} username=${user.username}` : "NEW wallet — creating account"}`
+        );
+
+        if (!user) {
+          // New user: welcome bonus of 100,000 microdollars (~100k output tokens)
+          const WELCOME_BONUS = 100_000; // microdollars
+
+          const placeholderPassword = uuidv4() + uuidv4();
+          const username = `wallet_${normalizedAddress.slice(2, 8)}`;
+
+          try {
+            const newUser = await prisma.users.create({
+              data: {
+                username,
+                password: placeholderPassword,
+                wallet_address: normalizedAddress,
+                credits_balance: WELCOME_BONUS,
+                role: "default",
+              },
+            });
+
+            await prisma.credit_transactions.create({
+              data: {
+                user_id: newUser.id,
+                type: "credit",
+                amount: WELCOME_BONUS,
+                reference: `signup_${normalizedAddress}`,
+              },
+            });
+
+            user = newUser;
+
+            // --- Auto-create a default workspace for the new user ---
+            try {
+              const { workspace: _workspace, message: wsError } =
+                await Workspace.new("My Workspace", user.id);
+              if (wsError) {
+                console.error(
+                  "[wallet] default workspace creation failed:",
+                  wsError
+                );
+              }
+            } catch (wsErr) {
+              // Non-fatal: user can still log in and create a workspace manually.
+              console.error(
+                "[wallet] default workspace creation error:",
+                wsErr.message
+              );
+            }
+
+            await EventLogs.logEvent(
+              "wallet_account_created",
+              {
+                wallet_address: normalizedAddress,
+                ip: request.ip || "unknown",
+              },
+              user.id
+            );
+          } catch (e) {
+            console.error(
+              "[wallet] user creation failed, retrying lookup:",
+              e.message
+            );
+            // Race condition: another request created the user concurrently. Re-fetch.
+            user = await User._get({ wallet_address: normalizedAddress });
+            if (!user) throw e;
+          }
+        }
+
+        if (user.suspended) {
+          console.error("[wallet] verify: user suspended");
+          response.status(403).json({
+            valid: false,
+            user: null,
+            token: null,
+            message: "Account is suspended.",
+          });
+          return;
+        }
+
+        // --- Issue JWT (same shape as /request-token) ---
+        const sessionToken = makeJWT(
+          { id: user.id, username: user.username },
+          process.env.JWT_EXPIRY || "30d"
+        );
+        console.log(
+          `[wallet:verify] SUCCESS user=${user.username} userId=${user.id} isReplay=${isReplay} — issuing JWT`
+        );
+
+        await EventLogs.logEvent(
+          "wallet_login_event",
+          {
+            wallet_address: normalizedAddress,
+            ip: request.ip || "unknown",
+            isReplay,
+          },
+          user.id
+        );
+
+        response.status(200).json({
+          valid: true,
+          user: User.filterFields(user),
+          token: sessionToken,
+          message: null,
+        });
+      } catch (e) {
+        console.error("[wallet] verify error:", e.message);
+        response.status(500).json({
           valid: false,
           user: null,
           token: null,
-          message: "Account is suspended.",
+          message: "Internal server error during wallet authentication.",
         });
-        return;
       }
-
-      // --- Issue JWT (same shape as /request-token) ---
-      const sessionToken = makeJWT(
-        { id: user.id, username: user.username },
-        process.env.JWT_EXPIRY || "30d"
-      );
-      console.log(
-        `[wallet:verify] SUCCESS user=${user.username} userId=${user.id} isReplay=${isReplay} — issuing JWT`
-      );
-
-      await EventLogs.logEvent(
-        "wallet_login_event",
-        {
-          wallet_address: normalizedAddress,
-          ip: request.ip || "unknown",
-          isReplay,
-        },
-        user.id
-      );
-
-      response.status(200).json({
-        valid: true,
-        user: User.filterFields(user),
-        token: sessionToken,
-        message: null,
-      });
-    } catch (e) {
-      console.error("[wallet] verify error:", e.message);
-      response.status(500).json({
-        valid: false,
-        user: null,
-        token: null,
-        message: "Internal server error during wallet authentication.",
-      });
     }
-  });
+  );
 }
 
 module.exports = { walletEndpoints };
