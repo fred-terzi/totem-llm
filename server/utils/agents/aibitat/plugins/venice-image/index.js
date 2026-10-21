@@ -20,9 +20,11 @@ const REFINE_AND_CONFIRM_MANDATE =
   "along with the exact credit cost of the generation (state the number of credits; ask " +
   "the tool handler for nothing — the cost is " +
   pricing.COST_PER_IMAGE +
-  " credits per image, times the number of " +
-  "variants); and (3) wait for the user's explicit confirmation. NEVER call this tool in " +
-  "the same turn the idea is first proposed. This refine-and-confirm contract applies to " +
+  " credits per image); and (3) wait for the user's explicit confirmation. NEVER call this tool in " +
+  "the same turn the idea is first proposed. ONE IMAGE PER TURN: always generate exactly " +
+  "one image per call, and never call this tool more than once in a single turn. If the " +
+  "user asks for multiple variations, generate one image and offer to iterate on it — do " +
+  "not batch or fan out generations. This refine-and-confirm contract applies to " +
   "EVERY user, including users who have enabled auto-generation via the approval card's " +
   "'Always allow' option — that option removes the approval card, not this conversation. " +
   "Pass the user-confirmed refined prompt as the `prompt` parameter.";
@@ -50,7 +52,8 @@ const generateImageTool = {
             "Generate an image from a text prompt using Venice AI and save it to the user's " +
             "files. The user can view and download the image from the File Explorer and a " +
             "download card in this chat. Supports negative prompts, dimensions or aspect " +
-            "ratio, style presets, seeds, and up to 4 variants. Images are always generated " +
+            "ratio, style presets, and seeds. Generates exactly ONE image per call — there " +
+            "is no variants or multi-image option. Images are always generated " +
             "with the Venice AI image model 'z-image-turbo'; model selection is not " +
             "available — if the user asks which image models are available, tell them this " +
             "tool uses z-image-turbo exclusively. " +
@@ -62,15 +65,6 @@ const generateImageTool = {
                 prompt:
                   "A weathered lighthouse on a rocky promontory at dusk, warm lamp glow against a deep blue sky, cinematic composition, waves crashing below, 16:9 aspect ratio",
                 aspect_ratio: "16:9",
-              }),
-            },
-            {
-              prompt: "Make 3 variants of the confirmed red sports car image",
-              call: JSON.stringify({
-                prompt:
-                  "A red sports car in an empty parking lot, low angle, golden hour lighting",
-                negative_prompt: "blurry, people, clouds",
-                variants: 3,
               }),
             },
           ],
@@ -116,10 +110,6 @@ const generateImageTool = {
                 type: "integer",
                 description: "Seed for reproducible results.",
               },
-              variants: {
-                type: "integer",
-                description: `Number of images to generate, 1-4. Costs ${pricing.COST_PER_IMAGE} credits per variant.`,
-              },
               style_preset: {
                 type: "string",
                 description:
@@ -150,11 +140,9 @@ const generateImageTool = {
                 return "Image generation is disabled and no image was created. This functionality is disabled because the user has not set it up yet.";
               }
 
+              // One-image-per-turn lock: variants are not exposed to the model and
+              // are stripped in buildRequestBody, so the quote is always flat.
               const quote = pricing.quote(params);
-              const variants = Math.max(
-                1,
-                Math.min(parseInt(params.variants, 10) || 1, 4)
-              );
 
               // F10 — hard confirmation via the existing tool-approval gate.
               // Runs BEFORE pre-flight so the user sees the card (prompt + exact cost)
@@ -166,7 +154,7 @@ const generateImageTool = {
                   payload: {
                     prompt: params.prompt,
                     credit_quote: quote,
-                    variants,
+                    variants: 1,
                     width: params.width ?? null,
                     height: params.height ?? null,
                     aspect_ratio: params.aspect_ratio ?? null,
@@ -174,7 +162,7 @@ const generateImageTool = {
                     style_preset: params.style_preset ?? null,
                     seed: params.seed ?? null,
                   },
-                  description: `Generate an image via Venice AI — costs ${quote} credits (${variants} image${variants > 1 ? "s" : ""})`,
+                  description: `Generate an image via Venice AI — costs ${quote} credits (one image)`,
                 });
                 if (!approval.approved) {
                   this.super.introspect(
@@ -195,7 +183,7 @@ const generateImageTool = {
                   this.super.introspect(
                     `${this.caller}: User has insufficient credits for image generation (needs ${quote}).`
                   );
-                  return `Insufficient credits: this image generation costs ${quote} credits (${variants} image${variants > 1 ? "s" : ""} at ${pricing.COST_PER_IMAGE} credits each), but your balance is too low. No credits were charged.`;
+                  return `Insufficient credits: this image generation costs ${quote} credits (one image at ${pricing.COST_PER_IMAGE} credits), but your balance is too low. No credits were charged.`;
                 }
               }
 

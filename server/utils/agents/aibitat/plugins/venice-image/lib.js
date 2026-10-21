@@ -30,15 +30,18 @@ class VeniceImageManager {
    *
    * Rules enforced here (F1, F9, F13):
    *  - `model` is ALWAYS the standardized constant and can never be overridden.
-   *  - `return_binary: false` always (JSON + base64 so variants work).
+   *  - `return_binary: false` always (JSON + base64 so the image payload works).
    *  - Only supplied optional parameters are included.
    *  - Sizing-idiom exclusivity: if `aspect_ratio` is present, `width`/`height`
    *    are dropped; if `width`/`height` are present, `aspect_ratio`/`resolution`
    *    are dropped. Never send both idioms.
    *  - The deprecated `inpaint` field is never sent.
+ *  - One-image-per-turn lock (F15): the `variants` parameter is stripped from every
+ *    request body unconditionally. Multi-image generation is not reachable through
+ *    this plugin, even if a caller (or a hallucinating model) passes `variants`.
    * @param {{prompt: string, negative_prompt?: string, width?: number, height?: number,
    *          aspect_ratio?: string, resolution?: string, cfg_scale?: number, steps?: number,
-   *          seed?: number, variants?: number, style_preset?: string,
+   *          seed?: number, style_preset?: string,
    *          format?: "png"|"jpeg"|"webp", safe_mode?: boolean}} params
    * @returns {object} request body
    */
@@ -65,10 +68,8 @@ class VeniceImageManager {
       if (params.height != null) body.height = params.height;
     }
 
-    const variants = parseInt(params.variants, 10);
-    if (Number.isFinite(variants) && variants > 1) {
-      body.variants = Math.min(variants, 4);
-    }
+    // One-image-per-turn lock (F15): never send `variants`, regardless of what
+    // the caller passed. Every request generates exactly one image.
 
     if (params.safe_mode != null) body.safe_mode = !!params.safe_mode;
 

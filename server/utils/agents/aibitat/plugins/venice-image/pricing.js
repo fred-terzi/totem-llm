@@ -48,16 +48,14 @@ const operations = {
   generate: {
     label: "image generation",
     /**
-     * @param {{variants?: number}} [params]
-     * @returns {number} display-credit integer (COST_PER_IMAGE × variants, capped at 4)
+     * Flat cost — one image per generation (F15 one-image-per-turn lock).
+     * The `variants` parameter was removed: pricing can never fan out, and any
+     * variant count passed in params is intentionally ignored.
+     * @param {object} [_params] - present for signature parity; no params affect cost
+     * @returns {number} display-credit integer (COST_PER_IMAGE)
      */
-    costFor(params = {}) {
-      const requested = parseInt(params?.variants, 10);
-      const variants = Math.max(
-        1,
-        Math.min(Number.isFinite(requested) ? requested : 1, 4)
-      );
-      return COST_PER_IMAGE * variants;
+    costFor(_params = {}) {
+      return COST_PER_IMAGE;
     },
   },
   // Future: edit, upscale, video — each with its own params-driven costFor().
@@ -67,7 +65,8 @@ const operations = {
  * Quote the display-credit cost for an operation.
  * The ONLY sanctioned way to obtain a cost anywhere in this plugin (F12, N4).
  *
- * @param {object} [params] - tool call parameters affecting cost (e.g. variants)
+ * @param {object} [params] - tool call parameters affecting cost (none currently;
+ *        the removed `variants` param is ignored by design)
  * @param {string} [operation="generate"] - key into `operations`
  * @returns {number} display-credit integer (0 for unknown operations)
  */
