@@ -143,6 +143,14 @@ services:
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL_PREF: "${OPENROUTER_MODEL_PREF:-nvidia/nemotron-3.5-lightning:free}"
 
+      # ── CORS allowlist ─────────────────────────────────────────────────
+      # Comma-separated list of exact Origin values allowed to call the API.
+      # The browser sends scheme+host (no port) over the Cloudflare tunnel:
+      #   https://beta.totemai.xyz
+      # Leave empty to disable the allowlist (old allow-all behavior).
+      # Read from docker/beta/.env (gitignored).
+      CORS_ORIGIN: "${CORS_ORIGIN:-}"
+
       # ── $TOTEM on-chain token (Base) ───────────────────────────────────
       # Enables GET /wallet/balance — reads the user's TOTEM ERC-20 balance.
       # When unset the endpoint returns 204 and the UI hides the badge.
