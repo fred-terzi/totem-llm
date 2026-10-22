@@ -386,6 +386,9 @@ describe("payments endpoints", () => {
       expect(res.body.id).toBe("sess-1");
       expect(res.body.expectedAmountUsdc).toBe("5000000"); // exact decimal string
       expect(res.body.treasuryAddress).toBe(TREASURY);
+      // The wallet must target the TOKEN contract (manual-test finding: a tx
+      // to the treasury EOA directly is a silent no-op that still mines).
+      expect(res.body.usdcAddress).toBe(USDC);
       expect(res.body.chainId).toBe(8453);
       // µ$ amount derived from the pack table — BigInt into the model.
       expect(PurchaseSessions.create).toHaveBeenCalledWith(

@@ -134,6 +134,18 @@ export default function BuyCreditsModal({ onClose }) {
     }
 
     // ── 3. Build calldata from the SERVER's session record only. ───────
+    // The tx target is the USDC TOKEN CONTRACT — an ERC-20 `transfer` is a
+    // call ON the token contract with the recipient (treasury) encoded in
+    // the calldata. A tx sent to the treasury address directly is a silent
+    // no-op that still mines successfully (manual-test finding, Step 6).
+    const tokenAddress = String(purchase.usdcAddress || "").trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(tokenAddress)) {
+      // Fail-closed (N3): no token contract from the server → never send.
+      setError(
+        "The purchase session is missing the token contract address. Please try again."
+      );
+      return;
+    }
     let data;
     try {
       data = buildUsdcTransferCalldata({
@@ -154,10 +166,10 @@ export default function BuyCreditsModal({ onClose }) {
         method: "eth_sendTransaction",
         params: [
           {
-            to: purchase.treasuryAddress,
+            to: tokenAddress, // the USDC contract, NOT the treasury
             from,
             value: "0x0", // ERC-20: the token amount rides in calldata
-            data,
+            data, // transfer(treasury, expectedAmountUsdc)
           },
         ],
       });

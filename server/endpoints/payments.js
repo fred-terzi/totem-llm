@@ -235,7 +235,12 @@ function paymentEndpoints(app) {
   /**
    * POST /api/credits/purchase-session
    * Body: { packId: "usd5" | "usd10" | "usd25" }
-   * Response 200: { id, expectedAmountUsdc, treasuryAddress, chainId, expiresAt }
+   * Response 200: { id, expectedAmountUsdc, treasuryAddress, usdcAddress, chainId, expiresAt }
+   *   `usdcAddress` is the ERC-20 token contract the wallet must target —
+   *   an `eth_sendTransaction` for a token transfer goes TO the token
+   *   contract with the recipient encoded in calldata, never to the
+   *   treasury directly (a direct tx to the treasury EOA is a silent no-op
+   *   that still mines successfully — the manual-test bug this field fixes).
    * Response 204: feature disabled (F1/AC1)
    * Response 400/401/403/429/500: per contract below
    */
@@ -293,6 +298,7 @@ function paymentEndpoints(app) {
           id: safe.id,
           expectedAmountUsdc: safe.expected_amount, // exact decimal string
           treasuryAddress: session.treasury_address,
+          usdcAddress: config.usdcAddress, // token contract = the tx target
           chainId: session.chain_id,
           expiresAt: session.expires_at,
         });
