@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { titleCase } from "text-case";
 import Admin from "@/models/admin";
+import { microToCredits, creditsToMicro } from "@/utils/credits";
 import EditUserModal from "./EditUserModal";
 import showToast from "@/utils/toast";
 import { useModal } from "@/hooks/useModal";
@@ -40,9 +41,12 @@ export default function UserRow({ currUser, user, onCreditsUpdated }) {
     }
   };
   const handleGrantCredits = async () => {
+    // Display + prompt in CREDITS (1 credit = $0.001); converted to the µ$ API
+    // contract via creditsToMicro (the endpoint's µ$ body contract is unchanged).
+    const currentCredits = microToCredits(user.credits_balance);
     const raw = window.prompt(
-      `Add credits to ${user.username}\n\nCurrent balance: ${(user.credits_balance ?? 0).toLocaleString("en-US")}\nEnter amount to add:`,
-      "100000"
+      `Add credits to ${user.username}\n\nCurrent balance: ${currentCredits.toLocaleString("en-US")} credits\nEnter amount to add (in credits):`,
+      "100"
     );
     if (raw === null) return;
     const amount = parseInt(raw, 10);
@@ -60,7 +64,10 @@ export default function UserRow({ currUser, user, onCreditsUpdated }) {
       return;
 
     setGranting(true);
-    const { success, error } = await Admin.grantCredits(user.id, amount);
+    const { success, error } = await Admin.grantCredits(
+      user.id,
+      creditsToMicro(amount)
+    );
     setGranting(false);
 
     if (success) {
@@ -102,8 +109,10 @@ export default function UserRow({ currUser, user, onCreditsUpdated }) {
         <td className="px-6">{titleCase(user.role)}</td>
         <td className="px-6">{user.createdAt}</td>
         <td className="px-6 whitespace-nowrap">
+          {/* credits_balance is µ$ internally — display credits (1 credit = 1 000 µ$),
+              matching what the user's own GET /credits balance shows. */}
           {user.credits_balance != null
-            ? user.credits_balance.toLocaleString("en-US")
+            ? `${microToCredits(user.credits_balance).toLocaleString("en-US")}`
             : "—"}
         </td>
         <td className="px-6 flex items-center gap-x-6 h-full mt-2">
