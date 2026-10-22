@@ -156,6 +156,23 @@ services:
       # When unset the endpoint returns 204 and the UI hides the badge.
       TOTEM_ADDRESS: "0x0F8ac22B85076F9BfE0b93Cc49FB6426CB150F88"
 
+      # ── Payments (USDC on Base) ─────────────────────────────────────────
+      # Enables the wallet-payment flow (server/endpoints/payments.js),
+      # gated on PAYMENTS_TREASURY_ADDRESS (see server/utils/payments/config.js).
+      # These are public on-chain addresses / config values (not secrets), so
+      # they're hardcoded here like TOTEM_ADDRESS above rather than read from
+      # docker/beta/.env. Because dotenv does not override pre-existing
+      # process.env keys (server/index.js:1-2), these always take precedence
+      # over server/.env.development — which is generated from
+      # server/.env.example where these fields are commented out by default.
+      # This guarantees the beta container always has payments enabled,
+      # regardless of .env file drift or a fresh `yarn setup:envs` run.
+      PAYMENTS_TREASURY_ADDRESS: "0xa1c9430776116A7Bc9dcC4987226beb38fcfd188"
+      PAYMENTS_USDC_ADDRESS: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      PAYMENTS_CHAIN_ID: "8453"
+      PAYMENTS_RPC_URL: "https://mainnet.base.org"
+      PAYMENTS_CONFIRMATIONS: "2"
+
       # ── Storage ─────────────────────────────────────────────────────────
       # All persistent data (user file sandboxes, uploads, vector cache,
       # models) MUST live on the totem-beta-data volume. Without this the
