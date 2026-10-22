@@ -41,7 +41,7 @@ Totem LLM, a self-hosted AI chat app. Fork of [AnythingLLM](https://github.com/M
 
 ### Key Files by Service
 
-**Server entry**: `server/index.js` — loads `.env`, creates storage dirs, mounts ~27 endpoint routers under `/api`, serves static frontend in prod. Body limit: 3GB. CORS: `origin: true`. HTTPS via `bootSSL` if `ENABLE_HTTPS`.
+**Server entry**: `server/index.js` — loads `.env`, creates storage dirs, mounts ~27 endpoint routers under `/api`, serves static frontend in prod. JSON/text body limit: **50MB** by default (override with `BODY_LIMIT`; multipart uploads go through multer and are unaffected). CORS: origin **allowlist** via `CORS_ORIGIN` env var (comma-separated; empty/unset = reflect any origin, the legacy behavior). Baseline security headers (HSTS, nosniff, Referrer-Policy, Permissions-Policy, X-Frame-Options) applied API-wide via `server/utils/middleware/securityHeaders.js`. HTTPS via `bootSSL` if `ENABLE_HTTPS`.
 
 **Collector entry**: `collector/index.js` — Express with 5 routes (all POST, integrity-verified via `verifyPayloadIntegrity` middleware):
 - `/process` — process uploaded file → chunks + embeddings
@@ -215,7 +215,7 @@ Sign-In with Ethereum (SIWE) is the **primary login method**. Users sign a serve
 **Two-step flow:**
 
 1. `POST /auth/wallet/nonce` → server returns `{ nonce, message }`.
-   - The nonce is a UUID stored in an **in-memory `Map`** with a **5-minute TTL** (expired entries cleaned up every 60 s). The nonce is **single-use** — deleted immediately on consumption, even if the signature is invalid.
+   - The nonce is a UUID persisted in the **`cache_data` table** (DB-backed, survives restarts — the original in-memory `Map` silently vanished on server restarts, killing logins mid-flow after the signature was approved) with a **10-minute TTL** (expired entries swept every 60 s). The nonce is **single-use** — on consumption it moves to a `wallet:consumed:` row with a **30-second replay window** so a mid-flow page reload (mobile SDK handback) can re-verify, then expires.
    - The message is a SIWE-style string. Example:
    ```
    totem.example.com wants you to sign in with your Ethereum account:
@@ -279,7 +279,7 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 
 | File | Role |
 |---|---|
-| `server/endpoints/wallet.js` | Nonce + verify + balance endpoints; in-memory nonce store |
+| `server/endpoints/wallet.js` | Nonce + verify + balance endpoints; DB-backed (`cache_data`) nonce store with 30 s replay window; shared per-IP rate limiter on both auth endpoints |
 | `server/utils/totemBalance.js` | $TOTEM config resolution, `eth_call` balance reader, amount formatting (pure — no server deps) |
 | `frontend/src/components/Modals/Password/MultiUserAuth.jsx` | Login modal — desktop EIP-1193 wallet button + password form |
 | `frontend/src/components/Modals/Password/WalletConnectMobile.jsx` | Mobile MetaMask Connect flow (`connectAndSign` SIWE — one deep link, one approval, reload-resumable) |
@@ -326,7 +326,10 @@ cost(µ$) = ceil(inputTokens × 0.5) + ceil(outputTokens × 1.0)
 | `POST /credits/debit-test` | session, **admin** | Simulate a debit (testing) |
 | `POST /credits/grant-test` | session, **admin** | Grant/adjust balance (testing) |
 
-> **Gotcha:** `wallet.js` is a *separate* concern from billing credits — it reads the on-chain $TOTEM token balance (Base) and handles SIWE wallet login. Don't conflate `GET /wallet/balance` (crypto token) with `GET /credits` (billing ledger).
+> **Gotchas:**
+> - `wallet.js` is a *separate* concern from billing credits — it reads the on-chain $TOTEM token balance (Base) and handles SIWE wallet login. Don't conflate `GET /wallet/balance` (crypto token) with `GET /credits` (billing ledger).
+> - **Admin panel units are intentional:** `GET /admin/users` returns `credits_balance` **raw in µ$**, and the admin Users table (`UserRow`) displays it that way, as do the `+ Credits` grant/debit prompts (which post µ$ directly to `/credits/grant-test` / `/credits/debit-test`). This is deliberate internal tooling — the admin sees the raw ledger unit. Do **not** "fix" it to credits without converting the grant/debit prompt inputs in the same change, or admins will grant 1000× less than intended.
+> - The `credits/grant-test` and `credits/debit-test` endpoints **accept µ$ in request bodies** (documented contract, unchanged) but **report results in credits** — the asymmetry is intentional: one file (`server/endpoints/credits.js`) owns the µ$→credits conversion direction at the API boundary.
 >
 > **Unit conversion (credit-units workstream):** the API speaks **credits** to clients: `balance` = floor(µ$ / 1000), ledger-row `amount` = credits with ≤2 decimals (JSON number). Ledger storage stays integer µ$. All conversions go through `server/utils/credits/units.js` (`CREDITS_PER_DOLLAR`, `microToCredits`, `formatLedgerCredits`) — do not add a new endpoint returning raw µ$ amounts. The admin test endpoints accept µ$ request bodies (internal contract) but respond in credits. The ledger `type` enum is `"purchase" | "debit" | "refund" | "credit"` (`credit` = bonus/grant, as written by `wallet.js`). See `totem_docs/credit-units/`.
 
@@ -444,14 +447,16 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 - **Storage dir** defaults to `~/totem-llm/` at runtime. Override with `TOTEM_STORAGE_DIR`. This is where secrets, DB, vector cache, and logs live — not inside the repo.
 - **Collector crash ≠ server crash**: Collector exiting only produces a warning; server keeps running. Server exit triggers full shutdown.
 - **SSE for chat, WebSocket for agents**: Chat-to-workspace uses HTTP SSE streaming. Agent tool execution streams over dedicated WebSocket connection (`agentWebsocket.js`). Both require different frontend handling.
-- **Body limit is 3GB** across all services — allows large document uploads but means body-parser buffers huge payloads into memory.
+- **Server JSON/text body limit is 50MB by default** (override with `BODY_LIMIT`) — bounds OOM risk from body-parser buffering under concurrent large payloads. Large document uploads go through multer (multipart) and are not affected by this limit.
+- **CORS allowlist (beta/production deployments)**: set `CORS_ORIGIN` to the exact scheme+host (+port if non-standard) the browser sends, comma-separated for multiple origins. Empty/unset disables the allowlist (reflect-any-origin, legacy behavior — fine for self-hosted single-user). Requests without an `Origin` header (curl, server-to-server, same-origin) are always allowed — only browsers send Origin. **`/api/embed/*` is exempt by design**: public embed widgets enforce their own per-config domain allowlists in `canRespond` and keep reflect-any-origin behavior. The beta deployment (`docker/beta/`) wires `CORS_ORIGIN` through `docker-compose.yml` from the gitignored `.env` (currently `https://beta.totemai.xyz`).
+- **Rate limiting**: dependency-free in-memory per-IP limiter at `server/utils/middleware/rateLimiter.js` (module-level `Map`, periodic sweep, process-local — resets on restart; per-IP keying prefers the first `X-Forwarded-For` hop, so a trusted reverse proxy is assumed for correct client attribution). Applied to the unauthenticated wallet auth endpoints (`POST /auth/wallet/nonce`, `POST /auth/wallet/verify`) with a shared limiter: **20 requests / 15 min per IP** by default, tunable via `WALLET_AUTH_RATE_LIMIT` and `WALLET_AUTH_RATE_WINDOW_MS`. Extend to new public unauthenticated endpoints rather than inventing a new mechanism.
 - **No relation on `workspace_agent_invocations.thread_id`**: Intentional — SQLite migration would lock the entire `workspace_threads` table, causing cascading timeouts. Same pattern on `workspace_chats.thread_id`.
 - **Credits ≠ microdollars, and ≠ wallet token**: `server/models/credits.js` + `credit_transactions` work in **microdollars** internally; the customer-facing **credit** = 1 000 µ$ ($0.001) via `CREDITS_PER_DOLLAR` in `server/utils/credits/units.js`. `GET /credits` and `CreditBadge` speak credits only — µ$ never crosses the API boundary, and `microToDisplay()` is `@internal` (never render it to end users). `wallet.js` ($TOTEM on-chain token + SIWE login) is a *different* balance entirely.
 - **Per-user filesystem** (v0.19.0+): the agent's filesystem tools are scoped to `$STORAGE_DIR/totemllm-fs/users/<userId>/`. In single-user mode (`userId == null`) they use the shared `$STORAGE_DIR/totemllm-fs` root. `getFilesystemFor()` is the only resolution point — do NOT `require` the default `module.exports` directly in new code (kept for backwards compat with existing require sites). The migration script (`yarn fs:migrate`, `scripts/migrate-fs-to-users.mjs`) copies old shared files into the correct user dirs — idempotent, run it when upgrading from pre-v0.19.0 builds.
 
 ## Security Notes
 
-- **CORS**: Configured with `origin: true` (accepts any origin). Acceptable for self-hosted use but review before exposing externally.
+- **CORS**: Origin allowlist via `CORS_ORIGIN` env var (see Key Gotchas for semantics and the embed exemption). Unset = legacy reflect-any-origin, acceptable for self-hosted single-user use; **any internet-facing deployment (beta, production) must set `CORS_ORIGIN`** — without it, any website can make credentialed cross-origin requests against the API.
   - **Hosted/beta deployments must set `CORS_ORIGIN`** (comma-separated allowlist, e.g. `CORS_ORIGIN="https://beta.totem.xyz"`). When unset, the API behaves as before for non-embed routes only for same-origin/non-browser clients; any browser Origin NOT on the list is rejected. `/api/embed/*` widget routes intentionally keep reflect-any-origin CORS (they have their own per-config domain allowlists).
 - **Auth middleware** (`server/utils/middleware/validatedRequest.js`): JWT validation in production; bypassed in development mode or when no `AUTH_TOKEN` is set.
 - **Body limit**: defaults to `50MB` for text/json/urlencoded bodies (was 3GB). Override with `BODY_LIMIT` if huge payloads through those parsers are genuinely required. Multipart document uploads are unaffected.
