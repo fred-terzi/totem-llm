@@ -69,6 +69,7 @@ const { memoryEndpoints } = require("./endpoints/memory");
 const { featureEndpoints } = require("./endpoints/features");
 const { importChatgptEndpoints } = require("./endpoints/importChatgpt");
 const { creditEndpoints } = require("./endpoints/credits");
+const { paymentEndpoints } = require("./endpoints/payments");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
 const apiRouter = express.Router();
@@ -176,6 +177,7 @@ memoryEndpoints(apiRouter);
 featureEndpoints(apiRouter);
 importChatgptEndpoints(apiRouter);
 creditEndpoints(apiRouter);
+paymentEndpoints(apiRouter);
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);
 

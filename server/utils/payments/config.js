@@ -190,6 +190,35 @@ async function rpcCall(
 }
 
 /**
+ * Reads the timestamp (ms since epoch) of a specific block via
+ * `eth_getBlockByNumber` (headers only). Needed by the confirm endpoint's
+ * F5f staleness check: sessions store a wall-clock `createdAt`, and a
+ * transaction receipt carries no timestamp — the block header is the only
+ * on-chain comparable. Thrown errors surface as `rpc_unavailable` (fail
+ * closed, N3).
+ * @param {string} rpcUrl - JSON-RPC endpoint URL
+ * @param {number|bigint|string} blockNumber - decimal or 0x-hex block number
+ * @param {Object} [opts]
+ * @param {number} [opts.timeoutMs=5000]
+ * @param {Function} [opts.fetchImpl] - injectable fetch (for tests)
+ * @returns {Promise<number>} block timestamp in milliseconds
+ * @throws on network/HTTP/RPC errors — caller decides how to surface it
+ */
+async function getBlockTimestamp(rpcUrl, blockNumber, opts = {}) {
+  if (!rpcUrl) throw new Error("Missing RPC URL.");
+  const hex = "0x" + BigInt(blockNumber).toString(16);
+  const block = await rpcCall(
+    rpcUrl,
+    "eth_getBlockByNumber",
+    [hex, false],
+    opts
+  );
+  if (!block || typeof block.timestamp !== "string")
+    throw new Error("RPC endpoint did not return a block.");
+  return Number(BigInt(block.timestamp) * 1000n);
+}
+
+/**
  * Fetches a transaction receipt by hash via `eth_getTransactionReceipt`.
  * @param {string} rpcUrl - JSON-RPC endpoint URL
  * @param {string} txHash - 0x-prefixed transaction hash
@@ -235,4 +264,5 @@ module.exports = {
   decodeUsdcTransfers,
   fetchReceipt,
   getBlockHeight,
+  getBlockTimestamp,
 };

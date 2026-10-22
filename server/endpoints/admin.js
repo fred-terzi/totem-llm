@@ -31,10 +31,10 @@ const {
 const {
   workspaceDeletionProtection,
 } = require("../utils/middleware/workspaceDeletionProtection");
-const {
-  listInferenceOptions,
+const { listInferenceOptions,
   setOptionSlugs,
 } = require("../utils/inferenceOptions");
+const { PurchaseSessions } = require("../models/purchaseSessions");
 
 function adminEndpoints(app) {
   if (!app) return;
@@ -499,6 +499,53 @@ function adminEndpoints(app) {
       }
     }
   );
+
+  // Wallet-payment purchase sessions (wallet-payments F10). Admin-only,
+  // inline role check after userFromSession — matches the credits-adjacent
+  // admin endpoints (`debit-test`/`grant-test`) per Step 0 finding 0.8.
+  // Paged session list with tx hash, on-chain/credited amounts, user,
+  // status, and failure reason — enough to reconcile treasury inflows
+  // against the ledger manually. BigInt amounts are serialized to exact
+  // decimal strings (Step 2 finding: JSON.stringify throws on BigInt).
+  app.get("/admin/purchases", [validatedRequest], async (request, response) => {
+    try {
+      const user = await userFromSession(request, response);
+      if (!user) {
+        return response.status(401).json({ message: "Not authenticated" });
+      }
+      if (user.role !== "admin") {
+        return response.status(403).json({ message: "Admin only" });
+      }
+
+      const {
+        limit = 50,
+        offset = 0,
+        status = null,
+      } = request.query;
+
+      const sessions = await PurchaseSessions.listForAdmin({
+        limit: Number(limit) || 50,
+        offset: Number(offset) || 0,
+        status: status || null,
+      });
+
+      response.status(200).json({
+        purchases: sessions.map((row) => ({
+          ...PurchaseSessions.serializeSession(row),
+          user: row.user
+            ? {
+                id: row.user.id,
+                username: row.user.username,
+                wallet_address: row.user.wallet_address,
+              }
+            : null,
+        })),
+      });
+    } catch (e) {
+      console.error(e);
+      response.sendStatus(500).end();
+    }
+  });
 
   app.get(
     "/admin/api-keys",

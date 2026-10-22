@@ -101,7 +101,12 @@ Data-layer module in the `server/models/*.js` static-method style. Key method �
   - `GET /credits/purchase-session/:id` — owner-only status poll for the frontend (F9).
   - All three return `204` (or 404) when `paymentsConfig().enabled === false` (F1, AC1).
 - `GET /admin/purchases` in `server/endpoints/admin.js` (auth per 0.8 finding — inline `user.role !== "admin"` check after `userFromSession`, matching the `debit-test`/`grant-test` style in `credits.js`): paged session list with tx hash, on-chain amount, credited µ$, user, status, failure reason (F10).
-- **Deviations from the original draft:** none yet.
+- **Deviations from the original draft:** none.
+- **Status: ✅ DONE** (commit `a4e1d7c9`). Journal notes:
+  - `getBlockTimestamp(rpcUrl, blockNumber)` added to `config.js` — anticipated by the Step 1 note ("needed later for the F5f staleness check"). A receipt carries no timestamp, so F5f compares the session's `createdAt` against the tx block's on-chain header timestamp with a 90 s clock-skew tolerance.
+  - **Verify-before-claim ordering**: `verifyReceipt` runs before `redeem`'s atomic claim, so a transient outcome (unmined, RPC down, short confirmations) never burns the one-shot `tx_hash` stamp. Exactly-once is unaffected — the claim + unique anchor still gate every credit (F6a/F6d).
+  - `countTreasuryBoundTransfers` helper discriminates `wrong_token` (paid the treasury in a different ERC-20) from `wrong_recipient` (paid someone else), so the F10 admin surface can reconcile without re-reading the chain.
+  - Endpoint tests (19) use the same fake-app + direct-handler pattern as `filesystem.test.js`/`invite.test.js` (Express's bundled `send`/`mime` breaks under Jest with the "charsets" TypeError; `supertest` is not a repo dep per N4). No new dependencies.
 
 ## Step 5 — Sweeper (F8, AC10)
 
