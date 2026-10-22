@@ -74,14 +74,24 @@ New module, CJS (server is CommonJS — AGENTS.md gotcha). Mirrors `totemBalance
 
 **Deviations from the original draft:** none.
 
-## Step 3 — `server/models/purchaseSessions.js` (F4, F6, F8)
+## Step 3 — `server/models/purchaseSessions.js` (F4, F6, F8) — ✅ DONE (2026-10-22, commits `8a2c1f0d` model+tests)
 
 Data-layer module in the `server/models/*.js` static-method style. Key method — the atomic redeem:
 
-- `redeem({ sessionId, txHash, blockNumber, valueMicro })` → inside `prisma.$transaction`: claim the session row by updating `status` from `pending` → `crediting` **conditioned on** `txHash` being null-or-equal (the row-level claim), then call `Credits.credit(userId, valueMicro, "purchase", "purchase_<txHash>")`, then mark `credited` with `credited_amount`. Any `P2002` on `txHash` (concurrent redeem of the same tx through a *different* session) is caught → transaction aborted, returns `already-redeemed`. Ledger + session update are atomic per F6d — the ledger write goes through the existing `Credits.credit()` transaction (0.3), nested in the session claim transaction.
-- Also: `create()`, `getById()`, `getByUser()`, `listForAdmin()`, `markFailed(reason)`, `markExpired()`, `findExpirable()`, `findSweepable()`.
+- `redeem({ sessionId, txHash, blockNumber, valueMicro })` → sequential claim → credit → mark pipeline (see journal note 1 below for why it is not one nested transaction):
+  1. **claim** — atomic conditional `updateMany`: `pending` + `tx_hash=null` → `crediting` with the txHash/blockNumber stamped. Exactly one concurrent caller wins; every loser sees `count: 0`. A cross-session double-redeem of the same txHash surfaces here as `P2002` on the unique column → `already-redeemed`, nothing written.
+  2. **ledger write** — `Credits.credit(userId, value, "purchase", "purchase_<txHash>")` (its own atomic transaction, 0.3). On throw, the claim is released back to `pending` (`failure_reason: ledger_write_failed`) — nothing credited, sweeper retries.
+  3. **mark** — `credited` + `credited_amount` audit copy.
+- **`resolveStuckClaim(session)`** — sweeper helper for crash artifacts: a session stuck in `crediting` past `CREDITING_STALE_MS` (60 s). Because the ledger `reference` is deterministic (`purchase_<txHash>`), it queries the ledger directly to tell the two crash windows apart: ledger row exists → re-sync to `credited` via `markCredited` (never credits again); no row → release the claim fully (status AND tx stamp cleared) so a later confirm/sweep can retry.
+- Also: `create()`, `getById()`, `getOwned()` (fail-closed ownership), `getByUser()`, `listForAdmin()` (paged, with user join), `getByTxHash()`, `markFailed()` (conditional — never downgrades a credited session), `expireStale()`, `findSweepable()`, `serializeSession()` (BigInt → exact decimal strings for HTTP), `FAILURE_REASONS` (machine-readable codes, single source shared by endpoints + sweeper).
 
-**Deviations from the original draft:** none yet.
+**Step 3 journal:**
+- **Journal note 1 — nested `$transaction`s deadlock on SQLite (verified live, changed the design):** the original draft put the claim + `Credits.credit()` + mark inside one `prisma.$transaction` callback. That deadlocks — `Credits.credit()` opens its own `$transaction` on the shared client, and on SQLite the outer transaction's write lock blocks the inner one from the same pool → connector timeout. Verified with a live experiment (outer tx + inner credit = timeout; sequential = clean commit). The redeem is therefore a sequential pipeline whose exactly-once guarantee comes from the row-level claim + the `tx_hash @unique` anchor rather than one big transaction.
+- **Journal note 2 — `credit_transactions.amount` is `Int`, not BigInt:** passing a BigInt `valueMicro` into `Credits.credit()` fails (Prisma Int column). redeem converts via `Number(valueMicro)` with a `Number.isSafeInteger` guard — safe, because µ$ amounts at our pack sizes are ≤ 25 000 000. BigInt stays at the session-table boundary (N2); the ledger keeps its existing `Int` shape.
+- **Journal note 3 — crash-window recovery belongs to the sweeper, not redeem:** an early draft let redeem re-claim its own stale `crediting` row with a matching txHash. Live testing showed this cannot distinguish crash window 1→2 (no ledger row — safe to re-credit) from 2→3 (ledger row EXISTS — re-crediting would double-pay, since `credit_transactions.reference` has no unique constraint). Final design: redeem claims only fresh `pending` rows; the sweeper resolves stuck claims via `resolveStuckClaim` (ledger-lookup decides release vs re-sync) before any retry. All five recoverability scenarios verified live: 21/21 integration checks against a real SQLite DB, including both crash windows, cross-session P2002, no-double-credit balance assertions, and fail-closed ownership.
+- Verification: 8/8 model unit tests (failure codes, BigInt serialization, constants) + full payments/credits/totemBalance regression suites green (70/70 combined); ESLint clean on the new model.
+
+**Deviations from the original draft:** the redeem shape changed (sequential pipeline instead of one nested transaction, plus `resolveStuckClaim`) — required by the SQLite nesting deadlock and the crash-window ambiguity, both verified live and documented above. The draft's intent (single crediting path, atomicity via claim + unique anchor, P2002-as-already-redeemed) is fully preserved.
 
 ## Step 4 — Endpoints: `server/endpoints/payments.js` (F1, F4, F5, N5) + admin surface (F10)
 
@@ -134,7 +144,7 @@ Data-layer module in the `server/models/*.js` static-method style. Key method �
 | Step | Risk | Level | Mitigation |
 |---|---|---|---|
 | 2 (migration) | New table on SQLite; beta container must apply it on restart | Medium | Additive-only migration; verify boot-script migration application before deploy (Step 8); no writes to existing tables |
-| 3 (redeem) | Double-credit via race between confirm and sweeper | High | Single atomic `redeem` is the *only* crediting path; `txHash @unique` + P2002-as-already-redeemed; AC4/AC10 both hit it |
+| 3 (redeem) | Double-credit via race between confirm and sweeper | High | Single atomic `redeem` is the *only* crediting path; sequential claim→credit→mark pipeline (nested `$transaction`s deadlock on SQLite — verified live); `txHash @unique` + P2002-as-already-redeemed; crash windows resolved by sweeper's `resolveStuckClaim` (ledger-reference lookup decides release vs re-sync); AC4/AC10 both hit it |
 | 4 (verification) | Trusting client-supplied amount/tx data | High | All six checks read from the receipt fetched server-side (F5); amount from log BigInt-equality only |
 | 4 (verification) | RPC unreachable → speculative crediting | Medium | Fail-closed N3: session stays `pending`, user told "verifying"; sweeper retries |
 | 1 (log decode) | Multiple USDC Transfers in one tx (e.g. swap contracts) | Medium | Ambiguity fails the session (N3), never guesses |
