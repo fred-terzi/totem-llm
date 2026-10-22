@@ -62,7 +62,7 @@ New module, CJS (server is CommonJS — AGENTS.md gotcha). Mirrors `totemBalance
 ## Step 2 — Prisma migration: `purchase_sessions` table (F4, F6a, N2) — ✅ DONE (2026-10-22, commit `87e4dad5`)
 
 - `server/prisma/schema.prisma`: new model `purchase_sessions`:
-  - `id` (uuid), `user_id` (relation → users, cascade), `expected_amount` (BigInt µ$ — identical to USDC base units per credit-units N2 identity), `treasury_address`, `chain_id`, `status` (`pending | credited | failed | expired`), `failure_reason` (nullable string, machine-readable per F5), `tx_hash` (nullable, **`@unique`**), `tx_block_number` (nullable BigInt, stamped at confirm time for the F5f staleness check), `credited_amount` (nullable BigInt, audit copy of what the ledger received), `expires_at`, `createdAt`, `updatedAt`.
+  - `id` (uuid), `user_id` (relation → users, cascade), `expected_amount` (BigInt µ$ — identical to USDC base units per credit-units N2 identity), `treasury_address`, `chain_id`, `status` (`pending | crediting | credited | failed | expired` — `crediting` is the Step 3 claim marker between claim and mark), `failure_reason` (nullable string, machine-readable per F5), `tx_hash` (nullable, **`@unique`**), `tx_block_number` (nullable BigInt, stamped at confirm time for the F5f staleness check), `credited_amount` (nullable BigInt, audit copy of what the ledger received), `expires_at`, `createdAt`, `updatedAt`.
   - Index on `(user_id, createdAt)` for the admin/user listing paths.
 - Migration: additive only. **No changes to `credit_transactions`** (N2). Record the migration timestamp and confirm `yarn prisma:migrate` applies cleanly against the dev SQLite DB, and that beta's next container restart picks it up (migrations run on container boot — verify the boot script applies pending migrations, per 0.8-style check).
 - **Blast-radius note:** this is the plan's only data-layout step. Additive new table = low risk, but it is the step to re-verify first if beta misbehaves after deploy.
@@ -74,7 +74,7 @@ New module, CJS (server is CommonJS — AGENTS.md gotcha). Mirrors `totemBalance
 
 **Deviations from the original draft:** none.
 
-## Step 3 — `server/models/purchaseSessions.js` (F4, F6, F8) — ✅ DONE (2026-10-22, commits `8a2c1f0d` model+tests)
+## Step 3 — `server/models/purchaseSessions.js` (F4, F6, F8) — ✅ DONE (2026-10-22, commit `6cd97b36` model+tests+plan-journal)
 
 Data-layer module in the `server/models/*.js` static-method style. Key method — the atomic redeem:
 
