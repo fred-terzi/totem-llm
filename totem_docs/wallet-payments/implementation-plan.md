@@ -59,7 +59,7 @@ New module, CJS (server is CommonJS — AGENTS.md gotcha). Mirrors `totemBalance
 
 **Deviations from the original draft:** none (the additions above are within the step's declared scope).
 
-## Step 2 — Prisma migration: `purchase_sessions` table (F4, F6a, N2)
+## Step 2 — Prisma migration: `purchase_sessions` table (F4, F6a, N2) — ✅ DONE (2026-10-22, commit `87e4dad5`)
 
 - `server/prisma/schema.prisma`: new model `purchase_sessions`:
   - `id` (uuid), `user_id` (relation → users, cascade), `expected_amount` (BigInt µ$ — identical to USDC base units per credit-units N2 identity), `treasury_address`, `chain_id`, `status` (`pending | credited | failed | expired`), `failure_reason` (nullable string, machine-readable per F5), `tx_hash` (nullable, **`@unique`**), `tx_block_number` (nullable BigInt, stamped at confirm time for the F5f staleness check), `credited_amount` (nullable BigInt, audit copy of what the ledger received), `expires_at`, `createdAt`, `updatedAt`.
@@ -67,7 +67,12 @@ New module, CJS (server is CommonJS — AGENTS.md gotcha). Mirrors `totemBalance
 - Migration: additive only. **No changes to `credit_transactions`** (N2). Record the migration timestamp and confirm `yarn prisma:migrate` applies cleanly against the dev SQLite DB, and that beta's next container restart picks it up (migrations run on container boot — verify the boot script applies pending migrations, per 0.8-style check).
 - **Blast-radius note:** this is the plan's only data-layout step. Additive new table = low risk, but it is the step to re-verify first if beta misbehaves after deploy.
 
-**Deviations from the original draft:** none yet.
+**Step 2 journal:**
+- Migration `20261022122319_add_purchase_sessions` generated via `prisma migrate dev --create-only`, SQL reviewed (pure `CREATE TABLE` + 2 indexes — zero touches to existing tables), then applied; Prisma Client regenerated (v5.3.1).
+- Behavior verified live against the dev SQLite DB with a throwaway script: `updateMany({ where: { id, status: "pending", tx_hash: null }, data: { status: "crediting", tx_hash } })` returns `count: 1` (the Step-3 claim pattern works); inserting/claiming the **same txHash through a second session rejects with `P2002`** (F6a anchor confirmed); BigInt roundtrips clean on `expected_amount`/`tx_block_number`/`credited_amount` (note: Prisma returns `BigInt` objects — Step 4 endpoints must stringify/Number() before JSON); cascade delete removes session rows with the user.
+- Beta boot path confirmed: `docker/beta/run.sh` runs `yarn prisma:setup` (generate + migrate + seed) on every container start, so the migration applies on the next beta restart.
+
+**Deviations from the original draft:** none.
 
 ## Step 3 — `server/models/purchaseSessions.js` (F4, F6, F8)
 
