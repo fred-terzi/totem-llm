@@ -87,6 +87,7 @@ model users {
   wallet_address               String?                         @unique
   credits_balance              Int                             @default(0)
   credit_transactions          credit_transactions[]
+  purchase_sessions            purchase_sessions[]
 }
 
 model recovery_codes {
@@ -474,6 +475,35 @@ model credit_transactions {
   user          users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id])
+}
+
+// Wallet payment sessions (see totem_docs/wallet-payments/requirement-spec.md).
+// One row per purchase attempt; `tx_hash` @unique is the double-credit anchor —
+// a single on-chain tx can be redeemed exactly once (F6a).
+model purchase_sessions {
+  id               String   @id @default(uuid())
+  user_id          Int
+  // Expected payment amount in microdollars — identical to USDC base units
+  // (6 decimals) per the credit-units identity. Always BigInt end-to-end.
+  expected_amount  BigInt
+  treasury_address String
+  chain_id         Int
+  // "pending"    — created, awaiting on-chain tx from the user
+  // "crediting"  — claim marker while the atomic redeem (ledger write) is in flight
+  // "credited"   — ledger write completed
+  // "failed"     — verification failed (see failure_reason)
+  // "expired"    — TTL passed without a successful confirm
+  status           String   @default("pending")
+  failure_reason   String?
+  tx_hash          String?  @unique
+  tx_block_number  BigInt?
+  credited_amount  BigInt?
+  expires_at       DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+  user             users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, createdAt])
 }
 
 model model_router_rules {
