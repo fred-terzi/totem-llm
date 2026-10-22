@@ -103,7 +103,7 @@ New code (planned):
 server/utils/agents/aibitat/plugins/venice-image/
 ├── index.js    # plugin object: generate-image + list-image-styles tools
 ├── lib.js      # VeniceImageManager: request build, error map, sandbox save
-└── pricing.js  # STANDARD_MODEL, COST_PER_IMAGE, quote(params), operations map
+└── pricing.js  # STANDARD_MODEL, COST_PER_IMAGE (display), COST_PER_IMAGE_MICRO (billing), quote(params), operations map
 ```
 
 Enable surface (added in plan Step 3): `frontend/src/pages/Admin/Agents/skills.jsx` registers the skill card under `getConfigurableSkills()` so admins can toggle it (writes `default_agent_skills`); the chat Tools menu reads the same registry.
@@ -122,7 +122,7 @@ None needed.
 
 Cost note for operators:
 
-- **Multi-user mode:** image generation is a **billed feature**. The user is quoted a flat credit cost before generation (refine-and-confirm flow), sees an approval card unless the skill is whitelisted (F10), and their Totem credit balance is debited once per successful generation (per-image cost × variants). Insufficient balance or a rejected/timed-out approval card → no API call, no charge. The operator's Venice balance is consumed 1:1 behind the scenes; margin between Totem credits and Venice USD is set by `COST_PER_IMAGE` in `pricing.js`.
+- **Multi-user mode:** image generation is a **billed feature**. The user is quoted a flat credit cost before generation (refine-and-confirm flow), sees an approval card unless the skill is whitelisted (F10), and their Totem credit balance is debited once per successful generation (exactly one image per turn since the F15 lock — no variants parameter). Insufficient balance or a rejected/timed-out approval card → no API call, no charge. The operator's Venice balance is consumed 1:1 behind the scenes; margin between Totem credits and Venice USD is set by `COST_PER_IMAGE` in `pricing.js`. Units: billing runs in microdollars (`COST_PER_IMAGE_MICRO`), display quotes convert through `server/utils/credits/units.js` (1 credit = $0.001 = 1 000 µ$) → 20 credits per image.
 - **Single-user mode:** nothing is debited — the operator's Venice balance is the meter. The quote is still shown so the operator knows the cost of each generation.
 - **Future-proofing:** pricing lives in one module keyed by operation. When editing/video land, their size- and duration-dependent costs register as new operations in `pricing.js` — the quote → confirm → generate → debit flow is unchanged, only the cost function differs.
 

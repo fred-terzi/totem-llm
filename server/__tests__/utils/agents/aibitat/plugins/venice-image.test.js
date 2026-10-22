@@ -144,23 +144,20 @@ beforeEach(() => {
 // F12 / F13 / N4 — pricing.quote unit tests
 // ════════════════════════════════════════════════════════════════════
 describe("pricing.quote (F12, F13, N4)", () => {
-  test("N4 — 1 variant quotes exactly COST_PER_IMAGE", () => {
+  test("N4 — flat quote equals COST_PER_IMAGE (one image per turn, F15)", () => {
     expect(pricing.quote({})).toBe(pricing.COST_PER_IMAGE);
-    expect(pricing.quote({ variants: 1 })).toBe(pricing.COST_PER_IMAGE);
-    expect(pricing.quote({ variants: 2 })).toBe(
-      pricing.COST_PER_IMAGE * 2
-    );
+    // Any hallucinated variants param is intentionally ignored by design.
+    expect(pricing.quote({ variants: 2 })).toBe(pricing.COST_PER_IMAGE);
+    expect(pricing.quote({ variants: 99 })).toBe(pricing.COST_PER_IMAGE);
   });
 
-  test("N4 — variants above 4 are capped at ×4", () => {
-    expect(pricing.quote({ variants: 4 })).toBe(
-      pricing.COST_PER_IMAGE * 4
+  test("N4 — display and billing constants agree through the units module (1 credit = 1000 µ$)", () => {
+    const units = require("../../../../../utils/credits/units.js");
+    expect(pricing.COST_PER_IMAGE_MICRO).toBe(
+      Math.round(pricing.GENERATION_COST_USD * pricing.MICRO_PER_USD * 2)
     );
-    expect(pricing.quote({ variants: 99 })).toBe(
-      pricing.COST_PER_IMAGE * 4
-    );
-    expect(pricing.quote({ variants: "not-a-number" })).toBe(
-      pricing.COST_PER_IMAGE
+    expect(pricing.COST_PER_IMAGE).toBe(
+      units.microToCredits(pricing.COST_PER_IMAGE_MICRO)
     );
   });
 
@@ -174,7 +171,7 @@ describe("pricing.quote (F12, F13, N4)", () => {
     global.fetch.mockResolvedValue(
       okFetchResponse({ id: "req_quote_1", images: [b64("img")] })
     );
-    const params = { prompt: "a lighthouse at dusk", variants: 3 };
+    const params = { prompt: "a lighthouse at dusk" };
     await def.handler.call(
       { super: aibitat, caller: "test" },
       params
@@ -182,8 +179,11 @@ describe("pricing.quote (F12, F13, N4)", () => {
     expect(mockCredits.debit).toHaveBeenCalledTimes(1);
     const [debitedUserId, debitedAmount] = mockCredits.debit.mock.calls[0];
     expect(debitedUserId).toBe(USER_ID);
-    expect(debitedAmount).toBe(pricing.quote(params));
-    expect(debitedAmount).toBe(pricing.COST_PER_IMAGE * 3);
+    // Debit is in µ$ (billing unit), not display credits.
+    expect(debitedAmount).toBe(pricing.COST_PER_IMAGE_MICRO);
+    expect(pricing.COST_PER_IMAGE_MICRO).toBe(
+      pricing.COST_PER_IMAGE * 1000
+    );
   });
 });
 
@@ -257,19 +257,20 @@ describe("buildRequestBody (F1, F9, F13)", () => {
     expect(body).not.toHaveProperty("inpaint");
   });
 
-  test("F9 — defaults: format png, return_binary always false, variants omitted at 1 and capped at 4", () => {
+  test("F9 — defaults: format png, return_binary always false, variants never sent (F15 one-image lock)", () => {
     const mgr = new VeniceImageManager();
     const minimal = mgr.buildRequestBody({ prompt: "p" });
     expect(minimal.format).toBe("png");
     expect(minimal.return_binary).toBe(false);
     expect(minimal).not.toHaveProperty("variants");
 
+    // Even a hallucinated variants param must never reach the API body.
     const overCap = mgr.buildRequestBody({
       prompt: "p",
       variants: 12,
       return_binary: true,
     });
-    expect(overCap.variants).toBe(4);
+    expect(overCap).not.toHaveProperty("variants");
     expect(overCap.return_binary).toBe(false);
   });
 });
@@ -449,7 +450,7 @@ describe("generate-image handler billing (AC11–AC14)", () => {
     const [debitedUserId, debitedAmount, reference] =
       mockCredits.debit.mock.calls[0];
     expect(debitedUserId).toBe(USER_ID);
-    expect(debitedAmount).toBe(pricing.quote({ prompt: "a lighthouse at dusk" }));
+    expect(debitedAmount).toBe(pricing.COST_PER_IMAGE_MICRO);
     expect(reference).toBe("venice-image-generate:req_test_123");
   });
 
@@ -678,10 +679,10 @@ describe("generate-image handler availability and outputs (AC4, AC6)", () => {
       expect(call[2]).toBe("venice-image-generate");
     }
 
-    // one debit for the full quote
+    // one debit for the full quote (µ$ billing unit)
     expect(mockCredits.debit).toHaveBeenCalledTimes(1);
     expect(mockCredits.debit.mock.calls[0][1]).toBe(
-      pricing.quote({ variants: 3 })
+      pricing.COST_PER_IMAGE_MICRO
     );
     expect(mockCredits.debit.mock.calls[0][2]).toBe(
       "venice-image-generate:req_multi"

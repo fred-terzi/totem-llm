@@ -142,7 +142,10 @@ const generateImageTool = {
 
               // One-image-per-turn lock: variants are not exposed to the model and
               // are stripped in buildRequestBody, so the quote is always flat.
+              // quote → customer-facing CREDITS (tool description, approval card,
+              // user messages); µ$ → internal billing for hasCredits/debit.
               const quote = pricing.quote(params);
+              const quoteMicro = pricing.COST_PER_IMAGE_MICRO;
 
               // F10 — hard confirmation via the existing tool-approval gate.
               // Runs BEFORE pre-flight so the user sees the card (prompt + exact cost)
@@ -178,7 +181,7 @@ const generateImageTool = {
                 userId != null &&
                 (await User.get({ id: userId }))?.role === ROLES.admin;
               if (userId != null && !isBillingExempt) {
-                const canAfford = await Credits.hasCredits(userId, quote);
+                const canAfford = await Credits.hasCredits(userId, quoteMicro);
                 if (!canAfford) {
                   this.super.introspect(
                     `${this.caller}: User has insufficient credits for image generation (needs ${quote}).`
@@ -238,10 +241,10 @@ const generateImageTool = {
               if (userId != null && !isBillingExempt) {
                 const debit = await Credits.debit(
                   userId,
-                  quote,
+                  quoteMicro,
                   `venice-image-generate:${result.requestId ?? "unknown"}`
                 );
-                debitNote = ` ${debit.debited} credits were debited (remaining balance: ${debit.newBalance}).`;
+                debitNote = ` ${pricing.COST_PER_IMAGE} credits were debited (remaining balance: ${debit.newBalance}).`;
               }
 
               // F3 — download card per saved image (sandbox file; served via the

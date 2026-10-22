@@ -52,6 +52,8 @@ Also add an example exchange demonstrating the confirm-then-generate turn split,
 
 **Step 0.10 follow-up — pin the cost:** ✅ DONE (2026-10-20). Ran real `GET /models?type=image` against the deployment's `VENICE_API_KEY`. Returned for `z-image-turbo`: `model_spec.pricing.generation.usd = 0.01`. Display-credit conversion: this deployment's `users.credits_balance` stores microdollars and the CreditBadge renders that integer directly, so **1 display credit = 1 microdollar** → `COST_PER_IMAGE = 0.01 × 1_000_000 = 10_000 credits per image`. Pinned in `pricing.js` as `GENERATION_COST_USD = 0.01` + `MICRO_PER_USD` (not a magic literal), so the derivation is auditable.
 
+> ⚠️ **SUPERSEDED — credit unit redefinition (2026-10-22).** Commit `235767cb` later redefined the customer-facing credit: **1 credit = $0.001 = 1 000 µ$** (`server/utils/credits/units.js`, `CREDITS_PER_DOLLAR = 1000`). The "1 display credit = 1 microdollar" assumption above no longer holds. `pricing.js` now exports `COST_PER_IMAGE_MICRO` (µ$ billing unit, fed to `Credits.hasCredits`/`debit` — unchanged at 20 000 µ$) and `COST_PER_IMAGE` (display credits via `units.microToCredits` — now **20 credits**). The smoke-test figures below are historical evidence from before the redefinition.
+
 **Deviations from the original draft:**
 
 - **Admin billing exemption (F14 amendment):** implementation revealed the existing credit gate exempts admins (`server/endpoints/chat.js:66-69` passes `user.role` and `hasCredits` auto-passes admins, `models/credits.js:135`). The handler now resolves the session user's role and skips pre-flight + debit for admins, matching house convention. Spec F14 amended accordingly.
