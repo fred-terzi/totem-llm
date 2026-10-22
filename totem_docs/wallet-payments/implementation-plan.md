@@ -51,7 +51,13 @@ New module, CJS (server is CommonJS — AGENTS.md gotcha). Mirrors `totemBalance
 - `decodeUsdcTransfers(receiptLogs, { tokenAddress, treasuryAddress })` — parses `Transfer(address,address,uint256)` logs from a receipt; returns matching treasury-bound transfers with `from`/`value` as **BigInt**. Ambiguity (zero or multiple matching logs) returns a distinct result the caller must fail on (N3).
 - `fetchReceipt(rpcUrl, txHash)` + `getBlockHeight(rpcUrl)` — raw JSON-RPC via `fetch`, injectable transport for tests.
 
-**Deviations from the original draft:** none yet.
+**Status: DONE 2026-10-22** (commit `62c3c2d8`). Additions made during implementation:
+- `MICRO_PER_DOLLAR = 1_000_000` added to `server/utils/credits/units.js` (was planned as "`units.js` or sibling" — landed in `units.js` beside `CREDITS_PER_DOLLAR` so no call site hardcodes the 6-decimal identity).
+- `getBlockHeight(rpcUrl)` also exported (needed later for the F5f staleness check in Step 4).
+- **Journal note (bug caught by tests):** the first `decodeUsdcTransfers` draft compared the full 32-byte padded topic word against the 40-char address — every address match would have silently failed (payments would verify as "not found"). Fix: take the low 20 bytes of the topic word before comparing. Locked in by the happy-path test — exactly why AC-mapped tests gate the merge.
+- Verification: 28/28 payments tests pass (96.7% line coverage on `config.js`); `units` + `totemBalance` regression suites green; ESLint clean.
+
+**Deviations from the original draft:** none (the additions above are within the step's declared scope).
 
 ## Step 2 — Prisma migration: `purchase_sessions` table (F4, F6a, N2)
 
