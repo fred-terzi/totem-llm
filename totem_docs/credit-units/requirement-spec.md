@@ -1,6 +1,6 @@
 # Credit Units — Requirement Spec
 
-**Status:** Draft
+**Status:** Implemented (2026-10-22)
 **Scope:** Customer-facing definition of "credit", the µ$↔credits conversion, API response shape for `GET /credits`, frontend credit display, and the `credit_transactions.type` enum cleanup. Does NOT include the wallet payment flow (separate workstream: `wallet-payments/`).
 **Depends on:** Credits ledger (`server/models/credits.js`, `credit_transactions` table) as it exists today — no ledger changes. The upcoming `wallet-payments/` workstream depends on THIS workstream.
 

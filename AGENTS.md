@@ -103,7 +103,7 @@ Prisma client 5.3.1. SQLite default; PostgreSQL supported via `DATABASE_URL`. Sc
 | `document_sync_queues` + `document_sync_executions` | Periodic re-sync of watched documents |
 | `cache_data` | Key-value cache with TTL (`expiresAt`) |
 | `event_logs` | Audit trail: event type + JSON metadata + userId |
-| `credit_transactions` | Billing ledger: `amount` (microdollars), `type` (`purchase`\|`debit`\|`refund`), `reference`, `model`, `input_tokens`, `output_tokens`. One row per top-up or usage charge. Relation → `users` (cascade) |
+| `credit_transactions` | Billing ledger: `amount` (microdollars, negative = debit), `type` (`purchase`\|`debit`\|`refund`\|`credit` — `credit` = welcome bonus/admin grant, `purchase` = wallet payment top-up), `reference`, `model`, `input_tokens`, `output_tokens`. One row per top-up or usage charge. Relation → `users` (cascade) |
 | `browser_extension_api_keys` | Browser extension auth tokens |
 | `temporary_auth_tokens` | Short-lived tokens for passwordless flows |
 | `password_reset_tokens`, `recovery_codes` | Account recovery |
@@ -142,7 +142,7 @@ All routes mounted under `/api`. Each file exports a function that appends to th
 | `agentFileServer.js` | Serve/receive files from agents | File I/O during agent sessions |
 | `experimental.js` | Live sync, imported agent plugins | Experimental/alpha features |
 | `invite.js` | Invite codes for multi-user join flows | User onboarding |
-| `credits.js` | `GET /credits`; admin: `POST /credits/debit-test`, `POST /credits/grant-test` | Credit balance + ledger; admin debit/grant for testing |
+| `credits.js` | `GET /credits`; admin: `POST /credits/debit-test`, `POST /credits/grant-test` | Credit balance + ledger, **reported in credits** (µ$ converted at the API boundary); admin debit/grant for testing accept µ$ bodies |
 | `wallet.js` | `GET /wallet/balance`; `POST /auth/wallet/nonce`, `POST /auth/wallet/verify` | **Distinct from billing credits** — on-chain $TOTEM token (Base) balance + SIWE (sign-in-with-Ethereum) wallet login. New wallet signups get the 100 000 µ$ welcome bonus + auto-created default workspace |
 | `mcpServers.js` | MCP (Model Context Protocol) server configs | External tool integrations |
 | `mobile.js` | Mobile app pairing + chat | Teams mobile companion |
@@ -287,7 +287,7 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 
 ### Credits & Billing
 
-Token-priced usage billing. The internal unit is the **microdollar** (1 µ$ = $0.000001); the customer-facing unit is an opaque integer called **"credits"**. Microdollar values are `@internal` — **never** rendered in the UI or leaked to end users.
+Token-priced usage billing. The internal unit is the **microdollar** (1 µ$ = $0.000001); the customer-facing unit is **"credits", where 1 credit = $0.001 = 1 000 µ$**. Microdollar values are `@internal` — **never** rendered in the UI or leaked to end users. The single source of truth for the conversion rate is `CREDITS_PER_DOLLAR = 1000` in `server/utils/credits/units.js` — never hardcode 1000 elsewhere.
 
 **Pricing** (`server/models/credits.js`, currently single-model `e2ee-glm-5-3-flash`; per-model rates are a `TODO`):
 
@@ -316,17 +316,19 @@ cost(µ$) = ceil(inputTokens × 0.5) + ceil(outputTokens × 1.0)
 | `getUsageStats(userId)` | Lifetime totals: input/output tokens, cost (µ$), debit count. |
 | `microToDisplay(micro)` | `@internal` — µ$ → `$…` string. **Never expose to end users.** |
 
-**Welcome bonus**: new accounts (notably via wallet signup in `wallet.js`) receive **100 000 µ$** (≈ $0.10) at creation, recorded as a `credit_transactions` row.
+**Welcome bonus**: new accounts (notably via wallet signup in `wallet.js`) receive **100 000 µ$** (≈ $0.10) at creation, recorded as a `credit_transactions` row (`type: "credit"`). Displays as **100 credits**.
 
 **API** — `server/endpoints/credits.js`:
 
 | Endpoint | Auth | Purpose |
 |---|---|---|
-| `GET /credits` | session | `{ balance, transactions }` (last 20) for the signed-in user |
+| `GET /credits` | session | `{ balance, transactions }` (last 20) for the signed-in user — **all amounts in credits** (1 credit = 1 000 µ$); raw µ$ never crosses the API boundary |
 | `POST /credits/debit-test` | session, **admin** | Simulate a debit (testing) |
 | `POST /credits/grant-test` | session, **admin** | Grant/adjust balance (testing) |
 
 > **Gotcha:** `wallet.js` is a *separate* concern from billing credits — it reads the on-chain $TOTEM token balance (Base) and handles SIWE wallet login. Don't conflate `GET /wallet/balance` (crypto token) with `GET /credits` (billing ledger).
+>
+> **Unit conversion (credit-units workstream):** the API speaks **credits** to clients: `balance` = floor(µ$ / 1000), ledger-row `amount` = credits with ≤2 decimals (JSON number). Ledger storage stays integer µ$. All conversions go through `server/utils/credits/units.js` (`CREDITS_PER_DOLLAR`, `microToCredits`, `formatLedgerCredits`) — do not add a new endpoint returning raw µ$ amounts. The admin test endpoints accept µ$ request bodies (internal contract) but respond in credits. The ledger `type` enum is `"purchase" | "debit" | "refund" | "credit"` (`credit` = bonus/grant, as written by `wallet.js`). See `totem_docs/credit-units/`.
 
 **Frontend** — `CreditContext` (`frontend/src/context/CreditContext.jsx`, hook `useCredits()`) + `CreditBadge` (`frontend/src/components/CreditBadge/index.jsx`):
 
@@ -444,7 +446,7 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 - **SSE for chat, WebSocket for agents**: Chat-to-workspace uses HTTP SSE streaming. Agent tool execution streams over dedicated WebSocket connection (`agentWebsocket.js`). Both require different frontend handling.
 - **Body limit is 3GB** across all services — allows large document uploads but means body-parser buffers huge payloads into memory.
 - **No relation on `workspace_agent_invocations.thread_id`**: Intentional — SQLite migration would lock the entire `workspace_threads` table, causing cascading timeouts. Same pattern on `workspace_chats.thread_id`.
-- **Credits ≠ microdollars, and ≠ wallet token**: `server/models/credits.js` + `credit_transactions` work in **microdollars**; the frontend `CreditContext`/`CreditBadge` show an opaque integer. `microToDisplay()` is `@internal` — never render it to end users. `wallet.js` ($TOTEM on-chain token + SIWE login) is a *different* balance entirely.
+- **Credits ≠ microdollars, and ≠ wallet token**: `server/models/credits.js` + `credit_transactions` work in **microdollars** internally; the customer-facing **credit** = 1 000 µ$ ($0.001) via `CREDITS_PER_DOLLAR` in `server/utils/credits/units.js`. `GET /credits` and `CreditBadge` speak credits only — µ$ never crosses the API boundary, and `microToDisplay()` is `@internal` (never render it to end users). `wallet.js` ($TOTEM on-chain token + SIWE login) is a *different* balance entirely.
 - **Per-user filesystem** (v0.19.0+): the agent's filesystem tools are scoped to `$STORAGE_DIR/totemllm-fs/users/<userId>/`. In single-user mode (`userId == null`) they use the shared `$STORAGE_DIR/totemllm-fs` root. `getFilesystemFor()` is the only resolution point — do NOT `require` the default `module.exports` directly in new code (kept for backwards compat with existing require sites). The migration script (`yarn fs:migrate`, `scripts/migrate-fs-to-users.mjs`) copies old shared files into the correct user dirs — idempotent, run it when upgrading from pre-v0.19.0 builds.
 
 ## Security Notes

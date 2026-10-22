@@ -47,6 +47,40 @@ export function humanFileSize(bytes, si = false, dp = 1) {
   return bytes.toFixed(dp) + " " + units[u];
 }
 
+/**
+ * Frontend mirror of `server/utils/credits/units.js#formatLedgerCredits`.
+ *
+ * The server converts ledger-row amounts to credits (1 credit = $0.001 =
+ * 1 000 µ$) at the API boundary; this helper formats such a credit amount
+ * for display with at most 2 decimals, trailing zeros trimmed:
+ *
+ *   0.39 → "0.39"    (a typical per-turn debit)
+ *   1.5  → "1.5"
+ *   1    → "1"
+ *   -0.39 → "-0.39"  (debit rows are negative)
+ *
+ * Do NOT convert µ$ here — by the time a value reaches the frontend it is
+ * already in credits (server N3: the frontend never performs µ$ math).
+ * Ready for the purchase-history view in the wallet-payments workstream.
+ *
+ * @param {number} credits - ledger-row amount in credits
+ * @param {string} [suffix=" credits"] - appended when a magnitude is shown
+ * @returns {string} formatted display string
+ */
+export function formatLedgerCredits(credits, suffix = " credits") {
+  if (
+    typeof credits !== "number" ||
+    !Number.isFinite(credits) ||
+    credits === 0
+  ) {
+    return `0${suffix}`;
+  }
+  // Truncate to 2 decimals toward zero, then trim trailing zeros.
+  const magnitude = Math.trunc(Math.abs(credits) * 100) / 100;
+  const trimmed = magnitude.toString().replace(/\.?0+$/, "");
+  return `${credits < 0 ? "-" : ""}${trimmed}${suffix}`;
+}
+
 export function milliToHms(milli = 0) {
   const d = parseFloat(milli) / 1_000.0;
   var h = Math.floor(d / 3600);

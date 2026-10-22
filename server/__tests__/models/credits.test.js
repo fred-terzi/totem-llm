@@ -138,3 +138,10 @@ describe("Credits.calculateCost (per-model lookups)", () => {
     expect(Credits.calculateCost(0, 1, "e2ee-glm-5-3-flash")).toBe(1);
   });
 });
+
+describe("Credits.WELCOME_BONUS (credit-units F7/AC8)", () => {
+  it("stays 100 000 µ$ internally (= 100 displayed credits)", () => {
+    expect(Credits.WELCOME_BONUS).toBe(100_000);
+    expect(Math.floor(Credits.WELCOME_BONUS / 1000)).toBe(100);
+  });
+});

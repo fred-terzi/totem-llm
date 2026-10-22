@@ -464,8 +464,8 @@ model model_routers {
 model credit_transactions {
   id            Int      @id @default(autoincrement())
   user_id       Int
-  amount        Int      // cost in microdollars (1/1,000,000 of a dollar)
-  type          String   // "purchase" | "debit" | "refund"
+  amount        Int      // cost in microdollars (1/1,000,000 of a dollar); negative = debit, positive = credit
+  type          String   // "purchase" | "debit" | "refund" | "credit" — "credit" = welcome bonus/admin grant, "purchase" = wallet payment top-up
   reference     String?
   model         String   @default("e2ee-glm-5-3-flash")
   input_tokens  Int      @default(0)

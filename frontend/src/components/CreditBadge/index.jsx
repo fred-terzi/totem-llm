@@ -5,8 +5,11 @@ import { useCredits } from "@/context/CreditContext";
 /**
  * CreditBadge — displays the user's credit balance with a coin icon.
  *
- * "Credits" is the customer-facing unit: the badge shows an opaque integer and
- * never exposes the underlying (internal) value.
+ * "Credits" is the customer-facing unit: 1 credit = $0.001 = 1 000 µ$
+ * (single source of truth: `server/utils/credits/units.js`). The badge shows
+ * the server-converted credit integer and never exposes the underlying
+ * microdollar value — the server owns all µ$→credits conversion at the
+ * `GET /credits` boundary; this component performs no unit math.
  *
  * Value resolution (in order):
  *   1. An explicit `credits` prop, when provided — useful for previews/tests or

@@ -18,4 +18,14 @@ Define the customer-facing "credit" as a display unit over the internal microdol
 
 ## Status
 
-🔲 **Draft** — spec + plan written, implementation not started. Prerequisite for the `wallet-payments/` workstream (the purchase UI speaks credits).
+✅ **Implemented (2026-10-22)** — see `implementation-plan.md` PR log for smoke-test evidence. Prerequisite complete for the `wallet-payments/` workstream (the purchase UI speaks credits).
+
+## Shipped surface
+
+| Piece | Where |
+|---|---|
+| `CREDITS_PER_DOLLAR`, `microToCredits()`, `formatLedgerCredits()` | `server/utils/credits/units.js` (single source of truth) |
+| `GET /credits` returns credits (`balance` floored int, ledger `amount` numeric ≤2 decimals) | `server/endpoints/credits.js` |
+| Admin test endpoints: µ$ bodies, credit responses | `server/endpoints/credits.js` |
+| Frontend ledger-row display helper (ready for purchase history) | `frontend/src/utils/numbers.js` |
+| Unit tests (11) + welcome-bonus lock | `server/__tests__/utils/credits/units.test.js`, `server/__tests__/models/credits.test.js` |
