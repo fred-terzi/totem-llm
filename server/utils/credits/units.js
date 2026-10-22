@@ -21,6 +21,16 @@
 const CREDITS_PER_DOLLAR = 1000;
 
 /**
+ * Microdollars per US dollar: 1 $ = 1 000 000 µ$.
+ * Companion constant to CREDITS_PER_DOLLAR. Used by the wallet-payments
+ * workstream: a pack's µ$ payable equals its USDC base-unit price exactly
+ * (1 µ$ = 1 USDC base unit), so `usd × MICRO_PER_DOLLAR` is the integer
+ * pass-through amount at the settlement boundary. Do not hardcode 1 000 000
+ * elsewhere — import from here.
+ */
+const MICRO_PER_DOLLAR = 1_000_000;
+
+/**
  * Convert microdollars to whole credits (integer floor).
  * Guards non-finite and negative inputs to 0 (balances never go negative;
  * negative ledger amounts are display-only and handled by formatLedgerCredits).
@@ -68,6 +78,7 @@ function formatLedgerCredits(micro) {
 
 module.exports = {
   CREDITS_PER_DOLLAR,
+  MICRO_PER_DOLLAR,
   microToCredits,
   formatLedgerCredits,
 };
