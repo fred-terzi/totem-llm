@@ -148,24 +148,37 @@ Data-layer module in the `server/models/*.js` static-method style. Key method �
 
 **Deviations from the original draft:** the test split (journal note 7) is the only one — organizational, not behavioral. The draft's intent (F9 flow, AC2 integer-exactness, AC9 human-readable reasons, N6 poll cadence, no badge changes, desktop-only mobile handling) is fully implemented.
 
-## Step 7 — Tests (AC1–AC12) — **merge gate**
+**Step 6 journal — addenda from live mainnet manual testing (2026-10-22):**
+- **Journal note 8 — the wallet-boundary bug (call-site error invisible to unit tests):** the first manual mainnet run sent `eth_sendTransaction` with `to` set to the **treasury address** and `transfer(treasury, amount)` as calldata. An ERC-20 transfer must be a call **on the token contract** with the recipient encoded in calldata — a direct tx to the treasury EOA executes the calldata against an EOA, so it **mines successfully as a silent no-op (status 1, zero logs)**: no USDC moves, gas burns, and the server correctly fails the session with `wrong_recipient`. Evidence tx `0x284b7878fe2bbbaeef2c3505e233d504c8575cfd2ada4ec232e394d105bae176` (block 52,948,893 — status `0x1`, 0 logs). No unit test can catch this: the calldata was byte-correct; the bug was the `to` field of the EIP-1193 call. The tell was MetaMask's own pre-send screen showing **"0 ETH / No changes"** (a no-op transfer previews as nothing happening). Fix (`3be45ee7`): the create-session response now carries the configured USDC contract address and the modal sends **to the token contract**, with a fail-closed guard when the session record lacks a well-formed token address (N3).
+- **Journal note 9 — $1 pack added (`b51c1436`):** new smallest pack `usd1` (1,000 credits / 1,000,000 USDC base units) for low-friction first purchases. The pack table is intentionally **mirrored in two places** (server `PACKS` in `server/utils/payments/config.js` — the F2 source of truth — and frontend `PURCHASE_PACKS` in `frontend/src/utils/payments.js`, display-only; the on-chain amount always comes from the session record), and the AC2 tests were updated to assert all **four** packs integer-exactly. Server payments suites 57/57, frontend 26/26.
 
-- `server/__tests__/utils/payments/config.test.js` — pack math (AC2 integer-exactness), config gating (AC1 server side), Transfer-log decoding happy/multiple/none, BigInt-only math (N1).
+## Step 7 — Tests (AC1–AC12) — ✅ DONE (2026-10-22, merge gate passed)
+
+- `server/__tests__/utils/payments/config.test.js` — pack math (AC2 integer-exactness, four packs after journal note 9), config gating (AC1 server side), Transfer-log decoding happy/multiple/none, BigInt-only math (N1).
 - `server/__tests__/models/purchaseSessions.test.js` — redeem happy path, double-redeem (`P2002` → already-redeemed, AC4), payer/amount/stale binding enforced at the endpoint-verification layer with mocked JSON-RPC (AC5, AC6, AC8), unmined/reverted handling (AC7).
 - Endpoint tests with mocked RPC + mocked auth: feature gate (AC1), auth/rate-limit rejections (AC11), failure surfacing reasons (AC9).
 - Sweeper test: expiry marking + crashed-tab credit-once (AC10).
-- Testnet run (manual, AC12): `PAYMENTS_CHAIN_ID=84532` + Sepolia USDC (0.11) + test treasury → one full purchase from a dev wallet; record the tx hash and ledger row here as evidence.
+- **AC12 — live purchase evidence (recorded here per the plan):** the plan asked for a Base Sepolia testnet run; the live verification was instead performed **directly on Base mainnet** — arguably stronger evidence, since it exercises the real asset, real value, and real confirmation depths. Both transactions:
+  - **Failed first attempt:** `0x284b7878fe2bbbaeef2c3505e233d504c8575cfd2ada4ec232e394d105bae176` (block 52,948,893) — the journal note 8 wrong-target bug: status `0x1`, **zero logs**, no USDC moved; the server correctly failed the session `wrong_recipient`. Kept as evidence that the six-check pipeline rejects no-op transfers (and as the bug report itself).
+  - **Successful $1 run:** `0x30370029d754ea4e8e117770b404cf086cc077178c4330e62170e24c45f37e9d` (block 52,949,908) — status `0x1`, one `Transfer` log from `0xd52437db133eaa3289455d708c749a1981808bda` to the treasury, value `0xf4240` = **1,000,000 USDC base units (= 1 µ$×10⁶ = 1,000 credits)**. DB evidence: session `d5fd7f0d-decd-4b46-9436-fd457fb7b148` (user 15, `expected_amount` 1000000, chain 8453) → **`credited`**, `credited_amount` 1000000; ledger row `credit_transactions` `{ user_id: 15, type: "purchase", amount: 1000000, reference: "purchase_0x30370029…f37e9d" }` — AC3 confirmed end-to-end with real funds.
+  - The testnet (Base Sepolia) configuration is fully documented in `server/.env.example` (`PAYMENTS_CHAIN_ID=84532` + Sepolia USDC `0x036CbD53842c5426634e7929541eC2318f3dCF7e`) for future runs; note the earlier Sepolia sessions (chain 84532 in the sessions table) were abandoned `expired` after faucet friction — the mainnet run superseded them as AC12 evidence.
 - Every AC maps to exactly one named test (review-checklist requirement).
-- **Deviations from the original draft:** none yet.
+- **Deviations from the original draft:** AC12's live run happened on mainnet instead of testnet (see above); all unit/integration suites ran exactly as drafted with mocked JSON-RPC (no network in Jest, N4).
 
-## Step 8 — Docs + release (workflow §4)
+## Step 8 — Docs + release (workflow §4) — ✅ DONE (2026-10-22)
 
 - `totem_docs/wallet-payments/README.md` (written last, describes shipped behavior).
 - Spec `Status:` → Implemented (only after spec text matches reality — fold in any corrections).
 - `totem_docs/README.md` topic row; `RELEASE.md` "Upcoming / Unreleased" bullet; `AGENTS.md` — env-var table addition (payments vars next to the `TOTEM_*` table) + Key-Gotchas entry (payments ≠ wallet balance ≠ credits distinction).
 - Beta rollout order: merge → beta container restart picks up migration + code → set `PAYMENTS_TREASURY_ADDRESS` (+ USDC/RPC/chain) in `docker/beta/.env` → `docker compose up -d` → curl matrix (204-off vs enabled, 401/403/429 paths) → one real USDC purchase through the beta UI. Rollback: unset the treasury var — feature off, sessions table inert.
 
-**Deviations from the original draft:** none yet.
+**Step 8 journal:**
+- Spec corrections folded in with the status flip: F2 pack set corrected to `{1,5,10,25}` (journal note 9), F8 records the dedicated `purchase_sessions` table decision, F9 notes the tx targets the USDC token contract (journal note 8 fix), AC2 updated to four packs, AC12 annotated with the mainnet-run outcome, `Status:` → **Implemented**.
+- `totem_docs/wallet-payments/README.md` written: shipped flow, four-pack table, exactly-once pipeline summary (incl. pipeline diagram), env-var table, API endpoints, key files, testing/AC12 evidence, Base Sepolia faucet/testing notes, sweeper duties, rollout/rollback.
+- `AGENTS.md`: the five `PAYMENTS_*` env vars documented next to the `TOTEM_*` table (same off-by-default gating pattern); the "Credits ≠ microdollars, and ≠ wallet token" gotcha extended — payments now *create* credit purchases, and the USDC payment rail is distinct from the read-only $TOTEM balance rail.
+- `RELEASE.md` Unreleased: `feat(payments)` bullet with the send-target fix and $1 pack sub-bullets.
+
+**Deviations from the original draft:** none — all four deliverables landed as drafted; the beta curl matrix remains an ops task for the beta restart, not a docs item.
 
 ---
 
@@ -187,4 +200,4 @@ Data-layer module in the `server/models/*.js` static-method style. Key method �
 
 | PR | Scope | Status |
 |---|---|---|
-| — | Steps 1–8 (single PR planned: `feat(payments): buy credits with USDC on Base`) | 🔲 Planned |
+| — | Steps 1–8 (single PR planned: `feat(payments): buy credits with USDC on Base`) | ✅ Ready to open (Steps 1–7 code + tests complete; Step 8 docs landed. Commits: `62c3c2d8` config, `87e4dad5` migration, `6cd97b36` model, `3520c1c7` endpoints, `b452508e` sweeper, `55521750` frontend, `3be45ee7` send-target fix, `b51c1436` $1 pack; docs: plan/spec/README/RELEASE/AGENTS updates) |
