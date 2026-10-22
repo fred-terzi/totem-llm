@@ -28,6 +28,7 @@
  * comes from the created session's `expectedAmountUsdc`, never from this table.
  */
 export const PURCHASE_PACKS = [
+  { id: "usd1", usd: 1, credits: 1_000, usdc: "1000000" },
   { id: "usd5", usd: 5, credits: 5_000, usdc: "5000000" },
   { id: "usd10", usd: 10, credits: 10_000, usdc: "10000000" },
   { id: "usd25", usd: 25, credits: 25_000, usdc: "25000000" },

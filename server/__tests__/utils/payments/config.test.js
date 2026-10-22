@@ -92,13 +92,16 @@ describe("paymentsConfig (F1 feature gate, mirrors totemConfig)", () => {
 });
 
 describe("packAmounts / getPack (F2 pack table, N1 integer math)", () => {
-  test("exposes exactly the three packs", () => {
-    expect(packAmounts().map((p) => p.id)).toEqual(["usd5", "usd10", "usd25"]);
-    expect(packAmounts().map((p) => p.usd)).toEqual([5, 10, 25]);
+  test("exposes exactly the four packs", () => {
+    expect(packAmounts().map((p) => p.id)).toEqual([
+      "usd1", "usd5", "usd10", "usd25",
+    ]);
+    expect(packAmounts().map((p) => p.usd)).toEqual([1, 5, 10, 25]);
   });
 
   test("AC2: credit amounts are integer-exact (usd × CREDITS_PER_DOLLAR)", () => {
     const byId = Object.fromEntries(packAmounts().map((p) => [p.id, p]));
+    expect(byId.usd1.credits).toBe(1_000);
     expect(byId.usd5.credits).toBe(5_000);
     expect(byId.usd10.credits).toBe(10_000);
     expect(byId.usd25.credits).toBe(25_000);
@@ -110,6 +113,7 @@ describe("packAmounts / getPack (F2 pack table, N1 integer math)", () => {
 
   test("N1/N2: µ$ payable equals USDC base units 1:1 (usd × 1 000 000, BigInt)", () => {
     const byId = Object.fromEntries(packAmounts().map((p) => [p.id, p]));
+    expect(byId.usd1.usdcBaseUnits).toBe(1_000_000n);
     expect(byId.usd5.usdcBaseUnits).toBe(5_000_000n);
     expect(byId.usd10.usdcBaseUnits).toBe(10_000_000n);
     expect(byId.usd25.usdcBaseUnits).toBe(25_000_000n);

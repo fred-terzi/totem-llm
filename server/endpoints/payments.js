@@ -234,7 +234,7 @@ function paymentEndpoints(app) {
 
   /**
    * POST /api/credits/purchase-session
-   * Body: { packId: "usd5" | "usd10" | "usd25" }
+   * Body: { packId: "usd1" | "usd5" | "usd10" | "usd25" }
    * Response 200: { id, expectedAmountUsdc, treasuryAddress, usdcAddress, chainId, expiresAt }
    *   `usdcAddress` is the ERC-20 token contract the wallet must target —
    *   an `eth_sendTransaction` for a token transfer goes TO the token
@@ -275,7 +275,7 @@ function paymentEndpoints(app) {
         const pack = payments.getPack(packId);
         if (!pack) {
           return response.status(400).json({
-            message: "Unknown packId. Valid packs: usd5, usd10, usd25.",
+            message: "Unknown packId. Valid packs: usd1, usd5, usd10, usd25.",
           });
         }
 

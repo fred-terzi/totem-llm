@@ -38,7 +38,7 @@ const Payments = {
 
   /**
    * Creates a purchase session for a pack.
-   * @param {string} packId - "usd5" | "usd10" | "usd25"
+   * @param {string} packId - "usd1" | "usd5" | "usd10" | "usd25"
    * @returns {Promise<
    *   | {available: true, session: {id: string, expectedAmountUsdc: string, treasuryAddress: string, usdcAddress: string, chainId: number, expiresAt: string}}
    *   | {available: false}

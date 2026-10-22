@@ -36,6 +36,7 @@ const TRANSFER_TOPIC_BYTES = 32;
 
 /** Pack table — the only place pack prices are defined (F2). */
 const PACKS = [
+  { id: "usd1", usd: 1 },
   { id: "usd5", usd: 5 },
   { id: "usd10", usd: 10 },
   { id: "usd25", usd: 25 },

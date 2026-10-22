@@ -39,24 +39,26 @@ const {
 } = require("@/utils/payments");
 
 describe("PURCHASE_PACKS (AC2 — integer-exact pack math)", () => {
-  it("offers exactly the three spec packs", () => {
+  it("offers exactly the four spec packs", () => {
     expect(PURCHASE_PACKS.map((p) => p.id)).toEqual([
+      "usd1",
       "usd5",
       "usd10",
       "usd25",
     ]);
   });
 
-  it("displays exactly 5 000 / 10 000 / 25 000 credits", () => {
+  it("displays exactly 1 000 / 5 000 / 10 000 / 25 000 credits", () => {
     expect(PURCHASE_PACKS.map((p) => p.credits)).toEqual([
-      5_000, 10_000, 25_000,
+      1_000, 5_000, 10_000, 25_000,
     ]);
   });
 
   it("carries the exact USDC base-unit amounts as decimal strings (no floats)", () => {
-    // 5/10/25 USDC × 1e6 base units — integer-exact, string-typed so no
+    // 1/5/10/25 USDC × 1e6 base units — integer-exact, string-typed so no
     // float can ever sneak into the value sent on-chain.
     expect(PURCHASE_PACKS.map((p) => p.usdc)).toEqual([
+      "1000000",
       "5000000",
       "10000000",
       "25000000",
