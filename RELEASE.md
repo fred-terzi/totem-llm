@@ -2,6 +2,9 @@
 
 ## Unreleased (pending next version bump)
 
+- `feat(payments)`: buy credits with USDC on Base — wallet users purchase fixed credit packs via direct ERC-20 transfer to the treasury; server-side six-check on-chain verification (receipt + Transfer-log integer equality, payer binding, confirmations, staleness), exactly-once crediting through an atomic claim→credit→mark redeem pipeline (`purchase_sessions` table, `tx_hash @unique`), 60 s background sweeper (expiry, crash-window recovery, crashed-tab re-verification), desktop buy-credits modal on the credits badge, and an admin reconciliation endpoint (`GET /admin/purchases`). Feature-gated off by default via `PAYMENTS_TREASURY_ADDRESS` (see `AGENTS.md` env-var table and `totem_docs/wallet-payments/`)
+  - `fix(payments)`: target the USDC token contract in `eth_sendTransaction` — the first manual mainnet run sent the tx to the treasury EOA, mining a silent no-op (status 1, zero logs); the modal now sends to the token contract exposed on the create-session response
+  - `payments`: add $1 pack (`usd1` — 1,000 credits) as the low-friction smallest pack; pack set is now {1, 5, 10, 25}
 - `feat(beta)`: add beta feature profile and wire it into beta compose
 - `chore(node22)`: ratify Node 22 LTS (22.23.3) as the runtime — all Dockerfiles on `node:22-slim`, release CI reads `.nvmrc` instead of a hardcoded Node 18, `engines.node >=22` across root/server/collector, AGENTS.md + Docker docs updated
 - `fix(server)`: regenerate `server/package-lock.json` to include the `ethers` tree (missing since the wallet-login commit)

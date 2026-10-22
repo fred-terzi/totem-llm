@@ -273,6 +273,18 @@ Read-only. Reads the caller's $TOTEM ERC-20 balance on **Base** via a JSON-RPC `
 | `TOTEM_SYMBOL` | `TOTEM` | Display symbol |
 | `VITE_INFURA_API_KEY` | *(unset — mobile wallet off)* | Infura API key (free tier OK) — required for the mobile MetaMask Connect path |
 
+**Wallet payments env vars** (see `totem_docs/wallet-payments/` for the full shipped behavior):
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `PAYMENTS_TREASURY_ADDRESS` | *(unset — feature off)* | USDC recipient address; setting it (valid `0x…40` hex) enables the whole payments feature (endpoints + UI + sweeper) |
+| `PAYMENTS_USDC_ADDRESS` | *(required to enable)* | ERC-20 USDC contract — Base mainnet `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, Base Sepolia `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
+| `PAYMENTS_RPC_URL` | `https://mainnet.base.org` | JSON-RPC endpoint for receipts/block data (testnet: `https://sepolia.base.org`) |
+| `PAYMENTS_CHAIN_ID` | `8453` | Payment chain (`84532` = Base Sepolia) |
+| `PAYMENTS_CONFIRMATIONS` | `2` | Required block confirmations before a payment is credited |
+
+Like the `TOTEM_*` vars above, all five are **off by default** with the same gating pattern: unset/invalid treasury → every payments endpoint returns `204`, the buy affordance is hidden, and no sweeper timer is scheduled.
+
 > **Frontend/Vite version note:** Vite was upgraded **Vite 4 → Vite 5** (esbuild ≥0.21) when wallet SDKs were adopted — their dist code requires esbuild ≥0.20. Don't downgrade Vite below 5. Also note: `frontend/package.json` pins `@wallet-standard/base` to `1.1.0` via `resolutions` — retain this pin (its `1.1.1` may raise its engine floor). The pin predates the Node 22 ratification; do not unpin without re-testing.
 
 **Key files:**
@@ -451,7 +463,7 @@ PR titles must follow [Conventional Commits](https://www.conventionalcommits.org
 - **CORS allowlist (beta/production deployments)**: set `CORS_ORIGIN` to the exact scheme+host (+port if non-standard) the browser sends, comma-separated for multiple origins. Empty/unset disables the allowlist (reflect-any-origin, legacy behavior — fine for self-hosted single-user). Requests without an `Origin` header (curl, server-to-server, same-origin) are always allowed — only browsers send Origin. **`/api/embed/*` is exempt by design**: public embed widgets enforce their own per-config domain allowlists in `canRespond` and keep reflect-any-origin behavior. The beta deployment (`docker/beta/`) wires `CORS_ORIGIN` through `docker-compose.yml` from the gitignored `.env` (currently `https://beta.totemai.xyz`).
 - **Rate limiting**: dependency-free in-memory per-IP limiter at `server/utils/middleware/rateLimiter.js` (module-level `Map`, periodic sweep, process-local — resets on restart; per-IP keying prefers the first `X-Forwarded-For` hop, so a trusted reverse proxy is assumed for correct client attribution). Applied to the unauthenticated wallet auth endpoints (`POST /auth/wallet/nonce`, `POST /auth/wallet/verify`) with a shared limiter: **20 requests / 15 min per IP** by default, tunable via `WALLET_AUTH_RATE_LIMIT` and `WALLET_AUTH_RATE_WINDOW_MS`. Extend to new public unauthenticated endpoints rather than inventing a new mechanism.
 - **No relation on `workspace_agent_invocations.thread_id`**: Intentional — SQLite migration would lock the entire `workspace_threads` table, causing cascading timeouts. Same pattern on `workspace_chats.thread_id`.
-- **Credits ≠ microdollars, and ≠ wallet token**: `server/models/credits.js` + `credit_transactions` work in **microdollars** internally; the customer-facing **credit** = 1 000 µ$ ($0.001) via `CREDITS_PER_DOLLAR` in `server/utils/credits/units.js`. `GET /credits` and `CreditBadge` speak credits only — µ$ never crosses the API boundary, and `microToDisplay()` is `@internal` (never render it to end users). `wallet.js` ($TOTEM on-chain token + SIWE login) is a *different* balance entirely.
+- **Credits ≠ microdollars, and ≠ wallet token**: `server/models/credits.js` + `credit_transactions` work in **microdollars** internally; the customer-facing **credit** = 1 000 µ$ ($0.001) via `CREDITS_PER_DOLLAR` in `server/utils/credits/units.js`. `GET /credits` and `CreditBadge` speak credits only — µ$ never crosses the API boundary, and `microToDisplay()` is `@internal` (never render it to end users). `wallet.js` ($TOTEM on-chain token + SIWE login) is a *different* balance entirely. **Payments close the loop:** wallet payments (`server/endpoints/payments.js`, `totem_docs/wallet-payments/`) now *create* credit purchases — a confirmed USDC-on-Base transfer writes a `"purchase"` ledger row and tops up the same `credits_balance`. The USDC-on-Base payment rail is distinct from the read-only $TOTEM balance rail: one moves money **into** the ledger, the other only **reads** an on-chain token balance. Don't conflate `PAYMENTS_*` (billing) with `TOTEM_*` (read-only badge).
 - **Per-user filesystem** (v0.19.0+): the agent's filesystem tools are scoped to `$STORAGE_DIR/totemllm-fs/users/<userId>/`. In single-user mode (`userId == null`) they use the shared `$STORAGE_DIR/totemllm-fs` root. `getFilesystemFor()` is the only resolution point — do NOT `require` the default `module.exports` directly in new code (kept for backwards compat with existing require sites). The migration script (`yarn fs:migrate`, `scripts/migrate-fs-to-users.mjs`) copies old shared files into the correct user dirs — idempotent, run it when upgrading from pre-v0.19.0 builds.
 
 ## Security Notes
