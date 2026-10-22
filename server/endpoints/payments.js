@@ -3,6 +3,7 @@ const { validatedRequest } = require("../utils/middleware/validatedRequest");
 const { rateLimiter } = require("../utils/middleware/rateLimiter");
 const { PurchaseSessions } = require("../models/purchaseSessions");
 const payments = require("../utils/payments/config");
+const prisma = require("../utils/prisma");
 
 /**
  * Wallet payment endpoints (USDC on Base) — see totem_docs/wallet-payments/.
@@ -41,8 +42,14 @@ const REASONS = PurchaseSessions.FAILURE_REASONS;
 /** Clock-skew tolerance for the F5f staleness check: a tx mined after the
  * session was created can still carry a block timestamp slightly behind the
  * server's wall clock (chain clock vs local clock). Anything older than the
- * session's creation minus this tolerance is a pre-session deposit. */
+ * session's creation minus this tolerance is a pre-session deposit. Also
+ * governs the sweeper's re-verification of a submitted session: a
+ * submitted-but-unmined tx is retried until the session's TTL passes, then
+ * expired instead of failed (AC10). */
 const STALENESS_TOLERANCE_MS = 90_000;
+
+/** Sweeper cadence — 60 s, per spec N6 (same as the wallet nonce sweeper). */
+const SWEEP_INTERVAL_MS = 60_000;
 
 /**
  * Per-user in-memory rate limiter (N5: session creation is limited per IP
@@ -460,4 +467,128 @@ function paymentEndpoints(app) {
   );
 }
 
-module.exports = { paymentEndpoints };
+/**
+ * Background purchase-session sweeper (F8, AC10) — Step 5.
+ *
+ * Housekeeping-only, mirroring the wallet nonce sweeper pattern (0.6):
+ * a module-level `setInterval` whose callback never throws, scoped so it
+ * only ever touches `purchase_sessions` rows. It is NOT a second crediting
+ * path — every credit goes through the same `PurchaseSessions.redeem()`
+ * the confirm endpoint uses (F6d), so all F6 invariants (atomic claim,
+ * `tx_hash @unique` P2002 anchor, verify-before-claim) apply unchanged.
+ *
+ * Per sweep, three disjoint duties:
+ *
+ *   1. expireStale — bulk-mark past-TTL sessions that never got a tx.
+ *
+ *   2. resolveStuckClaim — crash artifacts in `crediting` past
+ *      CREDITING_STALE_MS: ledger-lookup decides re-sync (credit committed,
+ *      crash 2→3) vs release (no credit, crash 1→2).
+ *
+ *   3. sweep re-verification — pending sessions WITH a submitted txHash
+ *      (crashed-tab recovery): re-run the F5 six-check verification and
+ *      redeem on a full pass. A submitted session that passes its TTL is
+ *      expired (never blanket-failed) — the user may still get their credits
+ *      if the tx lands; the generic sweep keeps retrying until then.
+ *
+ * Guarded on `paymentsConfig().enabled` at schedule time (F1): no treasury
+ * config, no timer. The config is re-read per sweep so flipping the env var
+ * takes effect without a restart, matching the endpoints' per-request gate.
+ */
+async function runPaymentSweep() {
+  // Re-read per sweep — the feature can be turned off after boot.
+  if (!payments.paymentsConfig().enabled) return;
+
+  // 1. TTL expiry for never-submitted sessions.
+  try {
+    const expired = await PurchaseSessions.expireStale();
+    if (expired > 0)
+      console.log(`[payments] sweeper: expired ${expired} stale session(s)`);
+  } catch (e) {
+    console.error("[payments] sweeper: expireStale failed:", e.message);
+  }
+
+  // 2. Crash-window recovery for stuck `crediting` claims.
+  try {
+    const stuck = await prisma.purchase_sessions.findMany({
+      where: { status: "crediting" },
+    });
+    const now = Date.now();
+    for (const session of stuck) {
+      if (
+        now - new Date(session.updatedAt).getTime() <
+        PurchaseSessions.CREDITING_STALE_MS
+      )
+        continue; // in-flight claim — a concurrent caller owns it
+      const outcome = await PurchaseSessions.resolveStuckClaim(session);
+      if (outcome !== "error")
+        console.log(`[payments] sweeper: stuck claim ${session.id} ${outcome}`);
+    }
+  } catch (e) {
+    console.error("[payments] sweeper: stuck-claim pass failed:", e.message);
+  }
+
+  // 3. Crashed-tab recovery: submitted-but-unverified sessions. Verification
+  // and redeem are the exact code paths the confirm endpoint uses.
+  try {
+    const sweepable = await PurchaseSessions.findSweepable();
+    for (const session of sweepable) {
+      const pastTtl = new Date(session.expires_at).getTime() <= Date.now();
+      const verification = await verifyReceipt(
+        session,
+        String(session.tx_hash)
+      );
+
+      if (verification.outcome === "redeem") {
+        const redeemResult = await PurchaseSessions.redeem({
+          sessionId: session.id,
+          txHash: String(session.tx_hash),
+          blockNumber: verification.blockNumber,
+          valueMicro: verification.valueMicro,
+        });
+        if (redeemResult.result === "credited")
+          console.log(
+            `[payments] sweeper: credited session ${session.id} (crashed-tab recovery)`
+          );
+        continue;
+      }
+
+      if (verification.outcome === "failed") {
+        // Permanent: a reverted/wrong-recipient tx can never succeed on
+        // retry — fail immediately with the precise F5 reason regardless of
+        // TTL (markFailed is conditional, never downgrades a credited row).
+        await PurchaseSessions.markFailed(session.id, verification.reason);
+        continue;
+      }
+
+      // outcome === "pending" (transient). Retry next sweep; expire once the
+      // TTL passes so a session whose tx never lands cannot linger forever.
+      if (pastTtl) {
+        await PurchaseSessions.markExpired(session.id, verification.reason);
+      }
+    }
+  } catch (e) {
+    console.error("[payments] sweeper: verification pass failed:", e.message);
+  }
+}
+
+/**
+ * Schedule the sweeper ONLY when the feature is enabled (F1): no treasury
+ * config → no timer at all. Unref'd so the timer never keeps the process
+ * (or Jest) alive on its own — same hygiene as the wallet nonce sweeper.
+ * `runPaymentSweep` is exported for tests (the injected-seam pattern from
+ * Step 1/4 — the sweep body is exercised directly, no timers).
+ * @returns {import("node:timers").NodeJS.Timeout|null} the timer (for tests)
+ */
+function paymentSweeper() {
+  if (!payments.paymentsConfig().enabled) return null;
+  const timer = setInterval(() => {
+    runPaymentSweep().catch((e) =>
+      console.error("[payments] sweeper iteration failed:", e.message)
+    );
+  }, SWEEP_INTERVAL_MS);
+  if (typeof timer.unref === "function") timer.unref();
+  return timer;
+}
+
+module.exports = { paymentEndpoints, paymentSweeper, runPaymentSweep };

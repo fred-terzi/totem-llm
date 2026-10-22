@@ -226,20 +226,33 @@ const PurchaseSessions = {
     }
 
     // ── 1. Row-level claim: exactly one concurrent caller wins. ─────────
-    // Atomic conditional update — claims ONLY fresh `pending` rows with no
-    // stamped tx. A `crediting` row (in-flight claim or crash artifact) is
-    // never claimed here: in-flight means a concurrent caller owns it;
-    // crash artifacts belong to the sweeper's `resolveStuckClaim`, which
-    // checks the ledger before deciding to release or re-sync. This keeps
-    // redeem itself stateless about crash windows — it can never re-claim
-    // a row whose ledger write may have already committed.
+    // Atomic conditional update — claims a fresh `pending` row with no
+    // stamped tx, OR this same session's own earlier stamp for the SAME
+    // txHash (the sweeper-retry case, see below). A `crediting` row
+    // (in-flight claim or crash artifact) is never claimed here: in-flight
+    // means a concurrent caller owns it; crash artifacts belong to the
+    // sweeper's `resolveStuckClaim`, which checks the ledger before
+    // deciding to release or re-sync. This keeps redeem itself stateless
+    // about crash windows — it can never re-claim a row whose ledger write
+    // may have already committed.
+    //
+    // Same-session same-hash re-claim (sweeper Step 5): after a ledger-write
+    // failure, redeem releases the row to `pending` but KEEPS the tx stamp
+    // (the ledger write is known not to have committed — `Credits.credit()`
+    // throwing means its transaction rolled back). The sweeper re-verifies
+    // the receipt and calls redeem again; the claim must therefore also
+    // match `tx_hash = <this hash>` on this session or the retry could
+    // never win. This is safe because a pending+stamped row can ONLY arise
+    // from this session's own verified claim releasing on ledger failure —
+    // a stamp from a DIFFERENT session is impossible (`tx_hash @unique`),
+    // and re-stamping the same hash re-arms the F6a unique anchor.
     let claim;
     try {
       claim = await prisma.purchase_sessions.updateMany({
         where: {
           id: String(sessionId),
           status: "pending",
-          tx_hash: null,
+          OR: [{ tx_hash: null }, { tx_hash: String(txHash) }],
         },
         data: {
           status: "crediting",
@@ -326,6 +339,33 @@ const PurchaseSessions = {
   },
 
   /**
+   * Sweeper: mark a pending session expired (Step 5, AC10). Targeted
+   * companion to `expireStale` (the bulk sweep) — used when a session with
+   * a submitted tx passes its TTL without reaching a terminal state. The
+   * recorded reason is the last transient verification outcome (e.g.
+   * `tx_not_found`) rather than the generic expiry code, so the admin
+   * surface can tell an abandoned session from one whose tx never landed.
+   * Conditional on `pending` — a just-credited or in-flight session is
+   * never downgraded.
+   * @param {string} sessionId
+   * @param {string} [reason]
+   * @returns {Promise<object|null>} updated session or null
+   */
+  async markExpired(sessionId, reason = "session_expired") {
+    if (!sessionId) return null;
+    try {
+      await prisma.purchase_sessions.updateMany({
+        where: { id: String(sessionId), status: "pending" },
+        data: { status: "expired", failure_reason: String(reason) },
+      });
+      return this.getById(sessionId);
+    } catch (error) {
+      console.error("FAILED TO MARK PURCHASE SESSION EXPIRED.", error.message);
+      return null;
+    }
+  },
+
+  /**
    * Look up a session by its stamped tx hash (sweeper recovery path).
    * @param {string} txHash
    */
@@ -388,16 +428,19 @@ const PurchaseSessions = {
         return "re-synced";
       }
       // Crash window 1→2: credit never committed → release the claim.
-      // tx_hash/tx_block_number are cleared too — redeem's claim requires
-      // a fresh `pending` row with no stamp, and since the ledger row is
-      // confirmed absent, no credit ever used this stamp.
+      // status AND the claim marker drop, but `tx_hash` / `tx_block_number`
+      // are deliberately KEPT: the stamp records the tx the user actually
+      // submitted (evidence for the admin surface, F10) and the sweep loop
+      // re-verifies + re-redeems exactly that hash — redeem's claim accepts
+      // a pending row re-stamping its own hash (see the claim comment in
+      // `redeem`). Since the ledger row is confirmed absent, no credit ever
+      // used this stamp, and the @unique anchor guarantees no other session
+      // could ever have held it.
       await prisma.purchase_sessions.updateMany({
         where: { id: session.id, status: "crediting" },
         data: {
           status: "pending",
           failure_reason: null,
-          tx_hash: null,
-          tx_block_number: null,
         },
       });
       return "released";
@@ -437,12 +480,20 @@ const PurchaseSessions = {
   /**
    * Sweeper: sessions whose TTL passed while still pending (nothing
    * submittable) → expired. Returns the count marked.
+   *
+   * Sessions with a SUBMITTED txHash are deliberately excluded here: the
+   * sweeper's sweep loop re-verifies and either credits them (redeem) or
+   * fails them with a precise F5 reason — both are truer terminal states
+   * than a blanket `expired`, which would strand a possibly-valid payment
+   * (AC10's "no valid tx" phrasing). Only sessions with nothing in flight
+   * are silently expired.
    */
   async expireStale() {
     try {
       const result = await prisma.purchase_sessions.updateMany({
         where: {
           status: "pending",
+          tx_hash: null, // submitted sessions are swept, never silently expired
           expires_at: { lte: new Date() },
         },
         data: { status: "expired", failure_reason: "session_expired" },
@@ -458,7 +509,8 @@ const PurchaseSessions = {
    * Sweeper recovery candidates: sessions with a submitted-but-unconfirmed
    * txHash (pending with the hash stamped, or stuck in `crediting` from a
    * crash window). Re-running the F5 checks + redeem resolves both safely
-   * because redeem is exactly-once.
+   * because redeem is exactly-once. The owning `user` is included — the
+   * F5c payer-binding check needs the user's `wallet_address`.
    * @returns {Promise<Array>}
    */
   async findSweepable() {
@@ -469,6 +521,7 @@ const PurchaseSessions = {
       },
       orderBy: { createdAt: "asc" },
       take: 100,
+      include: { user: true },
     });
   },
 };

@@ -69,7 +69,7 @@ const { memoryEndpoints } = require("./endpoints/memory");
 const { featureEndpoints } = require("./endpoints/features");
 const { importChatgptEndpoints } = require("./endpoints/importChatgpt");
 const { creditEndpoints } = require("./endpoints/credits");
-const { paymentEndpoints } = require("./endpoints/payments");
+const { paymentEndpoints, paymentSweeper } = require("./endpoints/payments");
 const { httpLogger } = require("./middleware/httpLogger");
 const app = express();
 const apiRouter = express.Router();
@@ -178,6 +178,11 @@ featureEndpoints(apiRouter);
 importChatgptEndpoints(apiRouter);
 creditEndpoints(apiRouter);
 paymentEndpoints(apiRouter);
+// Background purchase-session sweeper (F8/AC10): no-op timer when the
+// payments feature is disabled (no treasury configured). See
+// server/endpoints/payments.js — housekeeping only, credits still flow
+// through the same single redeem path as the confirm endpoint.
+paymentSweeper();
 // Externally facing embedder endpoints
 embeddedEndpoints(apiRouter);
 
