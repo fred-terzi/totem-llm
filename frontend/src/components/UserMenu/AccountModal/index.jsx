@@ -97,7 +97,7 @@ export default function AccountModal({ user, hideModal }) {
           style={{ maxHeight: "calc(100vh - 200px)" }}
         >
           <form onSubmit={handleUpdate} className="space-y-6">
-            {__TOTEM_FEATURES__.profilePicture && (
+            {__TOTEM_FEATURES__.profilePicture?.enabled && (
               <div className="flex flex-col md:flex-row items-center justify-center gap-8">
                 <div className="flex flex-col items-center">
                   <label className="group w-48 h-48 flex flex-col items-center justify-center bg-theme-bg-primary hover:bg-theme-bg-secondary transition-colors duration-300 rounded-full mt-8 border-2 border-dashed border-white light:border-[#686C6F] light:bg-[#E0F2FE] light:hover:bg-transparent cursor-pointer hover:opacity-60">
