@@ -20,13 +20,13 @@ draft get a "Correction to Step N" note rather than silent edits.
 | 0.5 | How history is loaded into the *next* invocation. | `server/utils/agents/index.js#chatHistory` (limit 20 in `createAIbitat`) | 2026-10-23 | Confirmed — reads `include:true` rows, emits only `prompt` / `response.text` pairs. This is the reconstruction injection point: expand each pair to include tool-call assistant/tool messages built from the row's trace. |
 | 0.6 | Native provider message formatting: can it accept interleaved assistant/tool messages for *history* turns? | `providers/helpers/tooled.js#formatMessagesForTools` | 2026-10-23 | Already handles `role:"function"` + `originalFunctionCall` → synthesizes `assistant.tool_calls` + `role:"tool"` pairs. **Key design decision:** if the next-turn history emits real aibitat messages with `originalFunctionCall` metadata, `formatMessagesForTools` converts them *for free* — no provider-format changes needed. Anthropic provider has an analogous converter (verify in Step 1). |
 | 0.7 | UnTooled collapse behavior. | `providers/helpers/untooled.js#cleanMsgs` | 2026-10-23 | Confirmed — concatenates `function` content into the previous assistant message with no call labels. F8 fix lands here (label injection in `cleanMsgs` or in history expansion). |
-| 0.8 | Frontend agent event pipeline & historical message rendering contract (what fields `response` JSON the UI reads). | `frontend/src/components/WorkspaceChat/...` (`HistoricalMessage`, `PromptReply`, `ThoughtContainer`) | 2026-10-23 | To verify in Step 1: exact fields consumed (`text`, `sources`, `outputs`, `clarifyingQuestions`, `metrics`) so adding `trace` is additive-safe. |
+| 0.8 | Frontend agent event pipeline & historical message rendering contract (what fields `response` JSON the UI reads). | `frontend/src/components/WorkspaceChat/...` (`HistoricalMessage`, `PromptReply`, `ThoughtContainer`) | 2026-10-23 | **Verified — and it contradicts the Step 7 draft.** The server-side serializer `convertToChatHistory` (`server/utils/helpers/chat/responses.js:184-230`) does **not** return the whole `response` JSON — it whitelists fields (`text`, `sources`, `type`, `attachments`, `metrics`, `outputs`, `clarifyingQuestions`) and drops everything else. Both history endpoints use it: `server/endpoints/workspaceThreads.js:113-136` (thread chats) and `server/endpoints/workspaces.js:465` (workspace chats). **Correction to Step 7:** exposing `trace` requires an explicit passthrough added to `convertToChatHistory` — "no server endpoint changes" was wrong. Second finding: rows whose `data.text` is not a string are **skipped entirely** (`responses.js:197-202`) — an abort-save row with an empty `text` would be invisible to the UI; the abort save must always set `text` to at least `""`. Frontend side is additive-safe: `HistoricalMessage` destructures known props only (`HistoricalMessage/index.jsx:30` `sources = []`, etc.) and ignores unknown keys. |
 | 0.9 | Abort path end-state. | `aibitat/index.js#abort`, `chat-history.js` (`if (aibitat._aborted) return`) | 2026-10-23 | Confirmed — on abort the second listener returns early; the placeholder row stays `include:false` forever. F9 requires a new abort-time upsert. Verify where `abort()` is invoked from (socket close handler) to hook the partial-save. |
-| 0.10 | Credit debit placement relative to any new save path. | `chat-history.js#_debitCredits`, `_storeSpecial` | 2026-10-23 | Debits happen inside `_store`/`_storeSpecial` after upsert. An abort-time save (F9) must NOT re-run debit against partially-billed usage unless session usage is available at that point (verify `providerInstance.getSessionUsage()` state at abort — partial usage may already be recorded via `recordUsage`). Decide: debit-on-abort if and only if usage > 0 and row not already debited (idempotency guard needed). |
+| 0.10 | Credit debit placement relative to any new save path. | `chat-history.js#_debitCredits`, `_storeSpecial` | 2026-10-23 | Debits happen inside `_store`/`_storeSpecial` after upsert. An abort-time save (F9) must NOT re-run debit against partially-billed usage unless session usage is available at that point (verify `providerInstance.getSessionUsage()` state at abort — partial usage may already be recorded via `recordUsage`). Decide: debit-on-abort if and only if usage > 0 and row not already debited (idempotency guard needed). **Resolved same day (see 0.13):** `getSessionUsage()` (`ai-provider.js:667-671`) returns the accumulated `_sessionUsage`, which only grows via `recordUsage` — and `recordUsage` is called from the usage-bearing chunk of each stream (`tooled.js` `chunk?.usage` arrives on the *final* chunk). A stream aborted before its final chunk contributes **zero** recorded usage for that call; completed tool-loop rounds are fully counted. So abort-time debit is safe against double-charging *completed* rounds only if an application-level guard exists (Credits has none — 0.13) and debits only when session usage > 0. |
 | 0.11 | Flush target mechanics: can we upsert `response.trace` on the placeholder row without flipping `include`? | `models/workspaceChats.js#upsert`, `chat-history.js` placeholder creation | 2026-10-23 | Verified — `WorkspaceChats.upsert(id, {...})` takes an explicit payload; passing only `response` does not touch `include`. The placeholder row is created before the first LLM call (first `onMessage` listener), so `trackedChatId` exists before any tool call can complete → flushes always have a row to target. Must serialize the full buffer on every flush (last-write-wins), and flushes must NOT call `_debitCredits` / `_autoRenameThread`. |
 | 0.12 | Crash-recovery detection point: when the next invocation loads history, what distinguishes an orphaned flushed row from a normal ghost? | `AgentHandler.#chatHistory` (`include:true` filter), `WorkspaceChats.where` | 2026-10-23 | Verified — orphaned flushed rows are invisible to `#chatHistory` (`include:false`) but findable via a direct `where(workspaceId, threadId, { include: false, hasTrace: true })`-style query at the start of a new invocation in the same thread. Promotion must happen exactly once (guard: only promote rows with non-empty `response.trace` and no `stopReason`). |
-| 0.13 | Credits dedupe behavior: does `Credits.debit` guard against a repeated `reference` (e.g. `chat_<id>`), and is partial session usage readable at abort time? | `server/models/credits.js#debit`, `debitUsage`; `chat-history.js#_debitCredits`; `providerInstance.getSessionUsage()` / `recordUsage` at abort | 2026-10-23 | Pulled forward from Step 6 (0.10) — the abort-time debit decision (Step 6.4) depends on whether a second debit with the same `reference` is a no-op, and on whether `getSessionUsage()` reflects in-flight partial usage at the moment `abort()` fires. **Finding pending verification — must be resolved before Step 6 implementation**, because if Credits has no dedupe today, the abort-save debit needs an application-level guard (`_finalized` flag only covers the finalize path), which may reshape Step 6. |
-| 0.14 | Live-turn promotion race: can a second tab / concurrent invocation trigger promotion against a still-executing turn's flushed placeholder? | `chat-history.js` (first `onMessage` listener — placeholder creation), `AgentHandler` invocation entry, `workspace_chats.lastUpdatedAt` semantics | 2026-10-23 | The risk table (Step 9) flags this; the promotion query needs a recency guard so a placeholder flushed seconds ago by a *live* turn is not promoted. **Design decision:** promotion only targets rows with no `stopReason`, a non-empty `response.trace`, AND `lastUpdatedAt` older than a recency window (e.g. 2× max flush interval or 60 s, whichever is larger) — a live turn's placeholder is refreshed by each flush, so a stale `lastUpdatedAt` implies the turn is genuinely dead. Verify `lastUpdatedAt` is actually bumped by `upsert` before relying on it. |
+| 0.13 | Credits dedupe behavior: does `Credits.debit` guard against a repeated `reference` (e.g. `chat_<id>`), and is partial session usage readable at abort time? | `server/models/credits.js#debit`, `debitUsage`; `chat-history.js#_debitCredits`; `providerInstance.getSessionUsage()` / `recordUsage` at abort | 2026-10-23 | Pulled forward from Step 6 (0.10). **Verified 2026-10-23: `Credits.debit` has NO dedupe.** The `reference` (`chat_<id>`) is stored verbatim (`credits.js:186`) but never checked; `credit_transactions.reference` has no unique constraint (`schema.prisma:465-478`, only `@@index([user_id])`). A second debit with the same reference creates a second ledger row and debits again. **Consequence for Step 6:** the abort-save debit needs an application-level guard — either (a) query `credit_transactions` for an existing row with `reference: "chat_<id>"` before debiting, or (b) an `aibitat._debited` flag set by `_store`/`_storeSpecial`/abort handler. Option (a) is preferred: it survives process restarts (a crash between debit and abort-save re-debits under option (b)). Partial session usage at abort: readable via `getSessionUsage()` but only covers calls whose final usage chunk arrived (see 0.10). In-flight-call tokens are unbillable-at-abort by construction — acceptable, bounded loss. |
+| 0.14 | Live-turn promotion race: can a second tab / concurrent invocation trigger promotion against a still-executing turn's flushed placeholder? | `chat-history.js` (first `onMessage` listener — placeholder creation), `AgentHandler` invocation entry, `workspace_chats.lastUpdatedAt` semantics | 2026-10-23 | The risk table (Step 9) flags this; the promotion query needs a recency guard so a placeholder flushed seconds ago by a *live* turn is not promoted. **Design decision:** promotion only targets rows with no `stopReason`, a non-empty `response.trace`, AND `lastUpdatedAt` older than a recency window (e.g. 2× max flush interval or 60 s, whichever is larger) — a live turn's placeholder is refreshed by each flush, so a stale `lastUpdatedAt` implies the turn is genuinely dead. **`lastUpdatedAt` bump verified 2026-10-23:** `WorkspaceChats.upsert`'s update branch explicitly sets `lastUpdatedAt: new Date()` (`server/models/workspaceChats.js`, upsert → `update: { ...payload, lastUpdatedAt: new Date() }`); the column exists with `@default(now())` on `workspace_chats` (`schema.prisma:196`). The recency guard is reliable. |
 | 0.15 | Flush read-modify-write: does `WorkspaceChats.upsert` merge into existing `response` JSON, or overwrite the column wholesale? | `models/workspaceChats.js#upsert`, `chat-history.js` flush call site | 2026-10-23 | Per 0.4, `upsert` **overwrites** `response` wholesale — so the Step 2b flush cannot pass only `{ trace }`; it must read the row's current `response` first (or read-modify-write in a transaction) and re-serialize the merged object, or it will clobber keys written by the placeholder creation (e.g. `prompt`-side metadata). This also creates a race surface: a flush landing concurrently with the abort-save can resurrect a stale `response` and clobber `stopReason`/`aborted` — mitigated by the `_finalized` check on flushes (Step 6.3) plus last-write-wins serialization. |
 
 ## Step 1 — Per-provider reasoning/trace audit
@@ -184,6 +184,11 @@ capability flag on the provider instance
    `include: true`, `response.aborted: true`, `response.stopReason:
    "user_abort"`, `response.text` = whatever partial text reached the client
    (or empty), plus the trace-so-far.
+   **Correction from Step 0 (0.8):** the abort save must always set `text` to
+   a **string** (empty string is acceptable) — `convertToChatHistory` skips
+   rows whose `data.text` is not a string (`responses.js:197-202`), so a
+   non-string/missing `text` would make the aborted turn invisible in UI
+   history.
 2. Idempotency: an `aborted` row must not be re-finalized later, and must not
    double-debit (see 0.10). Guard with a flag on the row write
    (e.g. only upsert abort state if `trackedChatId` exists and
@@ -193,19 +198,38 @@ capability flag on the provider instance
    (the abort upsert already serializes the final buffer; a later flush must
    not clobber `stopReason`/`include` — the flush helper writes `trace` only
    and must check `_finalized`).
-4. Debit decision from 0.10 recorded here as a deviation if it differs from the
-   draft assumption.
+4. Debit decision from 0.10 **resolved via 0.13**: `Credits.debit` performs no
+   dedupe on `reference` (`server/models/credits.js#debit` stores but never
+   checks it), so the abort path must not blindly re-call `_debitCredits`.
+   Record as deviation: use a DB-backed guard — check
+   `credit_transactions` for `reference: "chat_<id>"` before the abort debit
+   (option (a) in 0.13; survives crashes) — and debit only when
+   `providerInstance.getSessionUsage()` totals are > 0. Completed
+   tool-loop rounds have usage already recorded; the in-flight aborted
+   stream has zero recorded usage and is unbillable at abort by construction.
+   If the reference-dedupe query races with the finalize debit in a
+   concurrent-abort scenario, accept last-write-wins on the row but add the
+   `_debited` in-process flag as a second guard (both guards together).
 
 ## Step 7 — Frontend additive exposure (F7)
 
-- History endpoints already return the full `response` JSON — adding `trace`
-  requires **no server endpoint changes**. Verify the chat-history serializers
-  (`models/workspaceChats.js` fetch paths used by `workspaceThreads.js`,
-  `chat.js`) don't strip unknown keys (they currently return whole rows).
+- **Correction from Step 0 (0.8):** history endpoints do **not** return the
+  full `response` JSON. `convertToChatHistory`
+  (`server/utils/helpers/chat/responses.js:184-230`) whitelists response keys
+  (`text`, `sources`, `type`, `attachments`, `metrics`, `outputs`,
+  `clarifyingQuestions`) and silently drops everything else; both thread and
+  workspace history endpoints route through it
+  (`server/endpoints/workspaceThreads.js:113-136`,
+  `server/endpoints/workspaces.js:465`). Exposing `trace` therefore requires
+  an explicit additive passthrough: add
+  `...(data?.trace ? { trace: data.trace } : {})` to the assistant object in
+  `convertToChatHistory`, mirroring the existing `outputs` pattern.
 - Render contract: `HistoricalMessage`/`PromptReply` must tolerate the new key
-  (they ignore unknown fields today — verify, 0.8). A minimal read-only
+  (they ignore unknown fields today — verified, 0.8). A minimal read-only
   "tool timeline" may be added in this workstream only if trivial; otherwise
   the follow-up UI workstream owns it (see spec Out-of-scope). Record decision.
+- Add one test to `trace-exposure.test.js` asserting the passthrough survives
+  the serializer (not just the DB row).
 
 ## Step 8 — Tests (merge gate)
 
@@ -237,12 +261,12 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | 3 (Anthropic converter) | Anthropic tool_use/tool_result pairing requires strictly alternating, signed thinking blocks | High | Validate pair integrity in reconstruction; drop malformed pairs to plain text (fail-open to today's behavior) with a logged warning. |
 | 2 (trace buffer) | Unbounded growth mid-turn | Medium | Cap check on every append (N6). |
 | 5 (JSON size) | `response` column size limits on SQLite/Postgres | Medium | Cap default; verify in Step 0.5/5. |
-| 6 (abort save) | Double-debit / double-finalize races | Medium | `_finalized` flag; debit idempotency via `reference: chat_<id>` (verify Credits dedupe behavior in 0.10; add guard if none). |
+| 6 (abort save) | Double-debit / double-finalize races | Medium | `_finalized` flag; **Credits has NO reference dedupe (0.13)** — guard requires both a `credit_transactions` reference check and the `_debited` in-process flag; test in `abort-partial-save.test.js`. |
 | 6 (abort save) | Abort fires mid-stream, partial text saved and shown as complete in UI | Medium | `aborted: true` + `stopReason: "user_abort"` markers distinguish the row; frontend ignores them for final rendering (verify in Step 7). |
 | 2b (flush) | Flush write latency contends with tool execution on SQLite (single-writer) | Medium | Flushes are fire-and-forget and coalesced (max one pending per turn); failure is swallowed (N12); if contention shows up in practice, add a minimum-interval throttle (e.g. ≥500 ms between flushes) — recorded as a deviation if needed. |
 | 2b/3b (flush + promotion) | A promoted crash row double-counts with the new turn's own debit, or promotion races a still-alive turn (e.g. second tab) | Medium | Promotion only targets rows with no `stopReason`, a non-empty trace, and a stale `lastUpdatedAt` (recency window, 0.14) — a live turn's placeholder is refreshed by each flush, so staleness implies a dead turn; worst case the promoted row is simply visible history, which is safe. |
 | 2b (flush) | Non-atomic read-modify-write races the abort-save / finalize upsert; a stale flush resurrects old `response` keys or clobbers `stopReason` | Medium | Flushes re-check `_finalized` immediately before the upsert and skip if claimed (Step 6.3); last-write-wins means finalize always rewrites with the full buffer (Step 5.6); worst case is a lost flush, which is bounded data loss by design (F11). |
-| 7 (frontend) | Unknown-key rejection somewhere in the render pipeline | Low | Step 7 verification; trace key is additive. |
+| 7 (frontend) | Trace dropped by the server-side history serializer before it reaches the browser | **Resolved (0.8)** | `convertToChatHistory` whitelists keys and would silently drop `trace`; Step 7 now explicitly adds the passthrough and a serializer-level test. |
 | 8 (tests) | Provider matrix drift (new providers added without trace support) | Low | Capability-flag default `false` → provider degrades to today's behavior, never breaks. |
 
 ## Step 10 — PR / status log
