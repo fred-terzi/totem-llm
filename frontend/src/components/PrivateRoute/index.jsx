@@ -45,7 +45,10 @@ function useIsAuthenticated() {
         }
 
         const isValid = await validateSessionTokenForUser();
-        setIsAuthed(isValid);
+        // isValid === null means a network failure (e.g. the app was just
+        // resumed from background on mobile) — NOT an invalid token. Only
+        // treat a definitive server rejection (false) as a logout.
+        setIsAuthed(isValid === false ? false : true);
         return;
       }
 
@@ -58,7 +61,11 @@ function useIsAuthenticated() {
       }
 
       const isValid = await validateSessionTokenForUser();
-      if (!isValid) {
+      // Only clear the stored session when the server definitively rejected
+      // the token (false). A network error (null) must preserve the session —
+      // on Android/PWA cold-starts the first fetch often fails while the
+      // network stack reconnects, and wiping storage there logged users out.
+      if (isValid === false) {
         localStorage.removeItem(AUTH_USER);
         localStorage.removeItem(AUTH_TOKEN);
         localStorage.removeItem(AUTH_TIMESTAMP);

@@ -46,10 +46,26 @@ export function AuthProvider(props) {
    * If the user is suspended, (success === false and data === null) logout the user and redirect to the login page
    * If success is true and data is not null, update the user object in the store (multi-user mode only)
    * If success is true and data is null, do nothing (single-user mode only) with or without password protection
+   *
+   * Network errors (networkError === true) NEVER log the user out. On Android
+   * PWA cold-starts / resumes-from-background the first fetch frequently fails
+   * with "Failed to fetch" before the network stack re-establishes — the JWT
+   * in storage is still valid. Wiping it there was the primary cause of the
+   * "logged out every time I open the app" reports.
    */
   useEffect(() => {
     async function refreshUser() {
-      const { success, user: refreshedUser } = await System.refreshUser();
+      const {
+        success,
+        user: refreshedUser,
+        networkError,
+        newToken,
+      } = await System.refreshUser();
+
+      // Network failure — keep the session exactly as-is and retry on the
+      // next app load. Never touch storage or redirect.
+      if (networkError) return;
+
       if (success && refreshedUser === null) return;
 
       if (!success) {
@@ -61,6 +77,12 @@ export function AuthProvider(props) {
         navigate("/login");
         return;
       }
+
+      // Sliding session: the server may re-issue the token if the current one
+      // is older than the refresh threshold (see /system/refresh-user).
+      // Storing the fresh token resets the 30-day expiry so active users
+      // never hit the wall.
+      if (newToken) localStorage.setItem(AUTH_TOKEN, newToken);
 
       localStorage.setItem(AUTH_USER, JSON.stringify(refreshedUser));
       setStore((prev) => ({

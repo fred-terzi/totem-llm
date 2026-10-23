@@ -196,18 +196,39 @@ const System = {
   },
   /**
    * Refreshes the user object from the session.
-   * @returns {Promise<{success: boolean, user: Object | null, message: string | null}>}
+   * @returns {Promise<{success: boolean, user: Object | null, message: string | null, networkError: boolean}>}
+   *   - `networkError: true` → the request never reached the server (fetch threw).
+   *     Callers MUST NOT log the user out in this case — the token may be perfectly
+   *     valid; the device's network stack just wasn't ready (common on Android PWA
+   *     cold-starts / resumes from background).
+   *   - `success: false, networkError: false` → the server definitively rejected
+   *     the session (expired/invalid token, suspended user). Safe to log out.
    */
   refreshUser: () => {
     return fetch(`${API_BASE}/system/refresh-user`, {
       headers: baseHeaders(),
     })
-      .then((res) => {
+      .then(async (res) => {
+        const data = await res.json();
+        // HTTP-level rejection (401 from validatedRequest) — definite bad token.
+        if (!res.ok && res.status === 401)
+          return {
+            success: false,
+            user: null,
+            message: "Session expired or invalid.",
+            networkError: false,
+          };
         if (!res.ok) throw new Error("Could not refresh user.");
-        return res.json();
+        return { ...data, networkError: false };
       })
       .catch((e) => {
-        return { success: false, user: null, message: e.message };
+        // fetch threw → network-level failure, NOT an expired session.
+        return {
+          success: false,
+          user: null,
+          message: e.message,
+          networkError: true,
+        };
       });
   },
   recoverAccount: async function (username, recoveryCodes) {

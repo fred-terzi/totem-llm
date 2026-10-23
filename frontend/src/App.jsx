@@ -10,7 +10,7 @@ import { PfpProvider } from "./PfpContext";
 import { LogoProvider } from "./LogoContext";
 import { FullScreenLoader } from "./components/Preloader";
 import { ThemeProvider } from "./ThemeContext";
-import { PWAModeProvider } from "./PWAContext";
+import { PWAModeProvider, requestPersistentStorage } from "./PWAContext";
 import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 import ImageLightbox from "@/components/ImageLightbox";
 import { ErrorBoundary } from "react-error-boundary";
@@ -62,6 +62,13 @@ export default function App() {
   useBackendOfflineNotifications();
   useAppBadgeListener();
   useIOSPushPrompt();
+
+  // Ask the browser to mark this origin's storage as persistent so the auth
+  // token in localStorage is never evicted under storage pressure (the
+  // silent-logout cause on installed Android PWAs). Idempotent.
+  useEffect(() => {
+    requestPersistentStorage();
+  }, []);
 
   return (
     <ErrorBoundary

@@ -142,7 +142,12 @@ function systemEndpoints(app) {
    * Refreshes the user object from the session from a provided token.
    * This does not refresh the token itself - if that is expired or invalid, the user will be logged out.
    * This simply keeps the user object in sync with the database over the course of the session.
-   * @returns {Promise<{success: boolean, user: Object | null, message: string | null}>}
+   *
+   * Sliding sessions: when the incoming JWT is older than TOKEN_REFRESH_THRESHOLD_MS
+   * (default 7 days), a fresh JWT is issued (resetting the full 30-day expiry) and
+   * returned as `newToken`. The frontend stores it, so active users never hit the
+   * expiry wall while idle/abandoned sessions still expire naturally.
+   * @returns {Promise<{success: boolean, user: Object | null, message: string | null, newToken?: string}>}
    */
   app.get(
     "/system/refresh-user",
@@ -169,10 +174,43 @@ function systemEndpoints(app) {
             message: "User is suspended.",
           });
 
+        // --- Sliding session: re-issue the token when it's aging ---
+        // Read the token's issued-at time from the JWT payload. If it's older
+        // than the threshold, mint a new 30-day token so an active user's
+        // session never expires as long as they keep opening the app.
+        let newToken = null;
+        try {
+          const auth = request.header("Authorization");
+          const token = auth ? auth.split(" ")[1] : null;
+          const THRESHOLD_MS = parseInt(
+            process.env.JWT_REFRESH_THRESHOLD_MS ||
+              String(7 * 24 * 60 * 60 * 1000),
+            10
+          );
+          if (token) {
+            const { decodeJWT } = require("../utils/http");
+            const payload = decodeJWT(token);
+            const issuedAtMs = payload?.iat ? payload.iat * 1000 : 0;
+            if (issuedAtMs && Date.now() - issuedAtMs > THRESHOLD_MS) {
+              newToken = makeJWT(
+                { id: user.id, username: user.username },
+                process.env.JWT_EXPIRY || "30d"
+              );
+            }
+          }
+        } catch (tokenErr) {
+          // Token refresh is best-effort — never fail the user refresh over it.
+          console.error(
+            "/system/refresh-user token slide failed:",
+            tokenErr.message
+          );
+        }
+
         return response.status(200).json({
           success: true,
           user: User.filterFields(user),
           message: null,
+          ...(newToken ? { newToken } : {}),
         });
       } catch (e) {
         return response.status(500).json({

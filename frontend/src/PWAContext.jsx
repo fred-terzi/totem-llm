@@ -88,6 +88,31 @@ export function PWAModeProvider({ children }) {
   );
 }
 
+/**
+ * Requests persistent storage for the origin. On Android Chrome, localStorage
+ * (where the auth token lives) is "best-effort" by default and can be evicted
+ * under storage pressure — silently logging the user out of installed PWAs.
+ * Calling navigator.storage.persist() marks the origin's storage as persistent
+ * so Chrome won't evict it. Idempotent and safe to call on every load.
+ */
+export async function requestPersistentStorage() {
+  try {
+    if (typeof navigator === "undefined" || !navigator.storage?.persist)
+      return false;
+    const alreadyPersisted = await navigator.storage.persisted();
+    if (alreadyPersisted) return true;
+    const granted = await navigator.storage.persist();
+    if (!granted)
+      console.warn(
+        "[PWA] Persistent storage permission not granted — auth token may be evicted under storage pressure."
+      );
+    return granted;
+  } catch (e) {
+    console.warn("[PWA] storage.persist() failed:", e?.message);
+    return false;
+  }
+}
+
 export function usePWAMode() {
   return useContext(PWAModeContext);
 }
