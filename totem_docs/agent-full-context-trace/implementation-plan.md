@@ -1,7 +1,7 @@
 # Implementation Plan — Agent Full-Context Trace
 
 Companion to `requirement-spec.md`. All paths relative to repo root.
-Requirement IDs (F1–F10, N1–N10, AC1–AC15) refer to the spec.
+Requirement IDs (F1–F13, N1–N12, AC1–AC21) refer to the spec.
 
 ---
 
@@ -25,6 +25,9 @@ draft get a "Correction to Step N" note rather than silent edits.
 | 0.10 | Credit debit placement relative to any new save path. | `chat-history.js#_debitCredits`, `_storeSpecial` | 2026-10-23 | Debits happen inside `_store`/`_storeSpecial` after upsert. An abort-time save (F9) must NOT re-run debit against partially-billed usage unless session usage is available at that point (verify `providerInstance.getSessionUsage()` state at abort — partial usage may already be recorded via `recordUsage`). Decide: debit-on-abort if and only if usage > 0 and row not already debited (idempotency guard needed). |
 | 0.11 | Flush target mechanics: can we upsert `response.trace` on the placeholder row without flipping `include`? | `models/workspaceChats.js#upsert`, `chat-history.js` placeholder creation | 2026-10-23 | Verified — `WorkspaceChats.upsert(id, {...})` takes an explicit payload; passing only `response` does not touch `include`. The placeholder row is created before the first LLM call (first `onMessage` listener), so `trackedChatId` exists before any tool call can complete → flushes always have a row to target. Must serialize the full buffer on every flush (last-write-wins), and flushes must NOT call `_debitCredits` / `_autoRenameThread`. |
 | 0.12 | Crash-recovery detection point: when the next invocation loads history, what distinguishes an orphaned flushed row from a normal ghost? | `AgentHandler.#chatHistory` (`include:true` filter), `WorkspaceChats.where` | 2026-10-23 | Verified — orphaned flushed rows are invisible to `#chatHistory` (`include:false`) but findable via a direct `where(workspaceId, threadId, { include: false, hasTrace: true })`-style query at the start of a new invocation in the same thread. Promotion must happen exactly once (guard: only promote rows with non-empty `response.trace` and no `stopReason`). |
+| 0.13 | Credits dedupe behavior: does `Credits.debit` guard against a repeated `reference` (e.g. `chat_<id>`), and is partial session usage readable at abort time? | `server/models/credits.js#debit`, `debitUsage`; `chat-history.js#_debitCredits`; `providerInstance.getSessionUsage()` / `recordUsage` at abort | 2026-10-23 | Pulled forward from Step 6 (0.10) — the abort-time debit decision (Step 6.4) depends on whether a second debit with the same `reference` is a no-op, and on whether `getSessionUsage()` reflects in-flight partial usage at the moment `abort()` fires. **Finding pending verification — must be resolved before Step 6 implementation**, because if Credits has no dedupe today, the abort-save debit needs an application-level guard (`_finalized` flag only covers the finalize path), which may reshape Step 6. |
+| 0.14 | Live-turn promotion race: can a second tab / concurrent invocation trigger promotion against a still-executing turn's flushed placeholder? | `chat-history.js` (first `onMessage` listener — placeholder creation), `AgentHandler` invocation entry, `workspace_chats.lastUpdatedAt` semantics | 2026-10-23 | The risk table (Step 9) flags this; the promotion query needs a recency guard so a placeholder flushed seconds ago by a *live* turn is not promoted. **Design decision:** promotion only targets rows with no `stopReason`, a non-empty `response.trace`, AND `lastUpdatedAt` older than a recency window (e.g. 2× max flush interval or 60 s, whichever is larger) — a live turn's placeholder is refreshed by each flush, so a stale `lastUpdatedAt` implies the turn is genuinely dead. Verify `lastUpdatedAt` is actually bumped by `upsert` before relying on it. |
+| 0.15 | Flush read-modify-write: does `WorkspaceChats.upsert` merge into existing `response` JSON, or overwrite the column wholesale? | `models/workspaceChats.js#upsert`, `chat-history.js` flush call site | 2026-10-23 | Per 0.4, `upsert` **overwrites** `response` wholesale — so the Step 2b flush cannot pass only `{ trace }`; it must read the row's current `response` first (or read-modify-write in a transaction) and re-serialize the merged object, or it will clobber keys written by the placeholder creation (e.g. `prompt`-side metadata). This also creates a race surface: a flush landing concurrently with the abort-save can resurrect a stale `response` and clobber `stopReason`/`aborted` — mitigated by the `_finalized` check on flushes (Step 6.3) plus last-write-wins serialization. |
 
 ## Step 1 — Per-provider reasoning/trace audit
 
@@ -74,10 +77,14 @@ tool loop) and never touch `include`, debits, or rename (N11).
    trace buffer, schedule a flush (coalesced: if a flush is already pending,
    skip scheduling another — the pending one serializes the newer buffer).
 2. **Flush implementation** — in `chat-history.js`, a `_flushTrace()` helper:
-   `WorkspaceChats.upsert(aibitat.trackedChatId, { response: { ...latest,
-   trace: serialized buffer } })`. Must merge with any prior `response` keys
-   (text stays whatever it was — empty until finalize). Serialize the **full**
-   buffer every time (last-write-wins), re-check the N6 size cap at flush time.
+   read the placeholder row's current `response` JSON, merge in `trace:
+   serialized buffer`, and upsert the merged object. `WorkspaceChats.upsert`
+   overwrites `response` wholesale (0.4/0.15), so the read-modify-write is
+   mandatory — a bare `{ trace }` upsert would clobber existing keys. Serialize
+   the **full** buffer every time (last-write-wins), re-check the N6 size cap at
+   flush time. Because the read and write are not atomic, flushes must check
+   `aibitat._finalized` immediately before the upsert and skip if the
+   abort-save or finalize has already claimed the row (Step 6.3).
 3. **Failure handling** — try/catch around the upsert; on error log and drop
    (N12). Never throw into the tool loop.
 4. **Serialized shape** — same as Step 5's finalize shape, so a crash leaves a
@@ -208,9 +215,10 @@ All in `server/__tests__/utils/agents/`:
 |-----------|--------|
 | `trace-buffer.test.js` | Step 2: append ordering, llmCall numbering, cap/truncation marker, clear. |
 | `providers/helpers/tooled.trace.test.js` | Step 3: `reasoning` surfaced on tool-call and text branches; no double-strip. |
-| `agent-history-reconstruction.test.js` | Step 3.3: next-turn messages contain synthesized tool_calls/tool pairs; N5 truncation marker. |
+| `agent-history-reconstruction.test.js` | Step 3.3: next-turn messages contain synthesized tool_calls/tool pairs; N5 truncation marker; AC21 strict-shape provider receives only valid pairs (malformed pairs degrade to plain text). |
 | `untooled.labels.test.js` | AC7: labeled collapse format. |
 | `chat-history.trace.test.js` | Step 5: trace in upsert payload, `_cleanup` clears buffer, N10 failure isolation, N2 same-row upsert. |
+| `trace-exposure.test.js` | AC20 (F7): workspace thread history fetch returns `response.trace` intact for traced rows. |
 | `trace-flush.test.js` | Step 2b: flush after each completed tool call keeps `include:false`, no debit, full-buffer last-write-wins serialization, failure is swallowed (AC16, AC19). |
 | `stop-reason.test.js` | Step 3b/5/6: `completed` on finalize, `user_abort` on abort, `provider_error` on provider exception (AC17). |
 | `crash-recovery.test.js` | Step 3b: orphaned flushed row promoted once with `stopReason: "interrupted"` on next invocation; promotion excluded for rows without trace (AC18). |
@@ -232,7 +240,8 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | 6 (abort save) | Double-debit / double-finalize races | Medium | `_finalized` flag; debit idempotency via `reference: chat_<id>` (verify Credits dedupe behavior in 0.10; add guard if none). |
 | 6 (abort save) | Abort fires mid-stream, partial text saved and shown as complete in UI | Medium | `aborted: true` + `stopReason: "user_abort"` markers distinguish the row; frontend ignores them for final rendering (verify in Step 7). |
 | 2b (flush) | Flush write latency contends with tool execution on SQLite (single-writer) | Medium | Flushes are fire-and-forget and coalesced (max one pending per turn); failure is swallowed (N12); if contention shows up in practice, add a minimum-interval throttle (e.g. ≥500 ms between flushes) — recorded as a deviation if needed. |
-| 2b/3b (flush + promotion) | A promoted crash row double-counts with the new turn's own debit, or promotion races a still-alive turn (e.g. second tab) | Medium | Promotion only targets rows with no `stopReason` and a non-empty trace; a live turn would have flushed recently but its placeholder is distinguishable by invocation recency — verify in Step 0 follow-up; worst case the promoted row is simply visible history, which is safe. |
+| 2b/3b (flush + promotion) | A promoted crash row double-counts with the new turn's own debit, or promotion races a still-alive turn (e.g. second tab) | Medium | Promotion only targets rows with no `stopReason`, a non-empty trace, and a stale `lastUpdatedAt` (recency window, 0.14) — a live turn's placeholder is refreshed by each flush, so staleness implies a dead turn; worst case the promoted row is simply visible history, which is safe. |
+| 2b (flush) | Non-atomic read-modify-write races the abort-save / finalize upsert; a stale flush resurrects old `response` keys or clobbers `stopReason` | Medium | Flushes re-check `_finalized` immediately before the upsert and skip if claimed (Step 6.3); last-write-wins means finalize always rewrites with the full buffer (Step 5.6); worst case is a lost flush, which is bounded data loss by design (F11). |
 | 7 (frontend) | Unknown-key rejection somewhere in the render pipeline | Low | Step 7 verification; trace key is additive. |
 | 8 (tests) | Provider matrix drift (new providers added without trace support) | Low | Capability-flag default `false` → provider degrades to today's behavior, never breaks. |
 
