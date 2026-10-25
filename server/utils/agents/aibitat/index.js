@@ -381,9 +381,7 @@ class AIbitat {
    */
   static traceMaxBytes() {
     const envMax = parseInt(process.env.AGENT_TRACE_MAX_BYTES, 10);
-    return !isNaN(envMax) && envMax > 0
-      ? envMax
-      : 2 * 1024 * 1024; // 2 MB default
+    return !isNaN(envMax) && envMax > 0 ? envMax : 2 * 1024 * 1024; // 2 MB default
   }
 
   /**
@@ -454,9 +452,7 @@ class AIbitat {
    */
   static traceFlushIntervalMs() {
     const envMs = parseInt(process.env.AGENT_TRACE_FLUSH_INTERVAL_MS, 10);
-    return !isNaN(envMs) && envMs >= 0
-      ? envMs
-      : 500; // default-on throttle: cheap insurance on SQLite's single writer
+    return !isNaN(envMs) && envMs >= 0 ? envMs : 500; // default-on throttle: cheap insurance on SQLite's single writer
   }
 
   /**
@@ -1322,14 +1318,20 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     // Trace capture for this round (Step 2 — agent-full-context-trace):
     // reasoning (when the provider surfaced it) then the assistant's
     // pre-tool / final text, in the order the model produced them.
-    if (typeof completionStream?.reasoning === "string" && completionStream.reasoning.trim()) {
+    if (
+      typeof completionStream?.reasoning === "string" &&
+      completionStream.reasoning.trim()
+    ) {
       this._appendTraceEntry({
         type: "reasoning",
         llmCall: traceLlmCall,
         text: completionStream.reasoning,
       });
     }
-    if (typeof completionStream?.textResponse === "string" && completionStream.textResponse) {
+    if (
+      typeof completionStream?.textResponse === "string" &&
+      completionStream.textResponse
+    ) {
       this._appendTraceEntry({
         type: "llm_text",
         llmCall: traceLlmCall,
@@ -1543,14 +1545,20 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     // Trace capture for this round (Step 2 — agent-full-context-trace):
     // reasoning (when the provider surfaced it) then the assistant's
     // pre-tool / final text, in the order the model produced them.
-    if (typeof completion?.reasoning === "string" && completion.reasoning.trim()) {
+    if (
+      typeof completion?.reasoning === "string" &&
+      completion.reasoning.trim()
+    ) {
       this._appendTraceEntry({
         type: "reasoning",
         llmCall: traceLlmCall,
         text: completion.reasoning,
       });
     }
-    if (typeof completion?.textResponse === "string" && completion.textResponse) {
+    if (
+      typeof completion?.textResponse === "string" &&
+      completion.textResponse
+    ) {
       this._appendTraceEntry({
         type: "llm_text",
         llmCall: traceLlmCall,

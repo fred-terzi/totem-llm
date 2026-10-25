@@ -380,7 +380,9 @@ const chatHistory = {
               // Still over — give up on contents entirely, keep the skeleton.
               return {
                 entries: trimmedEntries.map((e) =>
-                  e?.type === "tool_result" ? { ...e, content: "[truncated]" } : e
+                  e?.type === "tool_result"
+                    ? { ...e, content: "[truncated]" }
+                    : e
                 ),
                 llmCalls: trace.llmCalls,
                 truncated: true,
@@ -437,7 +439,9 @@ const chatHistory = {
 
           // Read current response so the upsert does not clobber keys
           // written by placeholder creation (prompt-side metadata, etc.).
-          const { WorkspaceChats } = require("../../../../models/workspaceChats");
+          const {
+            WorkspaceChats,
+          } = require("../../../../models/workspaceChats");
           const existing = await WorkspaceChats.get({
             id: Number(chatId),
             user_id: invocation.user_id || null,

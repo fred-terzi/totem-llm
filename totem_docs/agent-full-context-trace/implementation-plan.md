@@ -108,6 +108,47 @@ Implement `aibitat._traceBuffer` (array of ordered entries):
 - Public accessors: `aibitat.getTrace()`, `aibitat.clearTrace()`.
 - **Deviations from the original draft:** (record as they occur)
 
+### Step 2 deviations (implemented in commit `416da428`, 2026-10-24)
+
+1. **Buffer fields are private with method-level accessors, as drafted — plus
+   running-size accounting.** `_traceBytes` tracks the running serialized size
+   (sum of `Buffer.byteLength(JSON.stringify(entry))` per entry, computed at
+   append time; unserializable entries count as 0 bytes rather than throwing).
+   The N6 cap check compares `running + entry size > AGENT_TRACE_MAX_BYTES`
+   (default 2 MB, env-tunable, parsed in `AIbitat.traceMaxBytes()`).
+2. **`llmCall` counter placement:** `_nextTraceLlmCall()` is called at the top
+   of both `handleAsyncExecution` and `handleExecution` — *before* the provider
+   call, not after — so an aborted/in-flight final call still consumes an index.
+   Harmless (the index is only stamped on entries that actually get appended).
+3. **Reasoning/llm_text capture reads optional return fields now, threading
+   later.** The handlers append `reasoning` / `llm_text` entries whenever the
+   completion object carries a non-empty `reasoning` string (and non-empty
+   `textResponse` for `llm_text`). Providers do not return `reasoning` yet
+   (that is Step 3), so these entries are dormant until then — the append sites
+   are already correct and tested via fake providers.
+4. **Entry shape:** `tool_call.callId` is taken from
+   `completionStream.functionCall?.id ?? null` — aibitat does not synthesize
+   call IDs for providers whose functionCall lacks one (UnTooled paths). The
+   trace stores `arguments` verbatim from the provider (string or object);
+   parsing stays in the tooled helpers, per the existing division of labor.
+5. **Unknown-function branch is traced too:** a call to a nonexistent tool
+   appends the `tool_call` plus a `tool_result` with the
+   `Function "<name>" not found.` error content — matching the `role:"function"
+   message the recursion actually sees.
+6. **Flush plumbing lives on aibitat, persistence in the plugin (ownership
+   split):** `aibitat.scheduleTraceFlush()` owns coalescing (`_traceFlushPending`)
+   and throttling (`_traceFlushLastRunAt` vs `AGENT_TRACE_FLUSH_INTERVAL_MS`,
+   default 500 ms) and calls the blind optional hook `this.flushTrace?.()`;
+   the chat-history plugin attaches `aibitat.flushTrace = () =>
+   this._flushTrace(aibitat)` at setup. The draft implied the plugin would
+   own scheduling too — it does not; the scheduler stays dumb so it never
+   throws into the tool loop and works in deployments without the plugin.
+7. **Step 5.1/5.2 landed early with Step 2** (same commit): finalize
+   (`_store`/`_storeSpecial`) drains the trace into the upsert payload via
+   `_serializeTrace` (fail-open → `trace: null`, N10), and `_cleanup()` calls
+   `clearTrace()` alongside the other pending buffers. See Step 5 deviations
+   for what that changed.
+
 ## Step 2b — Incremental trace flush (F11, F12 partial, N11, N12)
 
 Adds durable mid-turn persistence so a Stop or crash loses at most the single
@@ -144,6 +185,44 @@ tool loop) and never touch `include`, debits, or rename (N11).
    row whose `response.trace` is already in final form; finalize later simply
    rewrites it with the complete buffer plus text/metrics.
 5. **Deviations from the original draft:** (record as they occur)
+
+### Step 2b deviations (implemented in commit `416da428`, 2026-10-24)
+
+1. **Flush target resolution uses `WorkspaceChats.get` + explicit
+   `user_id` matching** per the review finding: the flush reads the row via
+   `WorkspaceChats.get({ id, user_id: invocation.user_id || null })` and passes
+   the same `user: { id }` shape to `upsert`, so the where-clause matches the
+   placeholder row the way the finalize path does.
+2. **Graduated write-time truncation added to `_serializeTrace`** (beyond the
+   plan's "re-check cap at flush time"): if the serialized trace still exceeds
+   the max despite append-time capping (e.g. the env cap was lowered between
+   appends and flush, or accounting drift), the serializer first trims
+   `tool_result.content` strings to 1024 chars; if still over, it degrades
+   tool_result contents to `"[truncated]"` skeletons — always preserving the
+   entry list and `llmCalls`, and marking `truncated: true` (N6/AC).
+3. **Cap constant duplicated, not imported:** `_serializeTrace` mirrors
+   `AIbitat.traceMaxBytes()`'s default locally (with the same env override)
+   instead of requiring aibitat from the plugin — the comment marks it
+   deliberate (avoids a plugin→core require-direction wrinkle). If the env var
+   changes between aibitat and plugin reads they agree, since both parse the
+   same variable; drift risk is noted here for the record.
+4. **Double ownership check:** `_flushTrace` checks `_aborted || _finalized`
+   *before* doing any DB work **and re-checks both plus
+   `trackedChatId === chatId` after the read await** — the post-await recheck
+   closes the read-modify-write window where finalize/abort claims the row
+   while the flush holds a stale read (plan Step 6.3 / 0.15 race).
+5. **`_finalized` is pre-wired but not yet set anywhere** (as of this commit).
+   The flag is checked by the flush guards per plan Step 6.3, but the writers
+   that would set it (abort save, and optionally `_store`) are Step 6 scope.
+   Until then the guards are effectively `_aborted` + `trackedChatId` only —
+   which is complete for the current writer set, because finalize's upsert is
+   synchronous with the tool loop unwind (no pending flush can interleave
+   after `_cleanup()` clears `trackedChatId`, and the trackedChatId guard
+   covers exactly that ordering).
+6. **Flush upsert deliberately omits `include`** (N11) with a code comment
+   explaining that the create-branch default (`true`) never applies because
+   the placeholder row is guaranteed to pre-exist (plan 0.11) — deviation in
+   documentation only; behavior matches the plan.
 
 ## Step 3 — Provider adapters: surface reasoning + history reconstruction
 
@@ -258,6 +337,34 @@ capability flag on the provider instance
 6. Finalize **overwrites** whatever partial `response.trace` flushes wrote
    (Step 2b) with the full buffer — the finalize write remains the single
    authoritative version of the turn.
+
+### Step 5 deviations (partially implemented early, in commit `416da428`)
+
+Items 5.1, 5.2, and 5.4 landed with Step 2 (same commit) since the finalize
+path is where the buffer gets drained; the rest of Step 5 is unaffected.
+
+1. **5.1 done, with one shape choice:** `_store`/`_storeSpecial` call the
+   plugin's `_serializeTrace(aibitat)` and put the result under
+   `response.trace` in the upsert payload. The serialized shape is
+   `{ entries, llmCalls, truncated }` exactly as drafted — except that
+   `response.stopReason` is **not yet written** (Step 3b scope; the plan's
+   Step 5.1 draft bundled it, it is deferred to its own step).
+2. **5.2 done:** `_cleanup()` calls `aibitat.clearTrace?.()` first, then
+   `clearTrackedChatId()` — the ordering matters because a coalesced flush
+   firing after cleanup is caught by the `trackedChatId` guard.
+3. **5.4 done, wording resolved as the plan's note suggested:** the trace is
+   serialized in its own try/catch (`_serializeTrace` returns `null` on any
+   error and logs `[AgentTrace]`), so a trace failure can never abort the
+   primary upsert — the row saves with `trace: null`. Covered by the
+   "trace serialization failure is fail-open" test.
+4. **5.3 partially superseded:** the append-time cap (Step 2) plus the
+   graduated flush-time truncation (Step 2b deviation 2) make a separate
+   finalize-time size check redundant — `_serializeTrace` applies the same
+   write-time guard on every write path (flush and finalize alike).
+5. **5.5 decided:** keep-in-JSON confirmed (no schema change made;
+   `response` remains a plain String column — Prisma serializes the payload
+   object). 2 MB cap validated in tests via small `AGENT_TRACE_MAX_BYTES`
+   values; no SQLite/Postgres size issue at that cap.
 
 ## Step 6 — Abort-time partial save (F9, F12, AC8)
 
@@ -379,8 +486,8 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 
 | PR | Contents | Status |
 |----|----------|--------|
-| (pending) | Steps 1–2 (audit + buffer) | 🔲 |
-| (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 🔲 |
+| (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
+| (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b 🔲 |
 | (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 🔲 |
-| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 🔲 |
-| (pending) | Step 8 tests + docs (README) | 🔲 |
+| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 partially done (see Step 5 deviations); 6–7 🔲 |
+| (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
