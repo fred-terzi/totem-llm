@@ -127,6 +127,60 @@ class AIbitat {
      * @type {boolean}
      */
     this._aborted = false;
+
+    /**
+     * Ordered trace of the current turn's intermediate agent activity
+     * (reasoning blocks, pre-tool assistant text, tool calls, tool results).
+     * Appended by `handleAsyncExecution`/`handleExecution` at the same sites
+     * the `role:"function"` messages are appended. Drained by the chat-history
+     * plugin at finalize/abort time and by incremental flushes
+     * (agent-full-context-trace plan, Steps 2b/5).
+     * @type {Array<{
+     *   type: "reasoning"|"tool_call"|"tool_result"|"llm_text"|"truncation_marker",
+     *   llmCall?: number,
+     *   callId?: string|null,
+     *   name?: string,
+     *   arguments?: any,
+     *   text?: string,
+     *   content?: any
+     * }>}
+     */
+    this._traceBuffer = [];
+
+    /**
+     * Number of LLM calls made this turn. Bumped at each
+     * `providerInstance.stream`/`providerInstance.complete` call; used as the
+     * 1-based `llmCall` index on trace entries.
+     * @type {number}
+     */
+    this._traceLlmCalls = 0;
+
+    /**
+     * True once the trace hit the size cap and a single `truncation_marker`
+     * entry was recorded (N6). No further entries are appended after it.
+     * @type {boolean}
+     */
+    this._traceTruncated = false;
+
+    /**
+     * Running serialized size of the trace buffer in bytes, for the
+     * append-time cap check (N6).
+     * @type {number}
+     */
+    this._traceBytes = 0;
+
+    /**
+     * Step 2b incremental trace flush state (F11/N11/N12).
+     * `_traceFlushPending` coalesces bursts: while a flush is queued, further
+     * tool completions skip scheduling (the queued flush serializes the newer
+     * buffer). `_traceFlushLastRunAt` throttles flushes to a minimum interval
+     * so SQLite's single writer is not hammered (default 500 ms).
+     * @type {boolean}
+     */
+    this._traceFlushPending = false;
+
+    /** @type {number} timestamp (ms) of the last executed flush */
+    this._traceFlushLastRunAt = 0;
   }
 
   /**
@@ -318,6 +372,137 @@ class AIbitat {
     const attachments = [...this._toolAttachments];
     this._toolAttachments = [];
     return attachments;
+  }
+
+  /**
+   * Maximum serialized size (bytes) a single turn's trace may grow to before
+   * it is truncated (N6). Env-tunable via `AGENT_TRACE_MAX_BYTES`.
+   * @returns {number}
+   */
+  static traceMaxBytes() {
+    const envMax = parseInt(process.env.AGENT_TRACE_MAX_BYTES, 10);
+    return !isNaN(envMax) && envMax > 0
+      ? envMax
+      : 2 * 1024 * 1024; // 2 MB default
+  }
+
+  /**
+   * Bump and return the 1-based LLM call counter for this turn.
+   * Called once per `providerInstance.stream`/`providerInstance.complete`
+   * invocation from the tool-execution loops.
+   * @returns {number} The index to stamp on this round's trace entries.
+   */
+  _nextTraceLlmCall() {
+    this._traceLlmCalls += 1;
+    return this._traceLlmCalls;
+  }
+
+  /**
+   * Append an entry to the trace buffer with append-time cap enforcement (N6).
+   * Once the running serialized size exceeds `AGENT_TRACE_MAX_BYTES`, a single
+   * `{ type: "truncation_marker" }` entry is pushed and all subsequent appends
+   * are dropped for the rest of the turn.
+   * @param {object} entry - A trace entry (see `_traceBuffer` shape).
+   */
+  _appendTraceEntry(entry) {
+    if (!entry || this._traceTruncated) return;
+
+    let size = 0;
+    try {
+      size = Buffer.byteLength(JSON.stringify(entry));
+    } catch {
+      size = 0; // unserializable entry content is treated as free
+    }
+
+    if (this._traceBytes + size > AIbitat.traceMaxBytes()) {
+      this._traceTruncated = true;
+      this._traceBuffer.push({ type: "truncation_marker" });
+      return;
+    }
+
+    this._traceBytes += size;
+    this._traceBuffer.push(entry);
+  }
+
+  /**
+   * Get the current turn's trace in its persistable serialized shape
+   * (matches the `response.trace` payload written by the chat-history plugin).
+   * @returns {{entries: Array<object>, llmCalls: number, truncated: boolean}}
+   */
+  getTrace() {
+    return {
+      entries: [...this._traceBuffer],
+      llmCalls: this._traceLlmCalls,
+      truncated: this._traceTruncated,
+    };
+  }
+
+  /**
+   * Clear the trace buffer and reset the cap accounting.
+   * Called by the chat-history plugin after persisting a turn.
+   */
+  clearTrace() {
+    this._traceBuffer = [];
+    this._traceLlmCalls = 0;
+    this._traceTruncated = false;
+    this._traceBytes = 0;
+  }
+
+  /**
+   * Minimum interval (ms) between incremental trace flushes (Step 2b).
+   * @returns {number}
+   */
+  static traceFlushIntervalMs() {
+    const envMs = parseInt(process.env.AGENT_TRACE_FLUSH_INTERVAL_MS, 10);
+    return !isNaN(envMs) && envMs >= 0
+      ? envMs
+      : 500; // default-on throttle: cheap insurance on SQLite's single writer
+  }
+
+  /**
+   * Schedule a fire-and-forget incremental trace flush (F11, Step 2b).
+   *
+   * Called immediately after a completed tool call's `tool_result` entry is
+   * appended to the trace buffer. Coalesced (max one pending flush per turn —
+   * the pending flush serializes the newest buffer when it runs) and
+   * throttled to `AGENT_TRACE_FLUSH_INTERVAL_MS` (default 500 ms).
+   *
+   * Contract (N11/N12): flushes never flip `include`, never debit credits,
+   * never trigger thread rename, and never throw into the tool loop — the
+   * chat-history plugin's `_flushTrace` handles all persistence concerns and
+   * swallows its own errors. All guards (trackedChatId presence, _aborted /
+   * _finalized ownership) live in `_flushTrace` so this scheduler stays dumb.
+   */
+  scheduleTraceFlush() {
+    if (this._traceFlushPending) return; // coalesced — pending flush sees newest buffer
+
+    const now = Date.now();
+    const elapsed = now - this._traceFlushLastRunAt;
+    const interval = AIbitat.traceFlushIntervalMs();
+
+    const run = () => {
+      this._traceFlushPending = false;
+      this._traceFlushLastRunAt = Date.now();
+      // `flushTrace` is attached by the chat-history plugin (Step 2b).
+      // Optional chaining keeps this a no-op in deployments/tests without it.
+      try {
+        this.flushTrace?.();
+      } catch (e) {
+        // Never throw into the tool loop (N12).
+        this.handlerProps?.log?.(
+          `[debug]: trace flush scheduling error (dropped): ${e.message}`
+        );
+      }
+    };
+
+    const wait = Math.max(0, interval - elapsed);
+    if (wait === 0) {
+      run();
+      return;
+    }
+
+    this._traceFlushPending = true;
+    setTimeout(run, wait);
   }
 
   /**
@@ -1129,9 +1314,28 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     if (depth === 0) this?.flushRoutingMetadata?.(v4());
 
     /** @type {{ functionCall: { name: string, arguments: string }, textResponse: string }} */
+    const traceLlmCall = this._nextTraceLlmCall();
     const completionStream = await this.#safeProviderCall(() =>
       this.providerInstance.stream(messages, functions, eventHandler)
     );
+
+    // Trace capture for this round (Step 2 — agent-full-context-trace):
+    // reasoning (when the provider surfaced it) then the assistant's
+    // pre-tool / final text, in the order the model produced them.
+    if (typeof completionStream?.reasoning === "string" && completionStream.reasoning.trim()) {
+      this._appendTraceEntry({
+        type: "reasoning",
+        llmCall: traceLlmCall,
+        text: completionStream.reasoning,
+      });
+    }
+    if (typeof completionStream?.textResponse === "string" && completionStream.textResponse) {
+      this._appendTraceEntry({
+        type: "llm_text",
+        llmCall: traceLlmCall,
+        text: completionStream.textResponse,
+      });
+    }
 
     if (completionStream.functionCall) {
       const { name, arguments: args } = completionStream.functionCall;
@@ -1148,6 +1352,19 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       }
 
       if (!fn) {
+        this._appendTraceEntry({
+          type: "tool_call",
+          llmCall: traceLlmCall,
+          callId: completionStream.functionCall?.id ?? null,
+          name,
+          arguments: args,
+        });
+        this._appendTraceEntry({
+          type: "tool_result",
+          callId: completionStream.functionCall?.id ?? null,
+          name,
+          content: `Function "${name}" not found. Try again.`,
+        });
         return await this.handleAsyncExecution(
           [
             ...messages,
@@ -1182,6 +1399,24 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         arguments: args,
         result,
       });
+
+      // Trace capture (Step 2): the tool call + its completed result, in order.
+      this._appendTraceEntry({
+        type: "tool_call",
+        llmCall: traceLlmCall,
+        callId: completionStream.functionCall?.id ?? null,
+        name,
+        arguments: args,
+      });
+      this._appendTraceEntry({
+        type: "tool_result",
+        callId: completionStream.functionCall?.id ?? null,
+        name,
+        content: result,
+      });
+
+      // Step 2b: fire-and-forget incremental flush of the trace-so-far.
+      this.scheduleTraceFlush();
 
       // An abort may have fired while the tool was running. Don't start the
       // next LLM round — return the tool result and let the recursion unwind.
@@ -1300,9 +1535,28 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     if (depth === 0) this?.flushRoutingMetadata?.(msgUUID);
 
     // get the chat completion
+    const traceLlmCall = this._nextTraceLlmCall();
     const completion = await this.#safeProviderCall(() =>
       this.providerInstance.complete(messages, functions)
     );
+
+    // Trace capture for this round (Step 2 — agent-full-context-trace):
+    // reasoning (when the provider surfaced it) then the assistant's
+    // pre-tool / final text, in the order the model produced them.
+    if (typeof completion?.reasoning === "string" && completion.reasoning.trim()) {
+      this._appendTraceEntry({
+        type: "reasoning",
+        llmCall: traceLlmCall,
+        text: completion.reasoning,
+      });
+    }
+    if (typeof completion?.textResponse === "string" && completion.textResponse) {
+      this._appendTraceEntry({
+        type: "llm_text",
+        llmCall: traceLlmCall,
+        text: completion.textResponse,
+      });
+    }
 
     if (completion.functionCall) {
       const { name, arguments: args } = completion.functionCall;
@@ -1319,6 +1573,19 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       }
 
       if (!fn) {
+        this._appendTraceEntry({
+          type: "tool_call",
+          llmCall: traceLlmCall,
+          callId: completion.functionCall?.id ?? null,
+          name,
+          arguments: args,
+        });
+        this._appendTraceEntry({
+          type: "tool_result",
+          callId: completion.functionCall?.id ?? null,
+          name,
+          content: `Function "${name}" not found. Try again.`,
+        });
         return await this.handleExecution(
           [
             ...messages,
@@ -1354,6 +1621,24 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         arguments: args,
         result,
       });
+
+      // Trace capture (Step 2): the tool call + its completed result, in order.
+      this._appendTraceEntry({
+        type: "tool_call",
+        llmCall: traceLlmCall,
+        callId: completion.functionCall?.id ?? null,
+        name,
+        arguments: args,
+      });
+      this._appendTraceEntry({
+        type: "tool_result",
+        callId: completion.functionCall?.id ?? null,
+        name,
+        content: result,
+      });
+
+      // Step 2b: fire-and-forget incremental flush of the trace-so-far.
+      this.scheduleTraceFlush();
 
       // An abort may have fired while the tool was running. Don't start the
       // next LLM round — return the tool result and let the recursion unwind.

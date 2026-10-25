@@ -90,6 +90,13 @@ const chatHistory = {
             });
           } catch {}
         });
+
+        // Step 2b (agent-full-context-trace): expose the incremental flush
+        // helper to aibitat so `scheduleTraceFlush()` (fired after each
+        // completed tool call) has a persistence target. The plugin instance
+        // (`this`) owns `_flushTrace`; aibitat only ever calls it blind via
+        // the optional `flushTrace?.()` hook.
+        aibitat.flushTrace = () => this._flushTrace(aibitat);
       },
       _store: async function (
         aibitat,
@@ -128,6 +135,13 @@ const chatHistory = {
         const clarifyingQuestions =
           aibitat._pendingClarifyingQuestionSurveys ?? [];
 
+        // Finalize is the authoritative write: it OVERWRITES whatever partial
+        // `response.trace` incremental flushes (Step 2b) may have written with
+        // the full buffer (plan Step 5.6). Trace serialization is fail-open
+        // (N10): a failure saves the row with `trace: null` and logs — the
+        // primary chat record is never lost to a trace failure.
+        const trace = this._serializeTrace(aibitat);
+
         await WorkspaceChats.upsert(aibitat.trackedChatId, {
           workspaceId: Number(invocation.workspace_id),
           prompt,
@@ -137,6 +151,7 @@ const chatHistory = {
             type: "chat",
             attachments,
             metrics,
+            trace,
             ...(outputs.length > 0 ? { outputs } : {}),
             ...(clarifyingQuestions.length > 0 ? { clarifyingQuestions } : {}),
           },
@@ -196,6 +211,13 @@ const chatHistory = {
           aibitat._pendingClarifyingQuestionSurveys ?? [];
         const existingSources = options?.sources ?? [];
 
+        // Finalize is the authoritative write: it OVERWRITES whatever partial
+        // `response.trace` incremental flushes (Step 2b) may have written with
+        // the full buffer (plan Step 5.6). Trace serialization is fail-open
+        // (N10): a failure saves the row with `trace: null` and logs — the
+        // primary chat record is never lost to a trace failure.
+        const trace = this._serializeTrace(aibitat);
+
         await WorkspaceChats.upsert(aibitat.trackedChatId, {
           workspaceId: Number(invocation.workspace_id),
           prompt,
@@ -209,6 +231,7 @@ const chatHistory = {
             type: options?.saveAsType ?? "chat",
             attachments,
             metrics,
+            trace,
             ...(outputs.length > 0 ? { outputs } : {}),
             ...(clarifyingQuestions.length > 0 ? { clarifyingQuestions } : {}),
           },
@@ -311,7 +334,147 @@ const chatHistory = {
         aibitat.clearCitations?.();
         aibitat._pendingOutputs = [];
         aibitat.clearClarifyingQuestionSurveys?.();
+        aibitat.clearTrace?.();
         aibitat.clearTrackedChatId();
+      },
+
+      /**
+       * Serialize the aibitat trace buffer into the persistable
+       * `response.trace` shape. Fail-open (N10): any error serializing
+       * returns `null` so the primary chat save is never blocked. The N6
+       * size cap is enforced at append time by aibitat (`_appendTraceEntry`)
+       * and re-checked here at write time.
+       * @param {object} aibitat
+       * @returns {{entries: Array<object>, llmCalls: number, truncated: boolean}|null}
+       */
+      _serializeTrace: function (aibitat) {
+        try {
+          if (!aibitat || typeof aibitat.getTrace !== "function") return null;
+          const trace = aibitat.getTrace();
+          if (!trace?.entries?.length) return null;
+
+          // Write-time size-cap re-check (N6). The buffer is already capped
+          // at append time; this guards against env changes mid-run or
+          // oversized entries that slipped through unserializable sizing.
+          // (Cap default mirrored from AIbitat.traceMaxBytes — deliberately
+          // not require()d to avoid a circular import.)
+          const envMax = parseInt(process.env.AGENT_TRACE_MAX_BYTES, 10);
+          const maxBytes =
+            !isNaN(envMax) && envMax > 0 ? envMax : 2 * 1024 * 1024;
+          let serialized = JSON.stringify(trace);
+          if (Buffer.byteLength(serialized) > maxBytes) {
+            // Drop the largest tool_result contents until under the cap,
+            // marking the trace truncated so readers know data was cut.
+            const trimmedEntries = trace.entries.map((entry) =>
+              entry?.type === "tool_result" && typeof entry.content === "string"
+                ? { ...entry, content: entry.content.slice(0, 1024) }
+                : entry
+            );
+            const trimmed = {
+              entries: trimmedEntries,
+              llmCalls: trace.llmCalls,
+              truncated: true,
+            };
+            serialized = JSON.stringify(trimmed);
+            if (Buffer.byteLength(serialized) > maxBytes) {
+              // Still over — give up on contents entirely, keep the skeleton.
+              return {
+                entries: trimmedEntries.map((e) =>
+                  e?.type === "tool_result" ? { ...e, content: "[truncated]" } : e
+                ),
+                llmCalls: trace.llmCalls,
+                truncated: true,
+              };
+            }
+            return JSON.parse(serialized);
+          }
+
+          return trace;
+        } catch (e) {
+          console.error(
+            `\x1b[31m[AgentTrace] Failed to serialize trace: ${e.message}\x1b[0m`
+          );
+          return null;
+        }
+      },
+
+      /**
+       * Step 2b — incremental trace flush (F11/F12-partial, N11, N12).
+       *
+       * Fire-and-forget persistence of the trace-so-far onto the turn's
+       * placeholder row, scheduled by aibitat after each completed tool call.
+       *
+       * Contract:
+       * - NEVER flips `include`, never debits credits, never renames threads (N11).
+       * - Read-modify-write: `WorkspaceChats.upsert` overwrites `response`
+       *   wholesale (plan 0.4/0.15), so the row's current response JSON is
+       *   read first and the merged object re-serialized — a bare `{ trace }`
+       *   upsert would clobber placeholder keys.
+       * - Guards before the upsert: `trackedChatId` must exist (a coalesced
+       *   flush scheduled just before finalize can fire after `_cleanup()`
+       *   cleared it) and the row must not be claimed by the abort save or
+       *   finalize (`_aborted`/`_finalized`) — a flush racing those writers
+       *   must not clobber `stopReason`/`include` (plan Step 6.3).
+       * - Last-write-wins: the FULL buffer is serialized every flush.
+       * - Fail-open (N12): errors are logged and dropped; the next flush
+       *   (or finalize) rewrites with the full buffer. Never throws.
+       */
+      _flushTrace: async function (aibitat) {
+        try {
+          // Ownership guards: finalize/abort own the row once claimed.
+          // (Order matters: check before doing any DB work.)
+          if (aibitat._aborted || aibitat._finalized) return;
+          if (!aibitat.trackedChatId) return;
+          const trace = aibitat.getTrace?.();
+          if (!trace?.entries?.length) return;
+
+          const invocation = aibitat.handlerProps?.invocation;
+          if (!invocation?.workspace_id) return;
+
+          const chatId = aibitat.trackedChatId;
+          const serialized = this._serializeTrace(aibitat);
+          if (!serialized) return;
+
+          // Read current response so the upsert does not clobber keys
+          // written by placeholder creation (prompt-side metadata, etc.).
+          const { WorkspaceChats } = require("../../../../models/workspaceChats");
+          const existing = await WorkspaceChats.get({
+            id: Number(chatId),
+            user_id: invocation.user_id || null,
+          });
+          let currentResponse = {};
+          try {
+            currentResponse = existing?.response
+              ? JSON.parse(existing.response)
+              : {};
+          } catch {
+            currentResponse = {};
+          }
+
+          // Re-check ownership after the await — the abort save or finalize
+          // may have claimed the row while we were reading.
+          if (aibitat._aborted || aibitat._finalized) return;
+          if (aibitat.trackedChatId !== chatId) return;
+
+          await WorkspaceChats.upsert(chatId, {
+            workspaceId: Number(invocation.workspace_id),
+            response: {
+              ...currentResponse,
+              trace: serialized,
+            },
+            user: { id: invocation.user_id || null },
+            threadId: invocation.thread_id || null,
+            // Deliberately omitted: `include` stays untouched on update; the
+            // create-branch default (true) never applies because the
+            // placeholder row is guaranteed to exist (created in the first
+            // onMessage listener before any tool can run — plan 0.11).
+          });
+        } catch (e) {
+          // Fail-open (N12): a failed flush is logged and skipped.
+          console.error(
+            `\x1b[31m[AgentTrace] Incremental flush failed (dropped): ${e.message}\x1b[0m`
+          );
+        }
       },
     };
   },
