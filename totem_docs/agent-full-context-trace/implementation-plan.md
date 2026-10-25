@@ -14,7 +14,7 @@ draft get a "Correction to Step N" note rather than silent edits.
 | # | Chain to verify | Files | Date verified | Finding |
 |---|-----------------|-------|---------------|---------|
 | 0.1 | Where intermediate `role:"function"` messages are appended in streaming and sync loops; confirm the recursion's `messages` array is the single source for the live trace. | `server/utils/agents/aibitat/index.js` (`handleAsyncExecution`, `handleExecution`) | 2026-10-23 | Confirmed — both recursions append `{name, role:"function", content: result, originalFunctionCall}` before recursing. This array is captured but discarded at the end of `reply()`; only the final string returns to `newMessage()`. **Capture point = end of each recursion branch.** |
-| 0.2 | Where reasoning content is captured and whether it survives into subsequent calls within a turn. | `providers/helpers/tooled.js` (`tooledStream` — `reasoningText` accumulation), provider `stream()` implementations | 2026-10-23 | `tooledStream` accumulates `reasoningText` and wraps it in `<thought>` tags streamed to the client, but the *returned* `textResponse` includes the thought text and the function-call branch of the loop **never surfaces reasoning separately to `handleAsyncExecution`** — when a tool call is requested, `textResponse` may be empty and the reasoning is streamed-only. Provider-specific `injectReasoningContent` exists for DeepSeek-style fields. Need per-provider audit in Step 1. |
+| 0.2 | Where reasoning content is captured and whether it survives into subsequent calls within a turn. | `providers/helpers/tooled.js` (`tooledStream` — `reasoningText` accumulation), provider `stream()` implementations | 2026-10-23 | **Correction (post-review):** the original finding mischaracterized `tooledStream`. Precisely: `tooledStream` accumulates `reasoningText` locally and emits it **only** via `eventHandler` stream events (`<thought>`-wrapped to the client) — it is **never** added to the returned `textResponse`. On the reasoning→content transition the code does `result.textResponse += "</thought>" + delta.content`, so a *text* turn from a reasoning model persists a **stray leading `</thought>` with no opening tag** into `response.text` — a pre-existing persistence bug the trace work collides with (fold its fix into Step 3: returning `reasoning` separately and excluding it from `textResponse` fixes it for free). On a *tool-call* turn `textResponse` is empty and `reasoningText` is reset to `""` after the transition — the reasoning is genuinely unrecoverable from the return value today; it must be threaded out as a new return field (Step 3.1). Provider-specific `injectReasoningContent` exists for DeepSeek-style fields. Need per-provider audit in Step 1. |
 | 0.3 | The finalize path: what `reply()` returns and how `chat-history` receives it. | `aibitat/index.js#reply` → `newMessage({...route, content})` → `plugins/chat-history.js#onMessage` (second listener) | 2026-10-23 | Confirmed — `reply()` returns only the final string; the history plugin sees `aibitat.chats.slice(-2)` = `[USER msg, final agent string]`. Trace must be attached to `aibitat` (e.g. `aibitat._traceBuffer`) before `newMessage` fires, and drained in `_store`/`_storeSpecial`. |
 | 0.4 | The two-phase save: pre-register + upsert by `trackedChatId`. | `plugins/chat-history.js` (`onMessage` first listener, `_store`, `_storeSpecial`, `_cleanup`) | 2026-10-23 | Confirmed. `WorkspaceChats.upsert(trackedChatId, {...})` overwrites `response` wholesale — trace keys must be added inside the same upsert payload. `_cleanup()` clears `_pendingCitations`/`_pendingOutputs`/surveys; trace buffer must be cleared there too. |
 | 0.5 | How history is loaded into the *next* invocation. | `server/utils/agents/index.js#chatHistory` (limit 20 in `createAIbitat`) | 2026-10-23 | Confirmed — reads `include:true` rows, emits only `prompt` / `response.text` pairs. This is the reconstruction injection point: expand each pair to include tool-call assistant/tool messages built from the row's trace. |
@@ -24,7 +24,7 @@ draft get a "Correction to Step N" note rather than silent edits.
 | 0.9 | Abort path end-state. | `aibitat/index.js#abort`, `chat-history.js` (`if (aibitat._aborted) return`) | 2026-10-23 | Confirmed — on abort the second listener returns early; the placeholder row stays `include:false` forever. F9 requires a new abort-time upsert. Verify where `abort()` is invoked from (socket close handler) to hook the partial-save. |
 | 0.10 | Credit debit placement relative to any new save path. | `chat-history.js#_debitCredits`, `_storeSpecial` | 2026-10-23 | Debits happen inside `_store`/`_storeSpecial` after upsert. An abort-time save (F9) must NOT re-run debit against partially-billed usage unless session usage is available at that point (verify `providerInstance.getSessionUsage()` state at abort — partial usage may already be recorded via `recordUsage`). Decide: debit-on-abort if and only if usage > 0 and row not already debited (idempotency guard needed). **Resolved same day (see 0.13):** `getSessionUsage()` (`ai-provider.js:667-671`) returns the accumulated `_sessionUsage`, which only grows via `recordUsage` — and `recordUsage` is called from the usage-bearing chunk of each stream (`tooled.js` `chunk?.usage` arrives on the *final* chunk). A stream aborted before its final chunk contributes **zero** recorded usage for that call; completed tool-loop rounds are fully counted. So abort-time debit is safe against double-charging *completed* rounds only if an application-level guard exists (Credits has none — 0.13) and debits only when session usage > 0. |
 | 0.11 | Flush target mechanics: can we upsert `response.trace` on the placeholder row without flipping `include`? | `models/workspaceChats.js#upsert`, `chat-history.js` placeholder creation | 2026-10-23 | Verified — `WorkspaceChats.upsert(id, {...})` takes an explicit payload; passing only `response` does not touch `include`. The placeholder row is created before the first LLM call (first `onMessage` listener), so `trackedChatId` exists before any tool call can complete → flushes always have a row to target. Must serialize the full buffer on every flush (last-write-wins), and flushes must NOT call `_debitCredits` / `_autoRenameThread`. |
-| 0.12 | Crash-recovery detection point: when the next invocation loads history, what distinguishes an orphaned flushed row from a normal ghost? | `AgentHandler.#chatHistory` (`include:true` filter), `WorkspaceChats.where` | 2026-10-23 | Verified — orphaned flushed rows are invisible to `#chatHistory` (`include:false`) but findable via a direct `where(workspaceId, threadId, { include: false, hasTrace: true })`-style query at the start of a new invocation in the same thread. Promotion must happen exactly once (guard: only promote rows with non-empty `response.trace` and no `stopReason`). |
+| 0.12 | Crash-recovery detection point: when the next invocation loads history, what distinguishes an orphaned flushed row from a normal ghost? | `AgentHandler.#chatHistory` (`include:true` filter), `WorkspaceChats.where` | 2026-10-23 | Verified — orphaned flushed rows are invisible to `#chatHistory` (`include:false`) but findable at the start of a new invocation in the same thread by fetching the last N `include:false` rows for the workspace/thread (`orderBy id desc`, take ~5) and filtering **in JS** by parsing `response.trace` — `workspace_chats.response` is a plain String column, so Prisma cannot filter on a key inside the JSON (a `hasTrace`-style filter does not exist; see Step 3b.2). Promotion must happen exactly once (guard: only promote rows with non-empty `response.trace` and no `stopReason`). |
 | 0.13 | Credits dedupe behavior: does `Credits.debit` guard against a repeated `reference` (e.g. `chat_<id>`), and is partial session usage readable at abort time? | `server/models/credits.js#debit`, `debitUsage`; `chat-history.js#_debitCredits`; `providerInstance.getSessionUsage()` / `recordUsage` at abort | 2026-10-23 | Pulled forward from Step 6 (0.10). **Verified 2026-10-23: `Credits.debit` has NO dedupe.** The `reference` (`chat_<id>`) is stored verbatim (`credits.js:186`) but never checked; `credit_transactions.reference` has no unique constraint (`schema.prisma:465-478`, only `@@index([user_id])`). A second debit with the same reference creates a second ledger row and debits again. **Consequence for Step 6:** the abort-save debit needs an application-level guard — either (a) query `credit_transactions` for an existing row with `reference: "chat_<id>"` before debiting, or (b) an `aibitat._debited` flag set by `_store`/`_storeSpecial`/abort handler. Option (a) is preferred: it survives process restarts (a crash between debit and abort-save re-debits under option (b)). Partial session usage at abort: readable via `getSessionUsage()` but only covers calls whose final usage chunk arrived (see 0.10). In-flight-call tokens are unbillable-at-abort by construction — acceptable, bounded loss. |
 | 0.14 | Live-turn promotion race: can a second tab / concurrent invocation trigger promotion against a still-executing turn's flushed placeholder? | `chat-history.js` (first `onMessage` listener — placeholder creation), `AgentHandler` invocation entry, `workspace_chats.lastUpdatedAt` semantics | 2026-10-23 | The risk table (Step 9) flags this; the promotion query needs a recency guard so a placeholder flushed seconds ago by a *live* turn is not promoted. **Design decision:** promotion only targets rows with no `stopReason`, a non-empty `response.trace`, AND `lastUpdatedAt` older than a recency window (e.g. 2× max flush interval or 60 s, whichever is larger) — a live turn's placeholder is refreshed by each flush, so a stale `lastUpdatedAt` implies the turn is genuinely dead. **`lastUpdatedAt` bump verified 2026-10-23:** `WorkspaceChats.upsert`'s update branch explicitly sets `lastUpdatedAt: new Date()` (`server/models/workspaceChats.js`, upsert → `update: { ...payload, lastUpdatedAt: new Date() }`); the column exists with `@default(now())` on `workspace_chats` (`schema.prisma:196`). The recency guard is reliable. |
 | 0.15 | Flush read-modify-write: does `WorkspaceChats.upsert` merge into existing `response` JSON, or overwrite the column wholesale? | `models/workspaceChats.js#upsert`, `chat-history.js` flush call site | 2026-10-23 | Per 0.4, `upsert` **overwrites** `response` wholesale — so the Step 2b flush cannot pass only `{ trace }`; it must read the row's current `response` first (or read-modify-write in a transaction) and re-serialize the merged object, or it will clobber keys written by the placeholder creation (e.g. `prompt`-side metadata). This also creates a race surface: a flush landing concurrently with the abort-save can resurrect a stale `response` and clobber `stopReason`/`aborted` — mitigated by the `_finalized` check on flushes (Step 6.3) plus last-write-wins serialization. |
@@ -42,7 +42,13 @@ tweaks get them in Step 3.
 
 **Risk:** some providers return reasoning only inside `<thought>`-tagged text
 mixed with content; parsing that back out needs a shared helper
-(`server/utils/agents/aibitat/providers/helpers/trace.js`).
+(`server/utils/agents/aibitat/providers/helpers/trace.js`). This applies to
+**non-tooled provider paths only** — the tooled path (`tooledStream`) needs
+threading, not stripping (see 0.2 correction). The Step 1 audit table must
+also explicitly record the **stray-`</thought>` artifact** (0.2): a text turn
+from a reasoning model persists a leading `</thought>` with no opening tag
+into `response.text`; its fix folds into Step 3 (returning `reasoning`
+separately and excluding it from `textResponse`).
 
 ## Step 2 — Trace buffer on AIbitat
 
@@ -76,15 +82,26 @@ tool loop) and never touch `include`, debits, or rename (N11).
    after a tool call completes and its `tool_result` entry is appended to the
    trace buffer, schedule a flush (coalesced: if a flush is already pending,
    skip scheduling another — the pending one serializes the newer buffer).
+   Flushes are additionally throttled to a **default-on** minimum interval of
+   500 ms (cheap insurance on SQLite's single-writer; the pending flush
+   serializes the newest buffer, so throttling costs only latency, never data).
 2. **Flush implementation** — in `chat-history.js`, a `_flushTrace()` helper:
    read the placeholder row's current `response` JSON, merge in `trace:
    serialized buffer`, and upsert the merged object. `WorkspaceChats.upsert`
    overwrites `response` wholesale (0.4/0.15), so the read-modify-write is
-   mandatory — a bare `{ trace }` upsert would clobber existing keys. Serialize
+   mandatory — a bare `{ trace }` upsert would clobber existing keys. **Where
+   clause (review finding):** `WorkspaceChats.upsert` matches on
+   `{id, user_id: data.user?.id || null}` — the flush helper must pass
+   `user: {id: invocation.user_id || null}` consistently or the where won't
+   match and the upsert will silently create-branch-fail. Serialize
    the **full** buffer every time (last-write-wins), re-check the N6 size cap at
    flush time. Because the read and write are not atomic, flushes must check
    `aibitat._finalized` immediately before the upsert and skip if the
-   abort-save or finalize has already claimed the row (Step 6.3).
+   abort-save or finalize has already claimed the row (Step 6.3); the helper
+   must also guard explicitly on `aibitat.trackedChatId` being present — a
+   coalesced flush scheduled just before finalize fires after `_cleanup()`
+   calls `clearTrackedChatId()`, and the `_finalized` check alone does not
+   cover every ordering.
 3. **Failure handling** — try/catch around the upsert; on error log and drop
    (N12). Never throw into the tool loop.
 4. **Serialized shape** — same as Step 5's finalize shape, so a crash leaves a
@@ -99,9 +116,15 @@ tool loop) and never touch `include`, debits, or rename (N11).
    unaffected). When reasoning is returned on a tool-call turn, the caller
    pushes the `reasoning` trace entry.
 2. Each provider's `stream()`/`complete()` wrapper maps the new field through.
-   For providers where reasoning arrives as `<thought>` text inside content,
-   extract with the shared helper and remove from `textResponse` *only if* the
-   provider previously stripped it (verify — do not double-strip; see Step 1 table).
+   **Correction (0.2 review):** for the tooled path there is **nothing to
+   strip** — `tooledStream` never puts reasoning in `textResponse`; the work is
+   threading `reasoningText` out of the stream loop as the new return field
+   (Step 3.1), which also fixes the stray-`</thought>` artifact for text turns
+   for free. The shared `<thought>`-parsing helper (Step 1 risk note) applies
+   only to non-tooled provider paths where reasoning arrives as `<thought>`
+   text mixed into content; extract with the helper and remove from
+   `textResponse` *only if* the provider previously stripped it (verify — do
+   not double-strip; see Step 1 table).
 3. History reconstruction for the next turn (F4): in
    `AgentHandler.#chatHistory` (`server/utils/agents/index.js`), for each loaded
    row, expand the flat `USER/assistant` pair into:
@@ -114,6 +137,22 @@ tool loop) and never touch `include`, debits, or rename (N11).
    - final assistant text message (unchanged).
    Respect N5: truncate oversized `tool_result.content` at reconstruction time
    with a `[truncated]` marker (full text stays in the DB).
+   **Required touchpoint (review finding):** reconstructed messages will NOT
+   flow through for free by injecting them into `aibitat._chats`. The pipeline
+   is `AgentHandler.#chatHistory` → AIbitat constructor `chats` →
+   `getHistory()` → **`getOrFormatNodeChatHistory()`** (`aibitat/index.js`) →
+   provider messages, and `getOrFormatNodeChatHistory` currently maps every
+   chat to `{role, content}` (+attachments), **dropping `originalFunctionCall`
+   and any intermediate-message shape**, and assigns roles via
+   `c.from === route.to ? "user" : "assistant"` — a reconstructed `tool_result`
+   message (also `from: WORKSPACE_AGENT`) would come out as a second
+   "assistant" role, not a function message. Without fixing this, the entire
+   F4 mechanism is dead on arrival. Either (a) update
+   `getOrFormatNodeChatHistory` to pass through messages carrying
+   `originalFunctionCall`/trace metadata unchanged, or (b) inject reconstructed
+   messages at `reply()`'s message-array build instead of into `_chats`.
+   `agent-history-reconstruction.test.js` must assert survival through
+   `getOrFormatNodeChatHistory`, not just `formatMessagesForTools`.
 4. UnTooled labeling (F8): extend `cleanMsgs` to label collapsed function
    messages with `[tool:<name>(<args>)]` when `originalFunctionCall` is present.
    **Deviations:** (record)
@@ -133,8 +172,14 @@ tool loop) and never touch `include`, debits, or rename (N11).
    (finalize, abort save, and flushes may carry the in-progress `null`).
 2. **Promotion on next invocation** — in `AgentHandler` (or `chat-history`'s
    first `onMessage` listener, wherever thread-scoped setup happens — decide
-   during implementation), before the new turn executes: query for the latest
-   `include:false` row in this workspace/thread with a non-empty
+   during implementation), before the new turn executes: fetch the last N
+   `include:false` rows for this workspace/thread (`orderBy id desc`, take ~5)
+   and filter **in JS** by parsing `response.trace` —
+   `workspace_chats.response` is a plain String column, so Prisma cannot
+   filter on a key inside the JSON (`hasTrace`-style filters don't exist; do
+   not reach for raw SQL or a schema change — the bounded fetch + JS filter is
+   cheap, and the recency guard from 0.14 slots directly into the JS filter).
+   Target the latest row with a non-empty
    `response.trace` and no `stopReason`. If found, promote exactly once:
    `include: true`, `stopReason: "interrupted"` (F13/AC18). The promoted row
    then flows into `#chatHistory` reconstruction like any traced row.
@@ -163,8 +208,10 @@ capability flag on the provider instance
 2. Clear the buffer in `_cleanup()` alongside `_pendingCitations` etc.
 3. Size-cap guard re-checked at write time (N6): serialize, cap, mark truncated.
 4. Wrap the trace portion in try/catch (N10): on failure, save the row with
-   `trace: null` and log — never block the primary save. Split the write so a
-   trace serialization failure cannot abort the whole upsert.
+   `trace: null` and log — never block the primary save. (Wording note: there
+   is a single `response` column, so "split the write" means serialize the
+   trace in its own try/catch and fall back to `trace: null` so a trace
+   serialization failure cannot abort the whole upsert.)
 5. `models/workspaceChats.js` — no schema change required if the trace lives
    inside the existing `response` JSON column. **Decision point (record in
    deviations):** keep-in-JSON (chosen — avoids a migration and preserves N3
@@ -178,8 +225,18 @@ capability flag on the provider instance
 
 ## Step 6 — Abort-time partial save (F9, F12, AC8)
 
-1. Hook the abort path: when `aibitat.abort()` fires (or the socket-close
-   handler calls it), after in-flight work unwinds, set
+1. Hook the abort path. **Prerequisite (elevated from a footnote):** verify
+   where `abort()` is invoked from (socket close handler) — the `"abort"`
+   event fires *before* the tool loop unwinds, so saving inside the event
+   handler is unreliable; save in the unwind path instead (the terminate branch
+   of `chat()` / the abort returns in `handleAsyncExecution`). Note that
+   `#safeProviderCall` rethrows abort errors, so the in-flight call's partial
+   `textResponse` never returns to `handleAsyncExecution` — either accumulate
+   a `_partialText` buffer on aibitat from `textResponseChunk` events (planned
+   mechanism for "whatever partial text reached the client") or commit to
+   `text: ""` for the in-flight call (prior rounds' text survives in the trace
+   as `llm_text` entries either way). When the abort save runs (after in-flight
+   work unwinds), set
    `aibitat.stopReason = "user_abort"`, then upsert the current row:
    `include: true`, `response.aborted: true`, `response.stopReason:
    "user_abort"`, `response.text` = whatever partial text reached the client
@@ -193,7 +250,20 @@ capability flag on the provider instance
    double-debit (see 0.10). Guard with a flag on the row write
    (e.g. only upsert abort state if `trackedChatId` exists and
    `!aibitat._finalized`) and set `aibitat._finalized` in both `_store` and the
-   abort handler.
+   abort handler. **Race note:** there is a window where normal finalize
+   (`_store`) and the abort handler can both observe `!_finalized`.
+   **Correction:** the abort save must gate on `!aibitat._finalized` **only** —
+   do NOT include `_aborted` in the abort save's guard, because `_aborted` is
+   always set by the time the abort save runs (it is set by `abort()` itself,
+   before the unwind path reaches the save; see 0.9) and would skip the save
+   every time. The `_aborted` check belongs to the other writer: `_store`
+   already skips when `aibitat._aborted` is set (`chat-history.js:61`).
+   Ownership contract: if `_aborted` is set, the abort handler owns the row
+   and `_store` defers; the abort handler, in turn, only writes when the row
+   has not been finalized. Pending flushes are a third writer and must check
+   **both** flags — skip when `_aborted || _finalized` (a flush firing between
+   `abort()` and the abort upsert would otherwise win the write and clobber
+   `stopReason`/`include`; see the flush guard in Step 2b).
 3. Pending flushes scheduled at abort time must be cancelled or made harmless
    (the abort upsert already serializes the final buffer; a later flush must
    not clobber `stopReason`/`include` — the flush helper writes `trace` only
@@ -242,7 +312,7 @@ All in `server/__tests__/utils/agents/`:
 | `agent-history-reconstruction.test.js` | Step 3.3: next-turn messages contain synthesized tool_calls/tool pairs; N5 truncation marker; AC21 strict-shape provider receives only valid pairs (malformed pairs degrade to plain text). |
 | `untooled.labels.test.js` | AC7: labeled collapse format. |
 | `chat-history.trace.test.js` | Step 5: trace in upsert payload, `_cleanup` clears buffer, N10 failure isolation, N2 same-row upsert. |
-| `trace-exposure.test.js` | AC20 (F7): workspace thread history fetch returns `response.trace` intact for traced rows. |
+| `server/__tests__/utils/helpers/trace-exposure.test.js` (lives under `helpers/`, not `agents/` — it tests `server/utils/helpers/chat/responses.js`) | AC20 (F7): workspace thread history fetch returns `response.trace` intact for traced rows. |
 | `trace-flush.test.js` | Step 2b: flush after each completed tool call keeps `include:false`, no debit, full-buffer last-write-wins serialization, failure is swallowed (AC16, AC19). |
 | `stop-reason.test.js` | Step 3b/5/6: `completed` on finalize, `user_abort` on abort, `provider_error` on provider exception (AC17). |
 | `crash-recovery.test.js` | Step 3b: orphaned flushed row promoted once with `stopReason: "interrupted"` on next invocation; promotion excluded for rows without trace (AC18). |
@@ -263,7 +333,7 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | 5 (JSON size) | `response` column size limits on SQLite/Postgres | Medium | Cap default; verify in Step 0.5/5. |
 | 6 (abort save) | Double-debit / double-finalize races | Medium | `_finalized` flag; **Credits has NO reference dedupe (0.13)** — guard requires both a `credit_transactions` reference check and the `_debited` in-process flag; test in `abort-partial-save.test.js`. |
 | 6 (abort save) | Abort fires mid-stream, partial text saved and shown as complete in UI | Medium | `aborted: true` + `stopReason: "user_abort"` markers distinguish the row; frontend ignores them for final rendering (verify in Step 7). |
-| 2b (flush) | Flush write latency contends with tool execution on SQLite (single-writer) | Medium | Flushes are fire-and-forget and coalesced (max one pending per turn); failure is swallowed (N12); if contention shows up in practice, add a minimum-interval throttle (e.g. ≥500 ms between flushes) — recorded as a deviation if needed. |
+| 2b (flush) | Flush write latency contends with tool execution on SQLite (single-writer) | Medium | Flushes are fire-and-forget and coalesced (max one pending per turn) with a **default-on** minimum-interval throttle of 500 ms (the pending flush serializes the newest buffer, so throttling costs latency only, never data); failure is swallowed (N12). Re-serializing the full capped buffer (2 MB) per flush is acceptable at that rate; tighten further only if measured contention demands it. |
 | 2b/3b (flush + promotion) | A promoted crash row double-counts with the new turn's own debit, or promotion races a still-alive turn (e.g. second tab) | Medium | Promotion only targets rows with no `stopReason`, a non-empty trace, and a stale `lastUpdatedAt` (recency window, 0.14) — a live turn's placeholder is refreshed by each flush, so staleness implies a dead turn; worst case the promoted row is simply visible history, which is safe. |
 | 2b (flush) | Non-atomic read-modify-write races the abort-save / finalize upsert; a stale flush resurrects old `response` keys or clobbers `stopReason` | Medium | Flushes re-check `_finalized` immediately before the upsert and skip if claimed (Step 6.3); last-write-wins means finalize always rewrites with the full buffer (Step 5.6); worst case is a lost flush, which is bounded data loss by design (F11). |
 | 7 (frontend) | Trace dropped by the server-side history serializer before it reaches the browser | **Resolved (0.8)** | `convertToChatHistory` whitelists keys and would silently drop `trace`; Step 7 now explicitly adds the passthrough and a serializer-level test. |
