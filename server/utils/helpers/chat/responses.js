@@ -219,6 +219,12 @@ function convertToChatHistory(history = []) {
         feedbackScore,
         metrics: data?.metrics || {},
         ...(data?.outputs?.length > 0 ? { outputs: data.outputs } : {}),
+        // Agent full-context trace (F7): additive passthrough so the frontend
+        // (and any API consumer of the history endpoints) can read the
+        // turn's reasoning/tool trace. HistoricalMessage/PromptReply ignore
+        // unknown keys today, so this is render-safe until the dedicated
+        // trace UI workstream lands. Absent on legacy/untraced rows.
+        ...(data?.trace ? { trace: data.trace } : {}),
         ...(data?.clarifyingQuestions?.length > 0
           ? { clarifyingQuestions: data.clarifyingQuestions }
           : {}),
