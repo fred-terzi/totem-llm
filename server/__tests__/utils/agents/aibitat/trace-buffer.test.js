@@ -338,6 +338,46 @@ describe("Trace persistence at finalize (Step 5)", () => {
     });
   });
 
+  test("finalize overwrites a stale flushed partial trace with the full buffer (Step 5.6)", async () => {
+    // Simulate a row that Step 2b flushes already wrote a partial (now
+    // stale) trace onto — the finalize write must REPLACE it wholesale with
+    // the full current buffer, never merge with it (last-write-wins).
+    WorkspaceChats.get.mockResolvedValue({
+      id: 42,
+      response: JSON.stringify({
+        somePlaceholderKey: "keep-me",
+        trace: {
+          entries: [{ type: "llm_text", llmCall: 1, text: "stale" }],
+          llmCalls: 1,
+          truncated: false,
+        },
+      }),
+    });
+
+    const aibitat = makeAibitat();
+    FakeProvider._script = [
+      () => ({
+        functionCall: { id: "call_1", name: "tool-a", arguments: "{}" },
+        textResponse: "checking",
+      }),
+      () => ({ textResponse: "final", functionCall: null }),
+    ];
+    aibitat.function({ name: "tool-a", handler: async () => "result-1" });
+
+    await aibitat.start({ from: "USER", to: "agent", content: "hi" });
+    await drain();
+
+    expect(finalizeCalls()).toHaveLength(1);
+    const [, payload] = finalizeCalls()[0];
+    // The stale flushed entry is gone — the full buffer is authoritative.
+    expect(
+      payload.response.trace.entries.some((e) => e.text === "stale")
+    ).toBe(false);
+    expect(payload.response.trace.entries).toHaveLength(4);
+    expect(payload.response.trace.llmCalls).toBe(2);
+    expect(payload.response.trace.truncated).toBe(false);
+  });
+
   test("trace serialization failure is fail-open: row saves with trace: null (N10)", async () => {
     const aibitat = makeAibitat();
     FakeProvider._script = [
