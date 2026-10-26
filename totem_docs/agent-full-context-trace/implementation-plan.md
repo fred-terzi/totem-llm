@@ -468,7 +468,7 @@ capability flag on the provider instance
    (Step 2b) with the full buffer — the finalize write remains the single
    authoritative version of the turn.
 
-### Step 5 deviations (partially implemented early, in commit `416da428`)
+### Step 5 deviations (items 5.1/5.2/5.4 landed in `416da428`; completed 2026-10-26 — see below)
 
 Items 5.1, 5.2, and 5.4 landed with Step 2 (same commit) since the finalize
 path is where the buffer gets drained; the rest of Step 5 is unaffected.
@@ -495,6 +495,34 @@ path is where the buffer gets drained; the rest of Step 5 is unaffected.
    `response` remains a plain String column — Prisma serializes the payload
    object). 2 MB cap validated in tests via small `AGENT_TRACE_MAX_BYTES`
    values; no SQLite/Postgres size issue at that cap.
+
+### Step 5 completion (2026-10-26)
+
+Step 5 is now **fully complete**. Items 5.1/5.2/5.4 landed early (above);
+the remainder needed no new production code — it was already satisfied by
+design choices made in Steps 2/2b/3b, verified rather than re-implemented:
+
+1. **5.3 fully superseded (confirmed):** the append-time cap (Step 2) plus
+   the graduated flush/finalize-time truncation (`_serializeTrace` applies
+   the same write-time guard on every write path) make a separate
+   finalize-only size check redundant. No code added.
+2. **5.6 verified + test added:** finalize's upsert writes the full
+   `response` payload (including `trace`) wholesale — `WorkspaceChats.upsert`
+   overwrites the column, so a stale partial trace from Step 2b flushes is
+   replaced, never merged. A regression test
+   ("finalize overwrites a stale flushed partial trace with the full
+   buffer", Step 5.6) was added to `trace-buffer.test.js` to pin the
+   last-write-wins contract.
+3. **`response.stopReason` (the 5.1 deferred piece) landed with Step 3b**
+   (`6af915d9`): `_store`/`_storeSpecial`/`_storeError` all persist
+   `stopReason` (`completed` default / `user_abort` / `provider_error`),
+   first-writer-wins via `aibitat.stopReason`.
+4. **Step 8 test-table note:** `chat-history.trace.test.js` does not exist
+   as a separate file — its coverage (trace in upsert payload, `_cleanup`
+   clears buffer, N10 failure isolation, N2 same-row upsert) lives in the
+   "Trace persistence at finalize (Step 5)" block of
+   `trace-buffer.test.js`, which owns the aibitat + plugin scaffolding
+   (same consolidation pattern as the Step 3b test-placement deviation).
 
 ## Step 6 — Abort-time partial save (F9, F12, AC8)
 
@@ -619,5 +647,5 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
 | (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b ✅ committed (`6af915d9`, 2026-10-26): stop reason plumbing (first-writer-wins; `user_abort` in `abort()`, `provider_error` in `newError()`, `completed` default at finalize), `_finalized` writers landed (flush guards now fully armed), error-path turn save (AC17, `_storeError`), crash-recovery promotion (F13/AC18); see Step 3b deviations. Suite: 62 suites / 584 tests green; server lint clean. |
 | (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 ✅ committed (`d6968fde`, 2026-10-26): in-turn reasoning retention (three-valued capability flag, function-message carrier, converter merge; see Step 4 deviations). Suite: 62 suites / 572 tests green; server lint clean. |
-| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 partially done (see Step 5 deviations); 6–7 🔲 |
+| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 ✅ complete (2026-10-26): 5.1/5.2/5.4 landed early (`416da428`); `stopReason` persistence landed with 3b (`6af915d9`); 5.3 superseded by the Step 2/2b write-time guards; 5.6 keep-in-JSON decided + last-write-wins finalize verified with a new regression test in `trace-buffer.test.js` (21 tests). No new production code required. 6–7 🔲 |
 | (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
