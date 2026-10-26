@@ -272,6 +272,42 @@ tool loop) and never touch `include`, debits, or rename (N11).
    messages with `[tool:<name>(<args>)]` when `originalFunctionCall` is present.
    **Deviations:** (record)
 
+### Step 3 deviations (recorded 2026-10-26, work in progress in working tree)
+
+1. **Provider scope narrowed for validation: Ollama, Venice, OpenRouter only.**
+   The Step 3 implementation and its testing target exactly three providers.
+   The architecture keeps the work provider-agnostic by construction (per the
+   Step 1 load-bearing finding), so the scope restriction costs nothing:
+   - **Venice / OpenRouter** are `InheritMultiple([Provider, UnTooled])`
+     wrappers that return the shared helpers' objects verbatim — the
+     `tooled.js` / `untooled.js` reasoning-threading edits **are** their
+     implementation; no per-provider file changes are made or needed.
+   - **Ollama** is the only one of the three with its own adapter work
+     (native tooled `stream()` normalization to the A-shape,
+     `streamingFunctionCall` override threading, `<think>` legacy-tag
+     acceptance in `helpers/trace.js#extractThought`).
+   - All other providers keep the uniform `reasoning: ""` return shape
+     (shape-uniformity stubs only, ~7 lines each) but their native reasoning
+     capture is **untested and unsupported** until/unless explicitly widened.
+     The capability flag `supportsReasoningHistory` stays `false` for everyone
+     except the three validated providers (Step 4 scope shrinks accordingly).
+2. **Anthropic `#prepareMessages` tool_use synthesis is included despite the
+   narrowed scope** — it is the Step 1 finding #3 fix (row D) the plan already
+   committed to: `#prepareMessages` now synthesizes the `tool_use` block from
+   `originalFunctionCall` when the preceding assistant message has no
+   content-array, fixing the pre-existing in-turn tool_result drop. Kept
+   because history reconstruction would otherwise be silently broken for that
+   provider and the fix is small, self-contained, and audit-mandated. If the
+   PR is later scoped strictly to the three providers, this is the one chunk
+   to split into its own commit.
+3. **Reasoning-threading shape confirmed per 0.2/Step 1 table:**
+   `tooledStream` accumulates a clean `fullReasoning` (returned as `reasoning`)
+   while keeping the live `<thought>` tag-state stream for the UI, and stops
+   appending the closing-tag chunk to `textResponse` — fixing the
+   stray-`</thought>` artifact (0.2) as a side effect, exactly as planned.
+   Path C (tag-embedded plain-chat fallback) is deliberately left untouched;
+   the handler layer splits it via `extractThought`.
+
 ## Step 3b — Stop reason (F12) + crash recovery promotion (F13)
 
 1. **`stopReason` plumbing** — AIbitat gains a `stopReason` field, set at every
@@ -488,6 +524,6 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 |----|----------|--------|
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
 | (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b 🔲 |
-| (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 🔲 |
+| (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 in progress (working tree, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. 4 🔲 |
 | (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 partially done (see Step 5 deviations); 6–7 🔲 |
 | (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
