@@ -582,6 +582,59 @@ design choices made in Steps 2/2b/3b, verified rather than re-implemented:
    concurrent-abort scenario, accept last-write-wins on the row but add the
    `_debited` in-process flag as a second guard (both guards together).
 
+### Step 6 deviations (implemented 2026-10-26)
+
+1. **Save points: three unwind sites, not two.** The plan drafted the abort
+   save around (a) the terminate branch of `chat()` and (b) the abort returns
+   in `handleAsyncExecution`. Implementation found a third, critical path the
+   plan's own Step 6.1 note implies but does not enumerate: `#safeProviderCall`
+   **rethrows abort errors verbatim** (never wrapped into `APIError`), so an
+   abort during the in-flight LLM call never reaches the terminate branch at
+   all — the error unwinds through `chat()`→`reply()` and is only caught at
+   the websocket session boundary. If the save ran only in the terminate
+   branch, that path (Stop pressed mid-stream, the most common abort) would
+   persist nothing. Resolution: the abort save fires at all three sites —
+   the post-tool abort branch in `handleAsyncExecution`/`handleExecution`,
+   and inside `#safeProviderCall`'s abort-error rethrow. All three call the
+   same idempotent hook (`aibitat.abortSave()`), so overlap is harmless.
+   Verified by a test that aborts inside the provider script and asserts the
+   save fired.
+2. **`_partialText` accumulation lives on the execution eventHandler** — the
+   per-round handler in `handleAsyncExecution` appends every
+   `reportStreamEvent` `textResponseChunk` content to `aibitat._partialText`,
+   and the buffer is reset at each round's start (fresh window per LLM call;
+   prior rounds' text survives in the trace as `llm_text` entries either
+   way). The sync `handleExecution` path does not accumulate (nothing
+   streams incrementally; `text: ""` applies, per the plan's fallback).
+3. **Debit guards landed in `_debitCredits`, not in the abort save.** The
+   plan Step 6.4 drafted the reference-dedupe check + `_debited` flag as
+   abort-save logic; implementation centralized both guards in
+   `_debitCredits` (now taking `aibitat` as its first argument) so they
+   protect **every** writer — finalize (`_store`/`_storeSpecial`/`_storeError`)
+   AND the abort save — against each other, not just the abort direction.
+   The DB-backed check is a new `Credits.hasDebitReference(userId,
+   reference)` (`credit_transactions.findFirst` on `type:"debit"`,
+   `reference: "chat_<id>"`) — option (a) in 0.13, crash-safe. `_debited`
+   (on aibitat, initialized in the constructor) is the second guard. Both
+   must pass before any `debitUsage` call.
+4. **The abort save always debits recorded session usage** (not "only > 0
+   totals") — the >0 condition is enforced naturally: `_debitCredits`
+   early-returns on `(!inputTokens && !outputTokens)`, so a zero-usage
+   abort (in-flight stream only) performs no debit without special-casing.
+   Test-pinned.
+5. **`response.aborted: true` is written alongside `stopReason:`
+   `user_abort`** per plan Step 6.1's upsert shape. `text` is
+   `aibitat._partialText || ""` — always a string (0.8).
+6. **Test placement deviation (same pattern as 3b/5):** the abort-save tests
+   live in `trace-buffer.test.js` (9 new tests, 30 total in the file) rather
+   than a separate `abort-save.test.js` from the Step 8 table — the file
+   already owns the aibitat + chat-history plugin scaffolding, including the
+   provider mock (which gained a static-overridable `getSessionUsage` and
+   `models/credits` + `models/user` mocks for the debit assertions).
+   The existing "flush is skipped once the run is aborted" test was updated:
+   with the abort save now real, that turn produces exactly one include:true
+   write (the abort save) instead of zero upserts.
+
 ## Step 7 — Frontend additive exposure (F7)
 
 - **Correction from Step 0 (0.8):** history endpoints do **not** return the
@@ -647,5 +700,5 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
 | (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b ✅ committed (`6af915d9`, 2026-10-26): stop reason plumbing (first-writer-wins; `user_abort` in `abort()`, `provider_error` in `newError()`, `completed` default at finalize), `_finalized` writers landed (flush guards now fully armed), error-path turn save (AC17, `_storeError`), crash-recovery promotion (F13/AC18); see Step 3b deviations. Suite: 62 suites / 584 tests green; server lint clean. |
 | (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 ✅ committed (`d6968fde`, 2026-10-26): in-turn reasoning retention (three-valued capability flag, function-message carrier, converter merge; see Step 4 deviations). Suite: 62 suites / 572 tests green; server lint clean. |
-| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 ✅ complete (2026-10-26): 5.1/5.2/5.4 landed early (`416da428`); `stopReason` persistence landed with 3b (`6af915d9`); 5.3 superseded by the Step 2/2b write-time guards; 5.6 keep-in-JSON decided + last-write-wins finalize verified with a new regression test in `trace-buffer.test.js` (21 tests). No new production code required. 6–7 🔲 |
+| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 ✅ complete (2026-10-26): 5.1/5.2/5.4 landed early (`416da428`); `stopReason` persistence landed with 3b (`6af915d9`); 5.3 superseded by the Step 2/2b write-time guards; 5.6 keep-in-JSON decided + last-write-wins finalize verified with a new regression test in `trace-buffer.test.js` (21 tests). No new production code required. 6 ✅ committed (2026-10-26): abort-time partial save (F9/AC8) — unwind-path `abortSave` hook at three sites (post-tool branch ×2 + `#safeProviderCall` abort rethrow), `_partialText` accumulation on the streaming eventHandler, `_storeAborted` (include:true, `aborted:true`, `stopReason:user_abort`, string text, trace-so-far, idempotent via `_finalized`), centralized double-charge guards in `_debitCredits` (`Credits.hasDebitReference` DB check + `_debited` flag; see Step 6 deviations). Suite: 62 suites / 594 tests green; server lint clean. 7 🔲 |
 | (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
