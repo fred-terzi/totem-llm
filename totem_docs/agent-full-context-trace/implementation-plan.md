@@ -272,7 +272,7 @@ tool loop) and never touch `include`, debits, or rename (N11).
    messages with `[tool:<name>(<args>)]` when `originalFunctionCall` is present.
    **Deviations:** (record)
 
-### Step 3 deviations (recorded 2026-10-26, work in progress in working tree)
+### Step 3 deviations (recorded 2026-10-26; Step 3 code committed as 3d2ece02)
 
 1. **Provider scope narrowed for validation: Ollama, Venice, OpenRouter only.**
    The Step 3 implementation and its testing target exactly three providers.
@@ -307,6 +307,26 @@ tool loop) and never touch `include`, debits, or rename (N11).
    stray-`</thought>` artifact (0.2) as a side effect, exactly as planned.
    Path C (tag-embedded plain-chat fallback) is deliberately left untouched;
    the handler layer splits it via `extractThought`.
+4. **`#chatHistory` → public `chatHistory`** (testability): JS private methods
+   enforce a brand check that makes them unreachable from test scaffolding
+   (subclass or `Object.create` receivers throw "Receiver must be an instance
+   of class AgentHandler"). The method was made public with a JSDoc note
+   marking it internal-but-testable; behavior is identical and the call site
+   is unchanged.
+5. **F8 label tests landed inside `tooled.trace.test.js`** rather than the
+   separate `untooled.labels.test.js` listed in the Step 8 test table — the
+   label injection is exercised through the same handler scaffolding as the
+   reconstruction tests, so a separate file would duplicate the mock setup
+   (mock paths, `formatMessageWithAttachments` borrowing, real-`
+   AgentHandler` construction). Coverage is identical.
+6. **Handler test scaffolding requirements** (for future test authors): the
+   handler must be a real `AgentHandler` instance (private-method brand
+   check), aibitat node registration must use `WORKSPACE_AGENT.name`
+   (`"@agent"` prefix), history must be routed via the `reply()` direction
+   for `getOrFormatNodeChatHistory`, and standalone `UnTooled` instances
+   must borrow `Provider.prototype.formatMessageWithAttachments` (that
+   method lives on the base class and `cleanMsgs`/`streamingFunctionCall`
+   call it unconditionally).
 
 ## Step 3b — Stop reason (F12) + crash recovery promotion (F13)
 
@@ -524,6 +544,6 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 |----|----------|--------|
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
 | (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b 🔲 |
-| (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 in progress (working tree, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. 4 🔲 |
+| (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 🔲 |
 | (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 partially done (see Step 5 deviations); 6–7 🔲 |
 | (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
