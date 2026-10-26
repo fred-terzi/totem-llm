@@ -120,6 +120,17 @@ const chatHistory = {
         // (`this`) owns `_flushTrace`; aibitat only ever calls it blind via
         // the optional `flushTrace?.()` hook.
         aibitat.flushTrace = () => this._flushTrace(aibitat);
+
+        // Step 6 (F9/AC8): expose the abort-time partial save to aibitat.
+        // Called from the UNWIND path (never from the "abort" event, which
+        // fires before the tool loop unwinds — plan Step 6.1 prerequisite):
+        // - the abort branch after a completed tool call (both execution paths)
+        // - `#safeProviderCall` when the in-flight LLM call throws an abort
+        //   error (that error is rethrown raw and never reaches the terminate
+        //   branch, so this hook is the only save point on that path).
+        // Fire-and-forget: the hook swallows its own errors and the callers
+        // do not await it (the unwind must not be delayed).
+        aibitat.abortSave = () => this._storeAborted(aibitat);
       },
       _store: async function (
         aibitat,
@@ -192,6 +203,7 @@ const chatHistory = {
 
         // Debit credits based on input/output token usage. Admins are exempt.
         await this._debitCredits(
+          aibitat,
           invocation,
           metrics.prompt_tokens,
           metrics.completion_tokens,
@@ -278,6 +290,7 @@ const chatHistory = {
 
         // Debit credits based on input/output token usage. Admins are exempt.
         await this._debitCredits(
+          aibitat,
           invocation,
           metrics.prompt_tokens,
           metrics.completion_tokens,
@@ -306,6 +319,7 @@ const chatHistory = {
        * @param {number|null} chatId
        */
       _debitCredits: async function (
+        aibitat,
         invocation,
         inputTokens,
         outputTokens,
@@ -322,6 +336,23 @@ const chatHistory = {
           if (!user || user.role === "admin") return;
 
           const reference = chatId ? `chat_${chatId}` : null;
+
+          // Step 6 (0.13): double-charge guards. `Credits.debit` performs NO
+          // reference dedupe (a second call with the same reference debits
+          // again), and a racing abort save could re-bill a turn finalize
+          // already charged. Two guards together (plan Step 6.4):
+          // 1. in-process flag — set by whichever writer debits first;
+          // 2. DB-backed reference check — survives crashes/restarts where
+          //    the flag is lost (option (a) in 0.13).
+          if (aibitat?._debited) return;
+          if (
+            reference &&
+            (await Credits.hasDebitReference(Number(userId), reference))
+          ) {
+            if (aibitat) aibitat._debited = true;
+            return;
+          }
+
           const result = await Credits.debitUsage(userId, {
             inputTokens: inputTokens || 0,
             outputTokens: outputTokens || 0,
@@ -332,6 +363,7 @@ const chatHistory = {
             `\x1b[33m[Credits]\x1b[0m user_${userId} debited ${result.debited} microdollars ` +
               `(${inputTokens} in / ${outputTokens} out, cost=${result.cost}) balance: ${result.newBalance}`
           );
+          if (aibitat && result.debited > 0) aibitat._debited = true;
         } catch (e) {
           // Credit debit failure should never block the chat save.
           console.error(
@@ -432,6 +464,7 @@ const chatHistory = {
         // Completed tool-loop rounds have usage already recorded upstream;
         // debit what was actually billed. Admin-exempt via _debitCredits.
         await this._debitCredits(
+          aibitat,
           invocation,
           metrics.prompt_tokens,
           metrics.completion_tokens,
@@ -440,6 +473,98 @@ const chatHistory = {
         );
 
         this._cleanup(aibitat);
+      },
+
+      /**
+       * Step 6 (F9/AC8): persist a turn aborted by the user (Stop command,
+       * socket close, disconnect). Mirrors `_store`'s shape but writes:
+       * - `text`: whatever partial streamed text reached the client, or ""
+       *   (ALWAYS a string — 0.8: non-string text rows are skipped by
+       *   `convertToChatHistory` and would vanish from UI history);
+       * - `stopReason: "user_abort"` (set centrally by `abort()` — read,
+       *   not written, here) and `aborted: true`;
+       * - the trace-so-far so the aborted turn's tool activity survives.
+       *
+       * Ownership (plan Step 6.2 correction): gates on `!_finalized` ONLY —
+       * `_aborted` is already set by `abort()` by the time this runs and
+       * would skip the save every time. Claiming via `_finalized` makes the
+       * save idempotent (a second unwind branch is a no-op) and makes late
+       * flushes stand down.
+       *
+       * Debit (plan Step 6.4 / 0.13): only when recorded session usage is
+       * non-zero (completed rounds were fully billed upstream; the in-flight
+       * aborted stream is unbillable by construction). The reference-dedupe
+       * + `_debited` guards in `_debitCredits` prevent double-charging a
+       * turn finalize already billed in a concurrent-abort scenario.
+       *
+       * Fail-open: never throws (N10/N12) — a failed abort save must not
+       * crash the unwind. Called fire-and-forget from the unwind path.
+       * @param {object} aibitat
+       */
+      _storeAborted: async function (aibitat) {
+        try {
+          if (aibitat._finalized) return; // finalize/error-save owns the row
+          if (!aibitat.trackedChatId) return;
+          aibitat._finalized = true;
+
+          const invocation = aibitat.handlerProps.invocation;
+          const lastCall = aibitat.providerInstance?.getUsage?.() ?? {};
+          const session = aibitat.providerInstance?.getSessionUsage?.() ?? {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+          };
+          const metrics = {
+            prompt_tokens: session.prompt_tokens || 0,
+            completion_tokens: session.completion_tokens || 0,
+            total_tokens: session.total_tokens || 0,
+            lastCall: {
+              prompt_tokens: lastCall.prompt_tokens || 0,
+              completion_tokens: lastCall.completion_tokens || 0,
+              total_tokens: lastCall.total_tokens || 0,
+              duration: lastCall.duration || 0,
+            },
+            model: lastCall.model,
+            provider: lastCall.provider,
+            timestamp: lastCall.timestamp,
+          };
+
+          const trace = this._serializeTrace(aibitat);
+
+          await WorkspaceChats.upsert(aibitat.trackedChatId, {
+            workspaceId: Number(invocation.workspace_id),
+            response: {
+              text: aibitat._partialText || "",
+              sources: aibitat._pendingCitations ?? [],
+              type: "chat",
+              attachments: [],
+              metrics,
+              trace,
+              aborted: true,
+              stopReason: aibitat.stopReason || "user_abort",
+            },
+            user: { id: invocation?.user_id || null },
+            threadId: invocation?.thread_id || null,
+            include: true,
+          });
+
+          // Debit only recorded (completed-round) usage — see JSDoc. Guards
+          // inside _debitCredits prevent any double charge.
+          await this._debitCredits(
+            aibitat,
+            invocation,
+            metrics.prompt_tokens,
+            metrics.completion_tokens,
+            metrics.model,
+            aibitat.trackedChatId
+          );
+
+          this._cleanup(aibitat);
+        } catch (e) {
+          console.error(
+            `\x1b[31m[AgentTrace] Abort-time chat save failed: ${e.message}\x1b[0m`
+          );
+        }
       },
 
       /**

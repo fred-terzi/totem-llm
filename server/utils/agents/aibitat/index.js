@@ -204,6 +204,26 @@ class AIbitat {
 
     /** @type {number} timestamp (ms) of the last executed flush */
     this._traceFlushLastRunAt = 0;
+
+    /**
+     * Step 6 (F9, agent-full-context-trace): partial streamed text of the
+     * in-flight LLM round, accumulated from `textResponseChunk` stream
+     * events. Reset at the start of each execution round; read by the
+     * chat-history plugin's abort save so an aborted turn persists whatever
+     * partial text reached the client (always a string — 0.8). Prior
+     * rounds' text survives in the trace as `llm_text` entries either way.
+     * @type {string}
+     */
+    this._partialText = "";
+
+    /**
+     * Step 6 (0.13): true once a writer has debited credits for this turn.
+     * Second guard (with the DB-backed reference check in `_debitCredits`)
+     * against the abort save double-charging a turn already billed by
+     * finalize. `Credits.debit` performs no reference dedupe.
+     * @type {boolean}
+     */
+    this._debited = false;
   }
 
   /**
@@ -1427,6 +1447,13 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         this.handlerProps?.log?.(
           `[debug]: Provider call aborted - unwinding agent run quietly.`
         );
+        // Step 6 (F9): an abort during the in-flight LLM call never returns
+        // to the tool loop — this error is rethrown raw (never wrapped), so
+        // the unwind never reaches the terminate-based abort save. Fire the
+        // abort save here instead: no tool is running on this path, so the
+        // trace buffer is already final. Fail-open/fire-and-forget (the
+        // hook swallows its own errors) so the rethrow is not delayed.
+        this.abortSave?.();
         throw error;
       }
       console.error(`[AIbitat] Provider error: ${error.message}`, {
@@ -1509,6 +1536,15 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
 
     const eventHandler = (type, data) => {
       this?.socket?.send(type, data);
+      // Step 6 (F9): accumulate the in-flight round's partial streamed text
+      // so the abort save can persist what reached the client.
+      if (
+        type === "reportStreamEvent" &&
+        data?.type === "textResponseChunk" &&
+        typeof data.content === "string"
+      ) {
+        this._partialText += data.content;
+      }
     };
 
     // Emit routing notification before the first completion so it appears above the response
@@ -1519,6 +1555,7 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
     // Step 4 (F5): apply in-turn reasoning retention per provider capability
     // and strip the internal `__inTurnReasoning` markers before the call.
     const providerMessages = this.#applyReasoningRetention(messages);
+    this._partialText = ""; // Step 6: fresh partial-text window per round
     const completionStream = await this.#safeProviderCall(() =>
       this.providerInstance.stream(providerMessages, functions, eventHandler)
     );
@@ -1629,15 +1666,14 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         this.handlerProps?.log?.(
           `[debug]: Run aborted after tool \`${name}\` completed. Stopping agent loop.`
         );
+        // Step 6 (F9): unwind-path abort save — the abort arrived while a
+        // tool was running, so this unwind branch (not the error funnel)
+        // is the reliable save point (plan Step 6.1 prerequisite). No LLM
+        // call is in flight; the trace buffer is final.
+        this.abortSave?.();
         return result;
       }
 
-      /**
-       * If the tool call has direct output enabled, return the result directly to the chat
-       * without any further processing and no further tool calls will be run.
-       * For streaming, we need to return the result directly to the chat via the event handler
-       * or else no response will be sent to the chat.
-       */
       if (this.skipHandleExecution) {
         this.skipHandleExecution = false;
         this?.introspect?.(
@@ -1860,6 +1896,9 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
         this.handlerProps?.log?.(
           `[debug]: Run aborted after tool \`${name}\` completed. Stopping agent loop.`
         );
+        // Step 6 (F9): unwind-path abort save (sync path — see the streaming
+        // path for the full comment).
+        this.abortSave?.();
         return result;
       }
 

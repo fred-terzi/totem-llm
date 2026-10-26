@@ -265,6 +265,25 @@ const Credits = {
   // ── transactions ───────────────────────────────────────────────────────────
 
   /**
+   * True if a `debit` ledger row already exists for the given reference.
+   * Used by the agent chat-save path (Step 6 of agent-full-context-trace):
+   * `debit` itself performs no dedupe, so callers that can race (finalize
+   * vs. the abort-time save) check this first to avoid double-charging a
+   * turn. DB-backed so the guard survives process restarts.
+   * @param {number} userId
+   * @param {string} reference - e.g. `chat_<id>`
+   * @returns {Promise<boolean>}
+   */
+  async hasDebitReference(userId, reference) {
+    if (!userId || !reference) return false;
+    const row = await prisma.credit_transactions.findFirst({
+      where: { user_id: userId, type: "debit", reference },
+      select: { id: true },
+    });
+    return !!row;
+  },
+
+  /**
    * Get a user's recent credit transactions (newest first).
    * @param {number} userId
    * @param {number} [limit=20]
