@@ -47,9 +47,22 @@ jest.mock("../../../../../../utils/MCP", () => {
 jest.mock("../../../../../../utils/agents/aibitat/providers", () => {
   class FakeProvider {
     static instances = [];
+    // Step 4 test knobs: capabilities applied in the constructor (reply()
+    // rebuilds providerInstance via getProviderForConfig, so per-instance
+    // injection is discarded before the first call), a static message
+    // capture list, and a scripted return queue.
+    static _script = [];
+    static _capabilities = null;
+    static seenMessages = [];
     constructor() {
       this.calls = [];
       FakeProvider.instances.push(this);
+      if (FakeProvider._capabilities) {
+        this.supportsReasoningHistory =
+          FakeProvider._capabilities.supportsReasoningHistory;
+        this.reasoningHistoryField =
+          FakeProvider._capabilities.reasoningHistoryField;
+      }
     }
     attachHandlerProps(props) {
       this.handlerProps = props;
@@ -62,6 +75,7 @@ jest.mock("../../../../../../utils/agents/aibitat/providers", () => {
     }
     async stream(messages, functions, eventHandler) {
       this.calls.push({ type: "stream", messages, functions });
+      FakeProvider.seenMessages.push(messages);
       if (FakeProvider._script.length > 0) {
         return FakeProvider._script.shift()();
       }
@@ -697,5 +711,132 @@ describe("trace-reconstructed messages do not inflate max rounds", () => {
     // getHistory counts BOTH directions, so the real messages are the user
     // prompt + the final reply = 2, which must stay under maxRounds: 3.
     expect(aibitat.hasReachedMaximumRounds("agent", "USER")).toBe(false);
+  });
+});
+
+// ---- Step 4: in-turn reasoning retention (F5/AC6) ----
+
+describe("Step 4: in-turn reasoning retention (F5/AC6)", () => {
+  /**
+   * Drive a two-round tool loop with the scripted FakeProvider and capture
+   * the message arrays every provider call receives.
+   *
+   * NOTE: capabilities and message capture go through the class-level
+   * FakeProvider mock — reply() rebuilds providerInstance via
+   * getProviderForConfig every turn, so a directly-assigned
+   * `aibitat.providerInstance` is discarded before the first call.
+   */
+  async function runTwoRoundTurn(providerShaping = {}) {
+    FakeProvider._capabilities = {
+      supportsReasoningHistory: providerShaping.supportsReasoningHistory ?? false,
+      reasoningHistoryField: providerShaping.reasoningHistoryField ?? "reasoning_content",
+    };
+    FakeProvider.seenMessages = [];
+    FakeProvider._script = [
+      // Round 1: tool call with reasoning.
+      () => ({
+        functionCall: { id: "call_1", name: "tool-a", arguments: {} },
+        textResponse: "let me check",
+        reasoning: "I should use tool-a first",
+        uuid: "u1",
+      }),
+      // Round 2: final text.
+      () => ({ textResponse: "all done", functionCall: null, uuid: "u2" }),
+    ];
+
+    const aibitat = new AIbitat({
+      chats: [],
+      maxRounds: 10,
+      maxToolCalls: 10,
+      provider: "openai",
+      model: "gpt-4",
+      handlerProps: {
+        invocation: { workspace_id: 1, user_id: null, thread_id: null },
+        log: () => {},
+      },
+    });
+    aibitat.agent("USER", { role: "u", interrupt: "ALWAYS" });
+    aibitat.agent("agent", { role: "a" });
+    aibitat.function({ name: "tool-a", handler: async () => "tool-a-result" });
+
+    await aibitat.start({ from: "USER", to: "agent", content: "hi" });
+
+    const seenMessages = FakeProvider.seenMessages;
+    // Reset knobs so later suites are unaffected.
+    FakeProvider._capabilities = null;
+    FakeProvider._script = [];
+    return { aibitat, seenMessages };
+  }
+
+  test("capability OFF (default): no reasoning fields reach the provider messages", async () => {
+    const { seenMessages } = await runTwoRoundTurn({});
+
+    expect(seenMessages).toHaveLength(2);
+    const second = seenMessages[1];
+    // No internal markers leak.
+    for (const msg of second) {
+      expect(msg.__inTurnReasoning).toBeUndefined();
+      expect(msg.__reasoningField).toBeUndefined();
+      expect(msg.__reasoningText).toBeUndefined();
+    }
+    // The function message is exactly today's shape.
+    const fnMsg = second.find((m) => m.role === "function");
+    expect(fnMsg).toMatchObject({ name: "tool-a", content: "tool-a-result" });
+    expect(fnMsg.content.startsWith("<thought>")).toBe(false);
+  });
+
+  test("capability true: reasoning rides to the formatter as the native carrier", async () => {
+    const { seenMessages } = await runTwoRoundTurn({
+      supportsReasoningHistory: true,
+    });
+
+    expect(seenMessages).toHaveLength(2);
+    const fnMsg = seenMessages[1].find((m) => m.role === "function");
+    expect(fnMsg.__reasoningField).toBe("reasoning_content");
+    expect(fnMsg.__reasoningText).toBe("I should use tool-a first");
+    // The raw marker is always stripped, carrier or not.
+    expect(fnMsg.__inTurnReasoning).toBeUndefined();
+  });
+
+  test("capability true + custom field: field name follows reasoningHistoryField", async () => {
+    const { seenMessages } = await runTwoRoundTurn({
+      supportsReasoningHistory: true,
+      reasoningHistoryField: "thinking",
+    });
+    const fnMsg = seenMessages[1].find((m) => m.role === "function");
+    expect(fnMsg.__reasoningField).toBe("thinking");
+  });
+
+  test("capability 'text': reasoning rides as <thought>-wrapped content prefix", async () => {
+    const { seenMessages } = await runTwoRoundTurn({
+      supportsReasoningHistory: "text",
+    });
+    const fnMsg = seenMessages[1].find((m) => m.role === "function");
+    expect(fnMsg.__reasoningField).toBeUndefined();
+    expect(fnMsg.__reasoningText).toBeUndefined();
+    expect(fnMsg.content.startsWith("<thought>I should use tool-a first</thought>")).toBe(true);
+    expect(fnMsg.content).toContain("tool-a-result");
+  });
+
+  test("AC6 end-to-end: formatMessagesForTools merges the carrier into the assistant tool_call message", async () => {
+    const { seenMessages } = await runTwoRoundTurn({
+      supportsReasoningHistory: true,
+    });
+    const formatted = formatMessagesForTools(seenMessages[1]);
+    const toolCallAssistant = formatted.find(
+      (m) => m.role === "assistant" && m.tool_calls
+    );
+    // `id` lives on tool_calls[0], not the assistant message root.
+    expect(toolCallAssistant.tool_calls[0]).toMatchObject({ id: "call_1" });
+    expect(toolCallAssistant.reasoning_content).toBe("I should use tool-a first");
+    const toolMsg = formatted.find((m) => m.role === "tool");
+    expect(toolMsg).toMatchObject({ tool_call_id: "call_1", content: "tool-a-result" });
+  });
+
+  test("base Provider capability defaults: false / reasoning_content", () => {
+    const Provider = require("../../../../../../utils/agents/aibitat/providers/ai-provider");
+    const p = new Provider();
+    expect(p.supportsReasoningHistory).toBe(false);
+    expect(p.reasoningHistoryField).toBe("reasoning_content");
   });
 });

@@ -69,6 +69,30 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
   }
 
   /**
+   * Step 4 (F5, agent-full-context-trace): Ollama accepts assistant
+   * `thinking` blocks in history for thinking models — the same field its
+   * stream emits (`chunk.message.thinking`). Retention is enabled only when
+   * a think level is configured (the same condition that sets
+   * `requestPayload.think`), so non-thinking models/models without the
+   * env var keep today's behavior (no `thinking` field in requests).
+   * @returns {boolean}
+   */
+  get supportsReasoningHistory() {
+    // thinkLevel can be boolean `false` ("off" env value → requestPayload
+    // .think = false) — that means thinking is explicitly disabled, so no
+    // retention either. Only a real level (low/medium/high/custom) enables it.
+    return this.thinkLevel !== "" && this.thinkLevel !== false;
+  }
+
+  /**
+   * Ollama's native assistant reasoning field name (F5).
+   * @returns {string}
+   */
+  get reasoningHistoryField() {
+    return "thinking";
+  }
+
+  /**
    * Whether this provider supports native OpenAI-compatible tool calling.
    * Override in subclass and return true to use native tool calling instead of UnTooled.
    * @returns {boolean|Promise<boolean>}
@@ -211,9 +235,16 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         const funcName =
           message.originalFunctionCall?.name || message.name || "unknown";
         const funcArgs = message.originalFunctionCall?.arguments || {};
-        formatted.push({
+        // Step 4 (F5/AC6, agent-full-context-trace): an in-turn reasoning
+        // retention carrier on the function message merges its text into the
+        // synthesized assistant tool-call message as Ollama's native
+        // `thinking` field — Ollama accepts assistant `thinking` history for
+        // thinking models (the same field its stream emits).
+        const hasReasoningCarrier = !!message.__reasoningField;
+        const assistantMsg = {
           role: "assistant",
           content: "",
+          ...(hasReasoningCarrier ? { thinking: message.__reasoningText } : {}),
           tool_calls: [
             {
               function: {
@@ -225,7 +256,8 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
               },
             },
           ],
-        });
+        };
+        formatted.push(assistantMsg);
         formatted.push({
           role: "tool",
           content:

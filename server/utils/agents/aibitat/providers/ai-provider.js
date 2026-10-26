@@ -168,6 +168,23 @@ class Provider {
   }
 
   /**
+   * Step 4 (F5, agent-full-context-trace): env gate for assistant reasoning
+   * history replay, mirroring `supportsNativeToolCallingViaEnv`. Set
+   * `PROVIDER_SUPPORTS_REASONING_HISTORY=<provider-tags>` to opt a provider
+   * in when its upstream accepts `reasoning_content` on assistant messages.
+   * @param {string} providerTag
+   * @returns {boolean}
+   */
+  supportsReasoningHistoryViaEnv(providerTag = "") {
+    if (!("PROVIDER_SUPPORTS_REASONING_HISTORY" in process.env)) return false;
+    if (!providerTag) return false;
+    return (
+      process.env.PROVIDER_SUPPORTS_REASONING_HISTORY?.includes(providerTag) ||
+      false
+    );
+  }
+
+  /**
    * Whether this provider supports native OpenAI-compatible tool calling.
    * @returns {boolean|Promise<boolean>}
    */
@@ -539,6 +556,35 @@ class Provider {
    */
   get supportsAgentStreaming() {
     return false;
+  }
+
+  /**
+   * Step 4 (F5, agent-full-context-trace): whether the provider accepts
+   * assistant reasoning blocks in the in-turn tool-loop message history.
+   * Three-valued:
+   * - `true`  → native field retention (`reasoningHistoryField`, default
+   *   `reasoning_content`); the provider's formatter merges the carrier into
+   *   the synthesized tool-call assistant message.
+   * - `"text"` → `<thought>`-tagged assistant-text fallback (universally
+   *   accepted by prompt- and tool-based APIs alike).
+   * - `false` (base default) → no in-turn retention — exactly today's
+   *   behavior. Reasoning is still captured to the trace for persistence;
+   *   it is just not replayed to the provider mid-turn.
+   * @returns {boolean|string}
+   */
+  get supportsReasoningHistory() {
+    return false;
+  }
+
+  /**
+   * Native assistant-message field name for reasoning history (F5), read by
+   * the aibitat tool loop when `supportsReasoningHistory === true`.
+   * Providers with a different convention (e.g. Ollama's `thinking`)
+   * override this.
+   * @returns {string}
+   */
+  get reasoningHistoryField() {
+    return "reasoning_content";
   }
 
   /**

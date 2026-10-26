@@ -1284,6 +1284,54 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
   }
 
   /**
+   * Step 4 (F5, agent-full-context-trace): build the in-turn reasoning
+   * retention carrier for a prior LLM call in this same tool loop.
+   *
+   * AC6: when call #3's request is built, call #1's reasoning block must be
+   * present. The carrier rides on the function message that follows the
+   * reasoning-bearing assistant turn; converters merge the native field into
+   * the synthesized assistant tool-call message so the API-required ordering
+   * (assistant reasoning/tool_call → result) is preserved.
+   *
+   * Behavior per provider capability (`supportsReasoningHistory`):
+   * - `true`  → returns a carrier object the provider formatter merges as the
+   *   native field (`reasoningHistoryField`, default `reasoning_content`) on
+   *   the assistant tool-call message.
+   * - `"text"` → returns the raw reasoning string as `content` — the aibitat
+   *   function message carries reasoning text as its content (assistant-text
+   *   fallback rendered by every converter as plain text).
+   * - `false` (or no reasoning yet) → returns null — today's behavior.
+   * @param {string} reasoningText - The prior call's reasoning from the trace
+   * @param {object|null} priorCall - The prior call's `{callId, name, arguments}`
+   * @returns {object|null}
+   */
+  #reasoningRetentionCarrier(reasoningText, priorCall) {
+    if (!reasoningText?.trim()) return null;
+    const capability = this.providerInstance?.supportsReasoningHistory ?? false;
+    if (capability === true) {
+      return {
+        __reasoningCarrier: true,
+        field:
+          this.providerInstance?.reasoningHistoryField ?? "reasoning_content",
+        text: reasoningText,
+        callId: priorCall?.callId ?? null,
+        name: priorCall?.name ?? null,
+        arguments: priorCall?.arguments ?? {},
+      };
+    }
+    if (capability === "text") {
+      return {
+        __reasoningCarrier: false,
+        text: reasoningText,
+        callId: priorCall?.callId ?? null,
+        name: priorCall?.name ?? null,
+        arguments: priorCall?.arguments ?? {},
+      };
+    }
+    return null;
+  }
+
+  /**
    * True if the error was caused by us aborting the run (user Stop, socket
    * close, HTTP client disconnect) - NOT by an upstream provider failure.
    * Aborts must never be wrapped into a scary "agent model failed to
@@ -1345,6 +1393,57 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
    *
    * @returns {Promise<string>}
    */
+  /**
+   * Apply Step 4 (F5/AC6) in-turn reasoning retention to the message array
+   * about to be sent to the provider, then strip the internal
+   * `__inTurnReasoning` marker fields (which must never reach a provider).
+   *
+   * The carrier from `#reasoningRetentionCarrier` rides on the function
+   * message that follows the reasoning-bearing assistant turn; converters
+   * merge the native field into the synthesized assistant tool-call message
+   * so the API-required ordering (assistant reasoning/tool_call → result) is
+   * preserved. `"text"`-capability providers get the reasoning as
+   * `<thought>`-wrapped content on the function message (assistant-text
+   * fallback). Capability-off providers just get their markers stripped —
+   * today's behavior, byte-for-byte.
+   * @param {Array} messages - The in-turn message array
+   * @returns {Array} Provider-safe message array
+   */
+  #applyReasoningRetention(messages = []) {
+    return messages.map((msg) => {
+      if (msg?.__inTurnReasoning === undefined) return msg;
+      const { __inTurnReasoning: reasoning, ...rest } = msg;
+      const capability =
+        this.providerInstance?.supportsReasoningHistory ?? false;
+      const priorCall = msg.originalFunctionCall
+        ? {
+            callId: msg.originalFunctionCall.id ?? null,
+            name: msg.originalFunctionCall.name ?? null,
+            arguments: msg.originalFunctionCall.arguments ?? {},
+          }
+        : null;
+      const carrier = this.#reasoningRetentionCarrier(reasoning, priorCall);
+      if (!carrier) return rest;
+
+      if (carrier.__reasoningCarrier) {
+        // Native-field retention: the provider formatter reads these off the
+        // function message and merges them into the synthesized assistant
+        // tool_call message (see formatMessagesForTools / Ollama's converter).
+        return {
+          ...rest,
+          __reasoningField: carrier.field,
+          __reasoningText: carrier.text,
+        };
+      }
+      // Text fallback: reasoning rides as <thought>-wrapped content prefix on
+      // the function message — every converter renders it as plain text.
+      return {
+        ...rest,
+        content: `<thought>${carrier.text}</thought>\n${rest.content ?? ""}`,
+      };
+    });
+  }
+
   async handleAsyncExecution(
     messages = [],
     functions = [],
@@ -1364,8 +1463,11 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
 
     /** @type {{ functionCall: { name: string, arguments: string }, textResponse: string }} */
     const traceLlmCall = this._nextTraceLlmCall();
+    // Step 4 (F5): apply in-turn reasoning retention per provider capability
+    // and strip the internal `__inTurnReasoning` markers before the call.
+    const providerMessages = this.#applyReasoningRetention(messages);
     const completionStream = await this.#safeProviderCall(() =>
-      this.providerInstance.stream(messages, functions, eventHandler)
+      this.providerInstance.stream(providerMessages, functions, eventHandler)
     );
 
     // Trace capture for this round (Step 2/3 — agent-full-context-trace):
@@ -1516,6 +1618,11 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
           role: "function",
           content: result,
           originalFunctionCall: completionStream.functionCall,
+          // Step 4 (F5/AC6): carry this round's reasoning on the function
+          // message so the NEXT round's request can retain it in-turn. The
+          // marker field is stripped by #applyReasoningRetention before the
+          // provider call; providers without the capability never see it.
+          __inTurnReasoning: traceParts.reasoning,
         },
       ];
 
@@ -1586,8 +1693,11 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
 
     // get the chat completion
     const traceLlmCall = this._nextTraceLlmCall();
+    // Step 4 (F5): apply in-turn reasoning retention per provider capability
+    // and strip the internal `__inTurnReasoning` markers before the call.
+    const providerMessages = this.#applyReasoningRetention(messages);
     const completion = await this.#safeProviderCall(() =>
-      this.providerInstance.complete(messages, functions)
+      this.providerInstance.complete(providerMessages, functions)
     );
 
     // Trace capture for this round (Step 2/3 — agent-full-context-trace):
@@ -1726,6 +1836,10 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
           role: "function",
           content: result,
           originalFunctionCall: completion.functionCall,
+          // Step 4 (F5/AC6): carry this round's reasoning on the function
+          // message so the NEXT round's request can retain it in-turn (sync
+          // path — see the streaming path for the full comment).
+          __inTurnReasoning: traceParts.reasoning,
         },
       ];
 

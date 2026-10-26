@@ -37,6 +37,7 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
       model || process.env.VENICE_MODEL_PREF || VeniceLLM.DEFAULT_MODEL;
     this.verbose = true;
     this._supportsToolCalling = null;
+    this._supportsReasoningHistory = null;
   }
 
   get client() {
@@ -45,6 +46,28 @@ class VeniceProvider extends InheritMultiple([Provider, UnTooled]) {
 
   get supportsAgentStreaming() {
     return true;
+  }
+
+  /**
+   * Step 4 (F5, agent-full-context-trace): Venice reasoning models return
+   * `reasoning_content` on assistant messages (the LLM connector wraps it in
+   * `<think>` tags for the chat path). Venice's OpenAI-compatible endpoint
+   * accepts assistant `reasoning_content` history, so native-field retention
+   * is enabled when the model reports the reasoning capability.
+   * Falls back to `false` if no key is set or the check throws.
+   * @returns {boolean}
+   */
+  get supportsReasoningHistory() {
+    if (this._supportsReasoningHistory !== null)
+      return this._supportsReasoningHistory;
+    try {
+      const venice = new VeniceLLM(null, this.model);
+      const capabilities = venice.getModelCapabilities();
+      this._supportsReasoningHistory = capabilities.reasoning === true;
+    } catch {
+      this._supportsReasoningHistory = false;
+    }
+    return this._supportsReasoningHistory;
   }
 
   /**

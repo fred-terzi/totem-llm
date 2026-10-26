@@ -98,6 +98,77 @@ function formatMessagesForTools(messages, options = {}) {
   const { injectReasoningContent = false } = options;
 
   for (const message of messages) {
+    // Step 4 (F5/AC6, agent-full-context-trace): an in-turn reasoning
+    // retention carrier rides on the function message. The native field
+    // (`reasoning_content` by default, provider-selectable via
+    // `__reasoningField`) merges onto the synthesized assistant tool-call
+    // message that follows, preserving the API-required ordering
+    // (assistant reasoning/tool_call → tool result). Note: this handler
+    // runs BEFORE the generic injectReasoningContent branch below, so a
+    // real carrier never gets overwritten by the empty-string synthesis.
+    if (message.role === "function" && message.__reasoningField) {
+      const {
+        __reasoningField: reasoningField,
+        __reasoningText: reasoningText,
+      } = message;
+      if (message.originalFunctionCall?.id) {
+        const prevMsg = formattedMessages[formattedMessages.length - 1];
+        if (!prevMsg || prevMsg.role !== "assistant" || !prevMsg.tool_calls) {
+          formattedMessages.push({
+            role: "assistant",
+            content: null,
+            [reasoningField]: reasoningText,
+            tool_calls: [
+              {
+                id: message.originalFunctionCall.id,
+                type: "function",
+                function: {
+                  name: message.originalFunctionCall.name,
+                  arguments:
+                    typeof message.originalFunctionCall.arguments === "string"
+                      ? message.originalFunctionCall.arguments
+                      : JSON.stringify(message.originalFunctionCall.arguments),
+                },
+              },
+            ],
+          });
+        }
+        formattedMessages.push({
+          role: "tool",
+          tool_call_id: message.originalFunctionCall.id,
+          content:
+            typeof message.content === "string"
+              ? message.content
+              : JSON.stringify(message.content),
+        });
+      } else {
+        const toolCallId = `call_${v4()}`;
+        formattedMessages.push({
+          role: "assistant",
+          content: null,
+          [reasoningField]: reasoningText,
+          tool_calls: [
+            {
+              id: toolCallId,
+              type: "function",
+              function: {
+                name: message.name,
+                arguments: "{}",
+              },
+            },
+          ],
+        });
+        formattedMessages.push({
+          role: "tool",
+          tool_call_id: toolCallId,
+          content:
+            typeof message.content === "string"
+              ? message.content
+              : JSON.stringify(message.content),
+        });
+      }
+      continue;
+    }
     if (message.role === "function") {
       if (message.originalFunctionCall?.id) {
         const prevMsg = formattedMessages[formattedMessages.length - 1];

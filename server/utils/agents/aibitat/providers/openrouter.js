@@ -44,6 +44,21 @@ class OpenRouterProvider extends InheritMultiple([Provider, UnTooled]) {
   }
 
   /**
+   * Step 4 (F5, agent-full-context-trace): OpenRouter models vary in both
+   * tool calling AND reasoning support, and the native
+   * `supportsNativeToolCallingViaEnv` gate only covers tools. Assistant
+   * reasoning history (`reasoning_content` replay) is therefore OFF by
+   * default — many upstream models 400 on unknown assistant fields.
+   * Operators can enable it per-deployment via
+   * `PROVIDER_SUPPORTS_REASONING_HISTORY=openrouter` (mirrors the
+   * native-tool-calling env gate).
+   * @returns {boolean}
+   */
+  get supportsReasoningHistory() {
+    return this.supportsReasoningHistoryViaEnv("openrouter");
+  }
+
+  /**
    * Whether this provider supports native OpenAI-compatible tool calling.
    * - Since OpenRouter models vary in tool calling support, we check the ENV.
    * - If the ENV is not set, we default to false.
