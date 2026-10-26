@@ -359,6 +359,43 @@ tool loop) and never touch `include`, debits, or rename (N11).
    rows.
 4. **Deviations:** (record)
 
+### Step 3b deviations (recorded 2026-10-26; Step 3b code committed as 6af915d9)
+
+1. **`_finalized` writers landed here, not in Step 6.** The flag that Step 2b
+   pre-wired (and whose guards the flushes already honor) now has its writers:
+   `_store`/`_storeSpecial` set it before their upserts, so pending flushes
+   stand down once the turn row is claimed. This closes the Step 6.3 race
+   surface early; Step 6's abort-save writer remains the only missing piece.
+2. **Error-path save (AC17) added as a new `onError` listener in the
+   chat-history plugin (`_storeError`)** — the plan drafted this as Step 6
+   scope ("the turn still saves via the error path today" was verified false
+   for turns that die before finalize: the placeholder row stayed
+   `include:false` forever, indistinguishable from an abort ghost). It landed
+   with 3b because it is the `provider_error` stop-reason's persistence half.
+   The save is fail-open, carries the trace-so-far, debits recorded session
+   usage, and never claims a row after finalize/abort.
+3. **Promotion runs in `AgentHandler.chatHistory()`** (the decision the plan
+   left open between AgentHandler and the plugin's first listener): it is
+   thread-scoped first-read work, it keeps the reconstruction tests at the
+   single injection point the Step 3 deviations already documented (public
+   method, brand-check-safe), and the plugin's first listener has no access to
+   the workspace/thread scope without duplicating invocation plumbing.
+4. **`"completed"` default set in `_store`/`_storeSpecial` via the existing
+   payload** — `stopReason` defaults to `"completed"` exactly when no other
+   reason was recorded (first-writer-wins makes this safe); flushes carry the
+   in-progress `null` and never write a stop reason.
+5. **Test placement deviates from the Step 8 table:** stop-reason persistence
+   tests live in `trace-buffer.test.js` (which already owns the aibitat +
+   chat-history-plugin scaffolding the AC17 tests need) rather than a separate
+   `stop-reason.test.js`; promotion coverage lives in `tooled.trace.test.js`
+   alongside the reconstruction block rather than `crash-recovery.test.js`.
+   A separate file would duplicate the handler mock setup (see Step 3
+   deviation 6). Coverage is identical.
+6. **Reconstruction test harness change:** the `WorkspaceChats.where` mock is
+   now clause-aware (`include:false` promotion lookup vs `include:true`
+   history load) because `chatHistory()` now runs promotion first on every
+   call.
+
 ## Step 4 — In-turn reasoning retention (F5)
 
 In `handleAsyncExecution`/`handleExecution`, when building `newMessages` for the
@@ -580,7 +617,7 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | PR | Contents | Status |
 |----|----------|--------|
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
-| (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b 🔲 |
+| (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b ✅ committed (`6af915d9`, 2026-10-26): stop reason plumbing (first-writer-wins; `user_abort` in `abort()`, `provider_error` in `newError()`, `completed` default at finalize), `_finalized` writers landed (flush guards now fully armed), error-path turn save (AC17, `_storeError`), crash-recovery promotion (F13/AC18); see Step 3b deviations. Suite: 62 suites / 584 tests green; server lint clean. |
 | (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 ✅ committed (`d6968fde`, 2026-10-26): in-turn reasoning retention (three-valued capability flag, function-message carrier, converter merge; see Step 4 deviations). Suite: 62 suites / 572 tests green; server lint clean. |
 | (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 partially done (see Step 5 deviations); 6–7 🔲 |
 | (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
