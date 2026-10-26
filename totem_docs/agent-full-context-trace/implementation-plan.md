@@ -370,6 +370,43 @@ Providers that reject such fields get plain assistant-text fallback (the
 capability flag on the provider instance
 (`supportsReasoningHistory: true/false`) set in Step 1's audit.
 
+### Step 4 deviations (implemented 2026-10-26, commit `d6968fde`)
+
+1. **Capability flag is three-valued, not boolean.** The plan drafted
+   `supportsReasoningHistory: true/false`; implemented as
+   `true` (native reasoning field retention), `"text"` (`<thought>`-tagged
+   assistant-text fallback), or `false` (base default — today's behavior,
+   byte-for-byte). The three-valued shape lets the base class express the
+   fallback mode explicitly instead of inferring it from `!== true`, and keeps
+   `false` semantically identical to pre-Step-4 behavior for all providers
+   outside the three validated ones.
+2. **Carrier via the `role:"function"` message, not `newMessages` surgery.**
+   Rather than rewriting prior assistant messages in `newMessages`, each
+   round's function-result message carries that round's reasoning as an
+   `__inTurnReasoning` marker; `#applyReasoningRetention` translates markers
+   per capability immediately before every provider call (native →
+   `__reasoningField`/`__reasoningText` carrier, `"text"` →
+   `<thought>`-wrapped content prefix, `false` → stripped). Markers never
+   reach a provider.
+3. **Retention merge happens in the tool-call converters.**
+   `formatMessagesForTools` (covers Venice/OpenRouter tooled paths, and runs
+   before DeepSeek's `injectReasoningContent` so a real carrier can't be
+   overwritten by the empty-string synthesis) merges the carrier onto the
+   synthesized assistant tool-call message; Ollama's
+   `#formatMessagesForOllamaTools` merges it as Ollama's native `thinking`
+   field.
+4. **Flag enablement (validation scope: Ollama/Venice/OpenRouter only):**
+   Ollama — dynamic off `thinkLevel` (boolean `false` "off" excluded), field
+   `thinking`; Venice — `reasoning` flag from the cached capabilities report
+   (fail-closed); OpenRouter — default off, env-gated opt-in via
+   `PROVIDER_SUPPORTS_REASONING_HISTORY` (upstream model variance makes
+   default-on unsafe). All other providers inherit the base `false`.
+5. **Test-harness note:** `reply()` rebuilds `providerInstance` via
+   `getProviderForConfig` every turn — capabilities and message capture must
+   be injected through the class-level provider mock (`_capabilities` applied
+   in the constructor, static `seenMessages`), not assigned per-instance.
+   Suite: 62 suites / 572 tests green; server lint clean.
+
 ## Step 5 — Persist the trace (F1–F3, F12, N2, N6, N10)
 
 1. In `chat-history.js` `_store` / `_storeSpecial`: drain
@@ -544,6 +581,6 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 |----|----------|--------|
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
 | (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b 🔲 |
-| (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 🔲 |
+| (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 ✅ committed (`d6968fde`, 2026-10-26): in-turn reasoning retention (three-valued capability flag, function-message carrier, converter merge; see Step 4 deviations). Suite: 62 suites / 572 tests green; server lint clean. |
 | (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 partially done (see Step 5 deviations); 6–7 🔲 |
 | (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
