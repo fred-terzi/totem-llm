@@ -91,6 +91,29 @@ const chatHistory = {
           } catch {}
         });
 
+        // Step 3b: an error that reaches the error funnel also ends the turn —
+        // persist the row (include:true) with `stopReason: "provider_error"`
+        // and the trace-so-far so the turn survives in history (AC17). The
+        // websocket plugin independently reports the error to the client.
+        // (`onError` is aibitat's registration name for the "replyError"
+        // emitter event.)
+        aibitat.onError(async (error) => {
+          try {
+            // Ownership: the finalize path may have already saved the turn
+            // (e.g. an error in a listener after _store). Never re-write.
+            if (aibitat._aborted || aibitat._finalized) return;
+            if (!aibitat.trackedChatId) return;
+            aibitat._finalized = true;
+            await this._storeError(aibitat, error);
+          } catch (e) {
+            // Fail-open: the error-path save must never mask the original
+            // error or crash the unwind (N10/N12).
+            console.error(
+              `\x1b[31m[AgentTrace] Error-path chat save failed: ${e.message}\x1b[0m`
+            );
+          }
+        });
+
         // Step 2b (agent-full-context-trace): expose the incremental flush
         // helper to aibitat so `scheduleTraceFlush()` (fired after each
         // completed tool call) has a persistence target. The plugin instance
@@ -142,6 +165,12 @@ const chatHistory = {
         // primary chat record is never lost to a trace failure.
         const trace = this._serializeTrace(aibitat);
 
+        // Step 3b (F12): claim the row before the write so racing flushes
+        // stand down, then persist the exit reason. The "completed" default
+        // applies only when no other exit path recorded a reason.
+        aibitat._finalized = true;
+        const stopReason = aibitat.stopReason || "completed";
+
         await WorkspaceChats.upsert(aibitat.trackedChatId, {
           workspaceId: Number(invocation.workspace_id),
           prompt,
@@ -152,6 +181,7 @@ const chatHistory = {
             attachments,
             metrics,
             trace,
+            stopReason,
             ...(outputs.length > 0 ? { outputs } : {}),
             ...(clarifyingQuestions.length > 0 ? { clarifyingQuestions } : {}),
           },
@@ -218,6 +248,11 @@ const chatHistory = {
         // primary chat record is never lost to a trace failure.
         const trace = this._serializeTrace(aibitat);
 
+        // Step 3b (F12): claim the row before the write, persist the exit
+        // reason (same contract as `_store`).
+        aibitat._finalized = true;
+        const stopReason = aibitat.stopReason || "completed";
+
         await WorkspaceChats.upsert(aibitat.trackedChatId, {
           workspaceId: Number(invocation.workspace_id),
           prompt,
@@ -232,6 +267,7 @@ const chatHistory = {
             attachments,
             metrics,
             trace,
+            stopReason,
             ...(outputs.length > 0 ? { outputs } : {}),
             ...(clarifyingQuestions.length > 0 ? { clarifyingQuestions } : {}),
           },
@@ -336,6 +372,74 @@ const chatHistory = {
         aibitat.clearClarifyingQuestionSurveys?.();
         aibitat.clearTrace?.();
         aibitat.clearTrackedChatId();
+      },
+
+      /**
+       * Step 3b (F12/AC17): persist a turn that ended in a provider/tool
+       * error. Mirrors `_store`'s shape but writes the error text as the
+       * row's `text` (always a string — 0.8: non-string text rows are
+       * skipped by `convertToChatHistory` and would vanish from UI history),
+       * `stopReason: "provider_error"`, `type: "error"`, and the trace-so-far
+       * so the failed turn's tool activity survives in history. Debits the
+       * recorded session usage (completed rounds were fully billed upstream);
+       * never renames the thread. Claimed via `_finalized` by the caller.
+       * @param {object} aibitat
+       * @param {Error|string|null} error
+       */
+      _storeError: async function (aibitat, error = null) {
+        const invocation = aibitat.handlerProps.invocation;
+        const lastCall = aibitat.providerInstance?.getUsage?.() ?? {};
+        const session = aibitat.providerInstance?.getSessionUsage?.() ?? {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        };
+        const metrics = {
+          prompt_tokens: session.prompt_tokens || 0,
+          completion_tokens: session.completion_tokens || 0,
+          total_tokens: session.total_tokens || 0,
+          lastCall: {
+            prompt_tokens: lastCall.prompt_tokens || 0,
+            completion_tokens: lastCall.completion_tokens || 0,
+            total_tokens: lastCall.total_tokens || 0,
+            duration: lastCall.duration || 0,
+          },
+          model: lastCall.model,
+          provider: lastCall.provider,
+          timestamp: lastCall.timestamp,
+        };
+
+        const trace = this._serializeTrace(aibitat);
+        const errorText =
+          error instanceof Error ? error.message : String(error || "");
+
+        await WorkspaceChats.upsert(aibitat.trackedChatId, {
+          workspaceId: Number(invocation.workspace_id),
+          response: {
+            text: errorText,
+            sources: aibitat._pendingCitations ?? [],
+            type: "error",
+            attachments: [],
+            metrics,
+            trace,
+            stopReason: aibitat.stopReason || "provider_error",
+          },
+          user: { id: invocation?.user_id || null },
+          threadId: invocation?.thread_id || null,
+          include: true,
+        });
+
+        // Completed tool-loop rounds have usage already recorded upstream;
+        // debit what was actually billed. Admin-exempt via _debitCredits.
+        await this._debitCredits(
+          invocation,
+          metrics.prompt_tokens,
+          metrics.completion_tokens,
+          metrics.model,
+          aibitat.trackedChatId
+        );
+
+        this._cleanup(aibitat);
       },
 
       /**

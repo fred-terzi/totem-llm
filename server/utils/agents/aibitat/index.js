@@ -130,6 +130,28 @@ class AIbitat {
     this._aborted = false;
 
     /**
+     * Exit reason for this turn (Step 3b, agent-full-context-trace).
+     * Set at every exit path:
+     *  - "user_abort"     → abort() (user Stop / socket close / disconnect)
+     *  - "provider_error" → newError() (provider/tool exception ended the turn)
+     *  - "completed"      → default applied by the chat-history finalize when
+     *                       no other reason was set (never stored on aibitat)
+     *  - "interrupted"    → never set in-process; written only by the
+     *                       crash-recovery promotion (AgentHandler)
+     * Persisted as `response.stopReason` on every save that writes the row.
+     * @type {string|null}
+     */
+    this._stopReason = null;
+
+    /**
+     * True once a writer has claimed the turn's row (finalize or the
+     * error-path save). Checked by incremental flushes so a late flush
+     * cannot clobber `stopReason`/`include` (plan Steps 2b/6.3).
+     * @type {boolean}
+     */
+    this._finalized = false;
+
+    /**
      * Ordered trace of the current turn's intermediate agent activity
      * (reasoning blocks, pre-tool assistant text, tool calls, tool results).
      * Appended by `handleAsyncExecution`/`handleExecution` at the same sites
@@ -239,6 +261,28 @@ class AIbitat {
    */
   get trackedChatId() {
     return this._trackedChatId ?? null;
+  }
+
+  /**
+   * Exit reason for this turn (Step 3b). Read by the chat-history plugin
+   * when persisting; the finalize site applies the "completed" default when
+   * no exit path recorded a reason.
+   * @returns {string|null}
+   */
+  get stopReason() {
+    return this._stopReason ?? null;
+  }
+
+  /**
+   * Record the exit reason. First writer wins — an exit path never
+   * overwrites a reason already recorded (abort() is the exception: it
+   * assigns directly and always wins, since a user abort supersedes any
+   * prior error).
+   * @param {string} reason
+   */
+  setStopReason(reason) {
+    if (!reason || this._stopReason) return;
+    this._stopReason = reason;
   }
 
   /**
@@ -643,6 +687,11 @@ class AIbitat {
    */
   abort() {
     this._aborted = true;
+    // Step 3b: the exit reason is recorded centrally at the moment of abort
+    // (not deferred to the Step 6 abort-save) so it is authoritative at every
+    // exit path; the abort save simply reads it. Abort always wins over any
+    // previously recorded reason.
+    this._stopReason = "user_abort";
     this.abortController.abort();
     this.emitter.emit("abort", null, this);
   }
@@ -770,6 +819,10 @@ class AIbitat {
    * @param error
    */
   newError(route, error) {
+    // Step 3b: a provider/tool exception that reaches the error funnel ends
+    // the turn — record the reason before the error listeners run so the
+    // error-path save persists it (AC17).
+    this.setStopReason("provider_error");
     const chat = {
       ...route,
       content: error instanceof Error ? error.message : String(error),

@@ -237,6 +237,95 @@ class AgentHandler {
   }
 
   /**
+   * Step 3b (F13/AC18): crash-recovery promotion.
+   *
+   * A turn that was mid-flight when the process died (or the socket was
+   * severed) leaves behind a placeholder row that only the Step 2b
+   * incremental flushes ever wrote: `include:false`, a non-empty
+   * `response.trace`, and no `stopReason` (the Step 6 abort save and the
+   * finalize never ran). This helper finds the most recent such orphan for
+   * the current workspace/thread and promotes it exactly once:
+   * `include: true` + `stopReason: "interrupted"` — after which it flows
+   * into `chatHistory()`'s trace reconstruction like any traced row.
+   *
+   * Detection is JS-side by design (plan 0.12): `workspace_chats.response`
+   * is a plain String column, so Prisma cannot filter on a key inside the
+   * JSON — the bounded fetch (last 5 rows, newest first) + parse filter is
+   * cheap and bounded.
+   *
+   * Guards (idempotency + live-turn safety, plan 0.14):
+   *  - Only rows with a non-empty `response.trace` AND no `stopReason` are
+   *    eligible (the `stopReason` absence is the once-only promoted-marker;
+   *    finalize/abort saves always write one).
+   *  - Recency guard: the row's `lastUpdatedAt` must be older than the
+   *    promotion window (default 60 s, env-tunable). A live turn's row is
+   *    refreshed by each flush (verified: `WorkspaceChats.upsert`'s update
+   *    branch sets `lastUpdatedAt`), so staleness implies the turn is dead.
+   * @returns {Promise<void>}
+   */
+  async #promoteInterruptedTurns() {
+    try {
+      const recencyMs = (() => {
+        const envSec = parseInt(
+          process.env.AGENT_TRACE_PROMOTION_MIN_AGE_MS,
+          10
+        );
+        return !isNaN(envSec) && envSec > 0 ? envSec : 60_000;
+      })();
+
+      const orphans = await WorkspaceChats.where(
+        {
+          workspaceId: this.invocation.workspace_id,
+          user_id: this.invocation.user_id || null,
+          thread_id: this.invocation.thread_id || null,
+          api_session_id: null,
+          include: false,
+        },
+        5,
+        { id: "desc" }
+      );
+
+      for (const row of orphans) {
+        const responseData = safeJsonParse(row.response) || {};
+        if (!responseData?.trace?.entries?.length) continue;
+        if (responseData?.stopReason) continue; // already finalized/abort-saved/promoted
+
+        // Recency guard: a live turn's placeholder is refreshed by every
+        // flush, so a stale lastUpdatedAt implies the turn is genuinely dead.
+        // An invalid/missing timestamp is treated as too-recent-to-promote
+        // (fail-safe: never promote a row whose age is unknown).
+        const lastUpdated = row.lastUpdatedAt
+          ? new Date(row.lastUpdatedAt).getTime()
+          : NaN;
+        if (
+          !Number.isFinite(lastUpdated) ||
+          Date.now() - lastUpdated < recencyMs
+        )
+          continue;
+
+        await WorkspaceChats.upsert(row.id, {
+          workspaceId: row.workspaceId,
+          user: { id: row.user_id || null },
+          threadId: row.thread_id || null,
+          include: true,
+          response: {
+            ...responseData,
+            stopReason: "interrupted",
+          },
+        });
+
+        this.log(
+          `Promoted interrupted agent turn: chat #${row.id} (crash recovery, stopReason=interrupted)`
+        );
+        break; // promote at most one orphan per invocation
+      }
+    } catch (e) {
+      // Promotion is best-effort recovery — never block the new turn.
+      this.log("Crash-recovery promotion failed", e.message);
+    }
+  }
+
+  /**
    * Internal (not part of the public handler surface) but deliberately NOT a
    * `#private` method: it is the F4 test injection point and JS private
    * methods cannot be invoked outside the class body. Marked `@private` in
@@ -246,6 +335,14 @@ class AgentHandler {
    */
   async chatHistory(limit = 10) {
     try {
+      // Step 3b (F13/AC18): before reading history for the new turn, promote
+      // any orphaned flushed placeholder from a crashed/killed prior turn in
+      // this workspace/thread. Runs here (rather than init) because this is
+      // the first thread-scoped read of the invocation and it keeps the
+      // promotion testable at the same injection point as reconstruction.
+      // Best-effort; never blocks history loading.
+      await this.#promoteInterruptedTurns();
+
       const rawHistory = (
         await WorkspaceChats.where(
           {

@@ -473,3 +473,91 @@ describe("Incremental trace flush (Step 2b — F11/AC16/AC19)", () => {
     expect(finalizeCalls()[0][1].response.text).toBe("final");
   });
 });
+
+// ---- Step 3b: stop reason plumbing (F12/AC17) ----
+
+describe("Step 3b: stop reason persistence", () => {
+  beforeEach(() => resetMocks());
+  afterEach(() => {
+    delete process.env.AGENT_TRACE_MAX_BYTES;
+    delete process.env.AGENT_TRACE_FLUSH_INTERVAL_MS;
+  });
+
+  test("a completed turn persists stopReason: 'completed' (F12)", async () => {
+    const aibitat = makeAibitat();
+    FakeProvider._script = [
+      () => ({ textResponse: "all done", functionCall: null, uuid: "u" }),
+    ];
+    await aibitat.start({ from: "USER", to: "agent", content: "hi" });
+
+    const finalizes = finalizeCalls();
+    expect(finalizes).toHaveLength(1);
+    expect(finalizes[0][1].response.stopReason).toBe("completed");
+  });
+
+  test("a provider error persists stopReason: 'provider_error' with include:true and the trace-so-far (AC17)", async () => {
+    const aibitat = makeAibitat();
+    FakeProvider._script = [
+      () => {
+        throw new Error("upstream 500");
+      },
+    ];
+    aibitat.function({ name: "tool-a", handler: async () => "r" });
+
+    await aibitat.start({ from: "USER", to: "agent", content: "hi" });
+    await drain();
+
+    // The error-path save is the only include:true write for this turn.
+    const finalizes = finalizeCalls();
+    expect(finalizes).toHaveLength(1);
+    const response = finalizes[0][1].response;
+    expect(response.stopReason).toBe("provider_error");
+    expect(response.type).toBe("error");
+    // 0.8: text must always be a string or the UI history skips the row.
+    expect(typeof response.text).toBe("string");
+    expect(response.text).toContain("upstream 500");
+    expect(finalizes[0][1].include).toBe(true);
+    expect(aibitat._finalized).toBe(true);
+  });
+
+  test("abort() records stopReason: 'user_abort' centrally (readable by the Step 6 abort save)", () => {
+    const aibitat = makeAibitat({ withHistoryPlugin: false });
+    aibitat.abort();
+    expect(aibitat.stopReason).toBe("user_abort");
+    expect(aibitat._aborted).toBe(true);
+  });
+
+  test("finalize after abort does NOT claim the row (abort path owns it — Step 6)", async () => {
+    const aibitat = makeAibitat();
+    aibitat._aborted = true; // simulate abort mid-turn
+    aibitat.registerChatId(42);
+    aibitat.newMessage({ from: "USER", to: "agent", content: "q" });
+    aibitat.newMessage({ from: "agent", to: "USER", content: "partial" });
+
+    // The finalize listener bails on _aborted (existing behavior).
+    await drain();
+    expect(finalizeCalls()).toHaveLength(0);
+    // And it never claimed the row — the Step 6 abort save still can.
+    expect(aibitat._finalized).toBe(false);
+  });
+
+  test("a turn with a pre-recorded error reason finalizes with that reason, not 'completed'", async () => {
+    const aibitat = makeAibitat();
+    FakeProvider._script = [
+      () => ({ textResponse: "recovered", functionCall: null, uuid: "u" }),
+    ];
+    aibitat.setStopReason("provider_error"); // error occurred, turn recovered
+    await aibitat.start({ from: "USER", to: "agent", content: "hi" });
+
+    const finalizes = finalizeCalls();
+    expect(finalizes).toHaveLength(1);
+    expect(finalizes[0][1].response.stopReason).toBe("provider_error");
+  });
+
+  test("setStopReason is first-writer-wins (an error reason survives a later non-error record attempt)", () => {
+    const aibitat = makeAibitat({ withHistoryPlugin: false });
+    aibitat.setStopReason("provider_error");
+    aibitat.setStopReason("completed"); // ignored — first writer wins
+    expect(aibitat.stopReason).toBe("provider_error");
+  });
+});

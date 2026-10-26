@@ -435,9 +435,16 @@ describe("AgentHandler #chatHistory trace reconstruction (F4/AC4)", () => {
   });
 
   function mockHistoryRow(trace, text = "final answer") {
-    WorkspaceChats.where.mockResolvedValueOnce([
-      { prompt: "do the thing", response: JSON.stringify({ text, trace }) },
-    ]);
+    // chatHistory() now runs crash-recovery promotion (Step 3b) BEFORE the
+    // history load — the promotion query filters include:false, the history
+    // load include:true. Key the mock on the clause so the promotion lookup
+    // sees no orphans and the queued row feeds the history read.
+    WorkspaceChats.where.mockImplementation(async (clause) => {
+      if (clause?.include === false) return []; // no orphans to promote
+      return [
+        { prompt: "do the thing", response: JSON.stringify({ text, trace }) },
+      ];
+    });
   }
 
   test("legacy rows (no trace) expand to exactly the old USER/assistant pair", async () => {
@@ -668,9 +675,11 @@ describe("AgentHandler #chatHistory trace reconstruction (F4/AC4)", () => {
   });
 
   test("malformed trace JSON fails open to the legacy pair", async () => {
-    WorkspaceChats.where.mockResolvedValueOnce([
-      { prompt: "q", response: "not-json{{" },
-    ]);
+    WorkspaceChats.where.mockImplementation(async (clause) =>
+      clause?.include === false
+        ? []
+        : [{ prompt: "q", response: "not-json{{" }]
+    );
     const handler = makeHandler();
     const history = await handler.chatHistory(20);
     expect(history).toHaveLength(2);
@@ -838,5 +847,148 @@ describe("Step 4: in-turn reasoning retention (F5/AC6)", () => {
     const p = new Provider();
     expect(p.supportsReasoningHistory).toBe(false);
     expect(p.reasoningHistoryField).toBe("reasoning_content");
+  });
+});
+
+// ---- Step 3b: crash-recovery promotion (F13/AC18) ----
+// (stop-reason persistence tests live in trace-buffer.test.js, which owns
+// the aibitat+plugin scaffolding these save-path asserts require)
+
+describe("Step 3b: crash-recovery promotion (F13/AC18)", () => {
+  beforeEach(() => {
+    delete process.env.AGENT_TRACE_PROMOTION_MIN_AGE_MS;
+    WorkspaceChats.where.mockReset();
+    WorkspaceChats.upsert.mockClear();
+  });
+  afterEach(() => {
+    delete process.env.AGENT_TRACE_PROMOTION_MIN_AGE_MS;
+  });
+
+  function makeHandlerForPromotion() {
+    const handler = new AgentHandler({ uuid: "promotion-test" });
+    handler.invocation = {
+      workspace_id: 1,
+      user_id: null,
+      thread_id: null,
+    };
+    handler.log = () => {};
+    return handler;
+  }
+
+  function tracedOrphan({ ageMs = 10 * 60 * 1000, stopReason = null } = {}) {
+    return {
+      id: 77,
+      workspaceId: 1,
+      user_id: null,
+      thread_id: null,
+      include: false,
+      lastUpdatedAt: new Date(Date.now() - ageMs),
+      response: JSON.stringify({
+        text: "",
+        ...(stopReason ? { stopReason } : {}),
+        trace: {
+          entries: [
+            {
+              type: "tool_call",
+              llmCall: 1,
+              callId: "call_1",
+              name: "t",
+              arguments: {},
+            },
+            {
+              type: "tool_result",
+              callId: "call_1",
+              name: "t",
+              content: "r",
+            },
+          ],
+          llmCalls: 1,
+          truncated: false,
+        },
+      }),
+    };
+  }
+
+  test("orphaned flushed row is promoted once: include:true + stopReason 'interrupted'", async () => {
+    const orphan = tracedOrphan();
+    WorkspaceChats.where.mockResolvedValue([orphan]);
+
+    const handler = makeHandlerForPromotion();
+    await handler.chatHistory(20); // chatHistory runs promotion first
+
+    expect(WorkspaceChats.upsert).toHaveBeenCalledTimes(1);
+    const [chatId, payload] = WorkspaceChats.upsert.mock.calls[0];
+    expect(chatId).toBe(77);
+    expect(payload.include).toBe(true);
+    expect(payload.response.stopReason).toBe("interrupted");
+    // Existing response keys survive the merge (trace intact).
+    expect(payload.response.trace.entries).toHaveLength(2);
+  });
+
+  test("promotion is idempotent: rows already carrying a stopReason are skipped (AC18)", async () => {
+    WorkspaceChats.where.mockResolvedValue([
+      tracedOrphan({ stopReason: "interrupted" }),
+    ]);
+
+    const handler = makeHandlerForPromotion();
+    await handler.chatHistory(20);
+
+    expect(WorkspaceChats.upsert).not.toHaveBeenCalled();
+  });
+
+  test("recency guard: a live turn's freshly flushed placeholder is not promoted (0.14)", async () => {
+    WorkspaceChats.where.mockResolvedValue([tracedOrphan({ ageMs: 2_000 })]);
+
+    const handler = makeHandlerForPromotion();
+    await handler.chatHistory(20);
+
+    expect(WorkspaceChats.upsert).not.toHaveBeenCalled();
+  });
+
+  test("rows without a trace are never promoted (AC18)", async () => {
+    WorkspaceChats.where.mockResolvedValue([
+      {
+        id: 88,
+        workspaceId: 1,
+        user_id: null,
+        thread_id: null,
+        include: false,
+        lastUpdatedAt: new Date(Date.now() - 10 * 60 * 1000),
+        response: JSON.stringify({ text: "ghost row, no trace" }),
+      },
+    ]);
+
+    const handler = makeHandlerForPromotion();
+    await handler.chatHistory(20);
+
+    expect(WorkspaceChats.upsert).not.toHaveBeenCalled();
+  });
+
+  test("brand-new threads (no prior rows) skip promotion cleanly", async () => {
+    WorkspaceChats.where.mockResolvedValue([]);
+
+    const handler = makeHandlerForPromotion();
+    const history = await handler.chatHistory(20);
+
+    expect(history).toEqual([]);
+    expect(WorkspaceChats.upsert).not.toHaveBeenCalled();
+  });
+
+  test("a promoted row then flows into history reconstruction like any traced row", async () => {
+    const orphan = tracedOrphan();
+    WorkspaceChats.where.mockImplementation(async (_clause, limit, orderBy) => {
+      // First call = promotion lookup (include:false); second = history load
+      // (include:true). Simulate the promotion making the row visible.
+      const includeTrue = JSON.stringify(_clause).includes('"include":true');
+      return includeTrue ? [{ ...orphan, include: true }] : [orphan];
+    });
+
+    const handler = makeHandlerForPromotion();
+    const history = await handler.chatHistory(20);
+
+    // USER + reconstructed intermediates (function result) + final text.
+    // The promoted row's empty text yields an empty final message; the
+    // function intermediate proves the trace flowed through.
+    expect(history.some((m) => m.traceRole === "function")).toBe(true);
   });
 });
