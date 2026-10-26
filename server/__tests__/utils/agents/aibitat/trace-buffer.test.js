@@ -641,6 +641,112 @@ describe("Step 3b: stop reason persistence", () => {
   });
 });
 
+// ---- Hotfix (2026-10-26): Prisma create-branch validation on no-prompt
+// writers ----
+// The real `WorkspaceChats.upsert` (server/models/workspaceChats.js) passes
+// `prompt: data.prompt` into the upsert's `create` branch. Prisma validates
+// that branch STATICALLY — even when the row exists and only the update
+// branch will run — so any writer that omits `prompt` is rejected outright
+// ("Argument `prompt` is missing") and its write is silently dropped. The
+// three no-prompt writers (_flushTrace, _storeAborted, _storeError) shipped
+// broken in live runs for exactly this reason; the mocked `upsert` here (a
+// plain jest.fn) could never catch it because it doesn't model that
+// validation. These tests mimic Prisma's contract: an upsert without a
+// defined `prompt` throws.
+describe("No-prompt writers satisfy Prisma's create-branch validation (hotfix)", () => {
+  beforeEach(() => resetMocks());
+
+  // Enforce the real model's contract on every upsert the plugin makes:
+  // create-branch inputs must be type-valid (prompt must be a string).
+  function enforcePrismaContract() {
+    WorkspaceChats.upsert.mockImplementation(async (chatId, payload) => {
+      if (typeof payload?.prompt !== "string") {
+        throw new Error(
+          "Invalid `prisma.workspace_chats.upsert()` invocation:\n\nArgument `prompt` is missing."
+        );
+      }
+      return { chat: {}, message: null };
+    });
+  }
+
+  test("_flushTrace upserts with a defined prompt (incremental flush survives live validation)", async () => {
+    enforcePrismaContract();
+    const aibitat = makeAibitat();
+    FakeProvider._script = [
+      () => ({
+        textResponse: "",
+        functionCall: { name: "tool-a", arguments: {} },
+        uuid: "u1",
+      }),
+      () => ({ textResponse: "done", functionCall: null, uuid: "u2" }),
+    ];
+    aibitat.function({ name: "tool-a", handler: async () => "tool result" });
+
+    await aibitat.start({ from: "USER", to: "agent", content: "flush prompt" });
+    await drain();
+
+    // At least one incremental flush fired (after the completed tool call)
+    // and NONE of the upserts threw — i.e. every call carried a prompt.
+    const flushes = WorkspaceChats.upsert.mock.calls.filter(
+      ([, p]) => p?.include === undefined
+    );
+    expect(flushes.length).toBeGreaterThanOrEqual(1);
+    for (const [, payload] of WorkspaceChats.upsert.mock.calls) {
+      expect(typeof payload.prompt).toBe("string");
+    }
+  });
+
+  test("_storeAborted upserts with a defined prompt (abort save survives live validation)", async () => {
+    enforcePrismaContract();
+    const aibitat = makeAibitat();
+    aibitat.registerChatId(42);
+    aibitat._turnPrompt = "abort prompt"; // set by the onMessage placeholder flow in production
+    aibitat._partialText = "partial answer";
+
+    await aibitat.abortSave();
+
+    const saves = finalizeCalls();
+    expect(saves).toHaveLength(1);
+    expect(saves[0][1].prompt).toBe("abort prompt");
+    expect(aibitat._finalized).toBe(true);
+  });
+
+  test("_storeError upserts with a defined prompt (error save survives live validation)", async () => {
+    enforcePrismaContract();
+    const aibitat = makeAibitat();
+    FakeProvider._script = [
+      () => {
+        throw new Error("upstream 500");
+      },
+    ];
+
+    await aibitat.start({ from: "USER", to: "agent", content: "error prompt" });
+    await drain();
+
+    // The onError save is an include:true write that must carry the prompt.
+    const saves = finalizeCalls();
+    expect(saves).toHaveLength(1);
+    expect(saves[0][1].prompt).toBe("error prompt");
+  });
+
+  test("the placeholder-registration flow records the (regeneration-resolved) prompt on aibitat._turnPrompt", async () => {
+    enforcePrismaContract();
+    const aibitat = makeAibitat();
+    FakeProvider._script = [
+      () => ({ textResponse: "done", functionCall: null, uuid: "u" }),
+    ];
+
+    await aibitat.start({
+      from: "USER",
+      to: "agent",
+      content: "the real user prompt",
+    });
+    await drain();
+
+    expect(aibitat._turnPrompt).toBe("the real user prompt");
+  });
+});
+
 // ---- Step 8: regeneration context pruning (F10/AC9) ----
 // "Before" state: on regeneration (a USER message starting with the literal
 // `@agent:` directive) the chat-history plugin's onMessage pruning branch

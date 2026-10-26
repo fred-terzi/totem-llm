@@ -44,6 +44,15 @@ const chatHistory = {
               }
             }
 
+            // Remember the resolved prompt for the no-prompt writers below
+            // (_flushTrace/_storeAborted/_storeError). Prisma statically
+            // validates the `create` branch of every upsert (even when only
+            // the update branch will run), so those writers MUST include a
+            // `prompt` or the write is rejected ("Argument `prompt` is
+            // missing") and silently dropped. Regeneration-resolved prompt
+            // (the "@agent:" directive search-back) is already applied here.
+            aibitat._turnPrompt = userMessage;
+
             const { chat } = await WorkspaceChats.new({
               workspaceId: Number(aibitat.handlerProps.invocation.workspace_id),
               user: { id: aibitat.handlerProps.invocation.user_id || null },
@@ -447,6 +456,10 @@ const chatHistory = {
 
         await WorkspaceChats.upsert(aibitat.trackedChatId, {
           workspaceId: Number(invocation.workspace_id),
+          // `prompt` is required: Prisma validates the upsert's create
+          // branch statically even when only the update branch runs —
+          // omitting it rejects the whole write (see _turnPrompt above).
+          prompt: aibitat._turnPrompt ?? "",
           response: {
             text: errorText,
             sources: aibitat._pendingCitations ?? [],
@@ -533,6 +546,9 @@ const chatHistory = {
 
           await WorkspaceChats.upsert(aibitat.trackedChatId, {
             workspaceId: Number(invocation.workspace_id),
+            // `prompt` required — see the Prisma create-branch validation
+            // note in _storeError.
+            prompt: aibitat._turnPrompt ?? "",
             response: {
               text: aibitat._partialText || "",
               sources: aibitat._pendingCitations ?? [],
@@ -691,6 +707,11 @@ const chatHistory = {
 
           await WorkspaceChats.upsert(chatId, {
             workspaceId: Number(invocation.workspace_id),
+            // `prompt` required — Prisma validates the upsert's create branch
+            // statically even when the row exists and only the update branch
+            // runs; omitting it rejects the write (see _turnPrompt above).
+            // The placeholder guarantees the create branch never executes.
+            prompt: aibitat._turnPrompt ?? "",
             response: {
               ...currentResponse,
               trace: serialized,
