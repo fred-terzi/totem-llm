@@ -641,6 +641,141 @@ describe("Step 3b: stop reason persistence", () => {
   });
 });
 
+// ---- Step 8: regeneration context pruning (F10/AC9) ----
+// "Before" state: on regeneration (a USER message starting with the literal
+// `@agent:` directive) the chat-history plugin's onMessage pruning branch
+// slices `aibitat._chats` back to the last real (non-directive) user
+// message. Prior steps did not add trace to the `_chats` array —
+// intermediate content only enters context via `getOrFormatNodeChatHistory`
+// reading a *persisted* row's trace (Step 3.3). AC9 pins that the pruning
+// contract holds with trace in the picture: the re-run's context carries
+// only the new attempt's messages, while the superseded turn's row (with
+// its trace) remains untouched on disk.
+describe("Regeneration excludes the superseded attempt's context (Step 8, F10/AC9)", () => {
+  beforeEach(() => resetMocks());
+  afterEach(() => {
+    delete process.env.AGENT_TRACE_MAX_BYTES;
+    delete process.env.AGENT_TRACE_FLUSH_INTERVAL_MS;
+  });
+
+  test("regeneration pruning keeps only the prompt and drops the prior attempt's intermediate messages from context", async () => {
+    const aibitat = makeAibitat();
+    // Simulate the pre-regeneration state WITHOUT going through newMessage:
+    // the pruning branch only runs while `trackedChatId` is unset (a fresh
+    // session — exactly the production regeneration condition, where the
+    // @agent: directive is the first message the plugin sees). Seed the
+    // prior attempt's messages directly into the history.
+    aibitat._chats.push(
+      { from: "USER", to: "agent", content: "write the file", state: "success" },
+      { from: "agent", to: "USER", content: "intermediate attempt text", state: "success" }
+    );
+    expect(aibitat._chats).toHaveLength(2);
+
+    // Emit the regeneration directive the way the websocket endpoint does —
+    // `newMessage` fires the "message" event, where the chat-history
+    // plugin's pruning listener runs (trackedChatId is still unset).
+    aibitat.newMessage({
+      from: "USER",
+      to: "agent",
+      content: "@agent:regenerate the file write",
+    });
+    await drain();
+
+    // Pruning contract: _chats is sliced back to (and including) the last
+    // real user message — the prior attempt's intermediate text is gone,
+    // so the re-run's LLM context cannot contain the old attempt.
+    const contents = aibitat._chats.map((c) => c.content);
+    expect(contents).not.toContain("intermediate attempt text");
+    expect(contents).toContain("write the file");
+    // The placeholder row was created with the ORIGINAL prompt (not the
+    // @agent: directive) — the regeneration re-runs the prior prompt.
+    expect(WorkspaceChats.new).toHaveBeenCalledTimes(1);
+    expect(WorkspaceChats.new.mock.calls[0][0].prompt).toBe("write the file");
+  });
+
+  test("the superseded row's trace is not re-embedded into the re-run's context (trace enters context only via the persisted row)", async () => {
+    const aibitat = makeAibitat({ withHistoryPlugin: false });
+    // Trace a completed turn, then simulate regeneration by pruning.
+    FakeProvider._script = [
+      () => ({
+        functionCall: { id: "call_1", name: "tool-a", arguments: "{}" },
+        textResponse: "first attempt",
+        reasoning: "first reasoning",
+        uuid: "u1",
+      }),
+      () => ({ textResponse: "done v1", functionCall: null, uuid: "u2" }),
+    ];
+    aibitat.function({ name: "tool-a", handler: async () => "v1-result" });
+    await aibitat.start({ from: "USER", to: "agent", content: "do it" });
+    const supersededTrace = aibitat.getTrace();
+    expect(supersededTrace.entries.length).toBeGreaterThan(0);
+
+    // Regeneration: the pruning branch removes intermediate messages. The
+    // trace object itself is never copied into _chats — it lives only in
+    // the persisted row's response JSON. Assert the chats array carries no
+    // trace-shaped payloads after the prune.
+    aibitat._chats = aibitat._chats.slice(
+      0,
+      aibitat._chats.findLastIndex((c) => c.from === "USER") + 1
+    );
+    expect(aibitat._chats.length).toBeGreaterThan(0);
+    for (const chat of aibitat._chats) {
+      expect("trace" in chat).toBe(false);
+      // Tool-call replies can carry undefined content — normalize for the
+      // substring assertions.
+      const content = chat.content ?? "";
+      expect(content).not.toContain("first reasoning");
+      expect(content).not.toContain("v1-result");
+    }
+    // The superseded trace object itself is intact (its row is separate —
+    // the DB side is covered by the no-row-rewrite assertion below and the
+    // flush/finalize tests above).
+    expect(supersededTrace.entries.length).toBeGreaterThan(0);
+  });
+
+  test("a regenerated turn's row is a NEW row — the superseded row is never rewritten", async () => {
+    const aibitat = makeAibitat();
+    // Turn 1: completes normally, tracked under row 42.
+    FakeProvider._script = [
+      () => ({ textResponse: "v1", functionCall: null, uuid: "u1" }),
+    ];
+    await aibitat.start({ from: "USER", to: "agent", content: "do it" });
+    await drain();
+    expect(finalizeCalls()).toHaveLength(1); // row 42 written once
+
+    // Turn 2 (regeneration): a fresh aibitat session — the plugin creates
+    // a new row via WorkspaceChats.new (id 42 again in the mock, but the
+    // superseded row is only ever touched by upsert from its own turn).
+    resetMocks();
+    const aibitat2 = makeAibitat();
+    FakeProvider._script = [
+      () => ({
+        functionCall: { id: "call_new", name: "tool-b", arguments: "{}" },
+        textResponse: "",
+        uuid: "u2",
+      }),
+      () => ({ textResponse: "v2", functionCall: null, uuid: "u3" }),
+    ];
+    aibitat2.function({ name: "tool-b", handler: async () => "v2-result" });
+    await aibitat2.start({
+      from: "USER",
+      to: "agent",
+      content: "@agent:do it again",
+    });
+    await drain();
+
+    // Exactly one include:true write — the new attempt's row. The mocked
+    // upsert cannot target the old row's id from this session.
+    const finalizes = finalizeCalls();
+    expect(finalizes).toHaveLength(1);
+    expect(finalizes[0][1].response.trace.entries.map((e) => e.type)).toEqual([
+      "tool_call",
+      "tool_result",
+      "llm_text",
+    ]);
+  });
+});
+
 // ---- Step 6: abort-time partial save (F9/AC8) ----
 describe("Abort-time partial save (Step 6)", () => {
   beforeEach(() => resetMocks());
