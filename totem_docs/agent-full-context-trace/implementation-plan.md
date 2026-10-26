@@ -635,7 +635,7 @@ design choices made in Steps 2/2b/3b, verified rather than re-implemented:
    with the abort save now real, that turn produces exactly one include:true
    write (the abort save) instead of zero upserts.
 
-## Step 7 — Frontend additive exposure (F7)
+## Step 7 — Frontend additive exposure (F7) — ✅ implemented 2026-10-26 (`11e87f0d`)
 
 - **Correction from Step 0 (0.8):** history endpoints do **not** return the
   full `response` JSON. `convertToChatHistory`
@@ -654,6 +654,24 @@ design choices made in Steps 2/2b/3b, verified rather than re-implemented:
   the follow-up UI workstream owns it (see spec Out-of-scope). Record decision.
 - Add one test to `trace-exposure.test.js` asserting the passthrough survives
   the serializer (not just the DB row).
+
+### Step 7 completion notes (2026-10-26)
+
+1. **Passthrough implemented exactly as corrected:**
+   `...(data?.trace ? { trace: data.trace } : {})` added after `outputs` in
+   `convertToChatHistory` (`responses.js`). Strictly additive — legacy rows
+   gain no `trace` key, so the API surface for non-agent chats is unchanged.
+2. **Trace UI decision:** the read-only tool timeline is **not** trivial
+   (trace entries carry tool args/results that need redaction-aware
+   rendering); it is deferred to the follow-up UI workstream per spec
+   Out-of-scope. `HistoricalMessage`/`PromptReply` tolerate the extra key
+   (verified in 0.8) — nothing renders differently today.
+3. **Serializer test landed as `server/__tests__/utils/helpers/
+   trace-exposure.test.js`** (per the Step 8 table's location correction),
+   covering: trace survives the serializer on the assistant message;
+   abort/error rows (string `text` + `stopReason` markers, per 0.8) pass
+   through un-skipped; legacy rows get no `trace` key; falsy trace values
+   (`undefined`/`null`/`""`) add no key.
 
 ## Step 8 — Tests (merge gate)
 
@@ -700,5 +718,5 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
 | (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b ✅ committed (`6af915d9`, 2026-10-26): stop reason plumbing (first-writer-wins; `user_abort` in `abort()`, `provider_error` in `newError()`, `completed` default at finalize), `_finalized` writers landed (flush guards now fully armed), error-path turn save (AC17, `_storeError`), crash-recovery promotion (F13/AC18); see Step 3b deviations. Suite: 62 suites / 584 tests green; server lint clean. |
 | (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 ✅ committed (`d6968fde`, 2026-10-26): in-turn reasoning retention (three-valued capability flag, function-message carrier, converter merge; see Step 4 deviations). Suite: 62 suites / 572 tests green; server lint clean. |
-| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 ✅ complete (2026-10-26): 5.1/5.2/5.4 landed early (`416da428`); `stopReason` persistence landed with 3b (`6af915d9`); 5.3 superseded by the Step 2/2b write-time guards; 5.6 keep-in-JSON decided + last-write-wins finalize verified with a new regression test in `trace-buffer.test.js` (21 tests). No new production code required. 6 ✅ committed (2026-10-26): abort-time partial save (F9/AC8) — unwind-path `abortSave` hook at three sites (post-tool branch ×2 + `#safeProviderCall` abort rethrow), `_partialText` accumulation on the streaming eventHandler, `_storeAborted` (include:true, `aborted:true`, `stopReason:user_abort`, string text, trace-so-far, idempotent via `_finalized`), centralized double-charge guards in `_debitCredits` (`Credits.hasDebitReference` DB check + `_debited` flag; see Step 6 deviations). Suite: 62 suites / 594 tests green; server lint clean. 7 🔲 |
+| (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 ✅ complete (2026-10-26): 5.1/5.2/5.4 landed early (`416da428`); `stopReason` persistence landed with 3b (`6af915d9`); 5.3 superseded by the Step 2/2b write-time guards; 5.6 keep-in-JSON decided + last-write-wins finalize verified with a new regression test in `trace-buffer.test.js` (21 tests). No new production code required. 6 ✅ committed (2026-10-26): abort-time partial save (F9/AC8) — unwind-path `abortSave` hook at three sites (post-tool branch ×2 + `#safeProviderCall` abort rethrow), `_partialText` accumulation on the streaming eventHandler, `_storeAborted` (include:true, `aborted:true`, `stopReason:user_abort`, string text, trace-so-far, idempotent via `_finalized`), centralized double-charge guards in `_debitCredits` (`Credits.hasDebitReference` DB check + `_debited` flag; see Step 6 deviations). Suite: 62 suites / 594 tests green; server lint clean. 7 ✅ committed (2026-10-26): `convertToChatHistory` additive `trace` passthrough (`11e87f0d`) + `trace-exposure.test.js` (4 tests; AC20). Trace UI deferred to the follow-up UI workstream. Suite: 63 suites / 598 tests green; server lint clean. |
 | (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
