@@ -713,10 +713,20 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 
 ## Step 10 — PR / status log
 
+### Hotfix deviation (2026-10-26, commit `674995a2`)
+
+First real end-to-end run (Ollama + qwen3.8-mtp via `yarn dev:all`) surfaced `Argument \`prompt\` is missing` from `prisma.workspace_chats.upsert()`: **Prisma statically validates the create branch of every upsert — even when the row exists and only the update branch will run.** The three no-prompt writers (`_flushTrace`, `_storeAborted`, `_storeError`) were therefore rejected at the model layer (caught + logged) and their writes silently dropped in live runs:
+
+1. `_flushTrace` (Step 2b) — masked in testing because finalize passes `prompt` and rewrites the full buffer over it.
+2. `_storeAborted` (Step 6) — aborted turns left `include:false` placeholders and vanished from history.
+3. `_storeError` (Step 3b) — error turns never persisted, which also left crash-recovery promotion (F13) with nothing to promote.
+
+Root cause of the test gap: the mocked `WorkspaceChats.upsert` is a plain `jest.fn` with no create-branch validation. The fix registers `aibitat._turnPrompt` in the placeholder-registration listener and all three writers pass `prompt: _turnPrompt ?? ""` (the create branch never legitimately executes — the placeholder row is guaranteed to exist). Regression tests now mimic Prisma's contract (an upsert without a string `prompt` throws). Suite after hotfix: **65 suites / 614 tests green**; server lint clean.
+
 | PR | Contents | Status |
 |----|----------|--------|
 | (pending) | Steps 1–2 (audit + buffer) | Step 1 ✅ commit `9e0671f2`; Step 2 (+2b, +5.1/5.2/5.4) ✅ commit `416da428` — PR not yet opened |
 | (pending) | Steps 2b, 3b (flush, stop reason, crash promotion) | 2b ✅ (landed early, `416da428`); 3b ✅ committed (`6af915d9`, 2026-10-26): stop reason plumbing (first-writer-wins; `user_abort` in `abort()`, `provider_error` in `newError()`, `completed` default at finalize), `_finalized` writers landed (flush guards now fully armed), error-path turn save (AC17, `_storeError`), crash-recovery promotion (F13/AC18); see Step 3b deviations. Suite: 62 suites / 584 tests green; server lint clean. |
 | (pending) | Steps 3–4 (providers + reconstruction + in-turn retention) | 3 ✅ committed (3d2ece02, 2026-10-26): reasoning threading (tooled/untooled/ollama), reconstruction, trace.js helper, Anthropic fix; see Step 3 deviations — **validation scope: Ollama/Venice/OpenRouter only**. Suite: 62 suites / 566 tests green; server lint clean. 4 ✅ committed (`d6968fde`, 2026-10-26): in-turn reasoning retention (three-valued capability flag, function-message carrier, converter merge; see Step 4 deviations). Suite: 62 suites / 572 tests green; server lint clean. |
 | (pending) | Steps 5–7 (persistence + abort + frontend exposure) | 5 ✅ complete (2026-10-26): 5.1/5.2/5.4 landed early (`416da428`); `stopReason` persistence landed with 3b (`6af915d9`); 5.3 superseded by the Step 2/2b write-time guards; 5.6 keep-in-JSON decided + last-write-wins finalize verified with a new regression test in `trace-buffer.test.js` (21 tests). No new production code required. 6 ✅ committed (2026-10-26): abort-time partial save (F9/AC8) — unwind-path `abortSave` hook at three sites (post-tool branch ×2 + `#safeProviderCall` abort rethrow), `_partialText` accumulation on the streaming eventHandler, `_storeAborted` (include:true, `aborted:true`, `stopReason:user_abort`, string text, trace-so-far, idempotent via `_finalized`), centralized double-charge guards in `_debitCredits` (`Credits.hasDebitReference` DB check + `_debited` flag; see Step 6 deviations). Suite: 62 suites / 594 tests green; server lint clean. 7 ✅ committed (2026-10-26): `convertToChatHistory` additive `trace` passthrough (`11e87f0d`) + `trace-exposure.test.js` (4 tests; AC20). Trace UI deferred to the follow-up UI workstream. Suite: 63 suites / 598 tests green; server lint clean. |
-| (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (14 tests, in `416da428`); remaining files 🔲 |
+| (pending) | Step 8 tests + docs (README) | trace-buffer.test.js ✅ (now 37 tests incl. 3 AC9 regeneration + 4 Prisma-contract hotfix tests); Step 8 files ✅ committed (`a20d12f5`: regeneration trace in trace-buffer, credits.unchanged, legacy-rows). All steps done; remaining: PR to `main-totem`. |
