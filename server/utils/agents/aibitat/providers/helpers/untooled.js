@@ -13,9 +13,23 @@ class UnTooled {
     const modifiedMessages = [];
     messages.forEach((msg) => {
       if (msg.role === "function") {
+        // F8 (agent-full-context-trace): label the collapsed tool output so
+        // prompt-based tool-calling models can attribute each result to the
+        // call that produced it, instead of unlabeled concatenation.
+        // Reconstructed-history messages carry `originalFunctionCall`;
+        // live in-turn messages do too (aibitat appends it to every
+        // role:"function" message). Falls back to the message's own `name`.
         const prevMsg = modifiedMessages[modifiedMessages.length - 1].content;
+        const callMeta =
+          msg.originalFunctionCall ??
+          (msg.name
+            ? { name: msg.name, arguments: msg.arguments ?? {} }
+            : null);
+        const label = callMeta?.name
+          ? `[tool:${callMeta.name}(${typeof callMeta.arguments === "string" ? callMeta.arguments : JSON.stringify(callMeta.arguments ?? {})})]\n`
+          : "";
         modifiedMessages[modifiedMessages.length - 1].content =
-          `${prevMsg}\n${msg.content}`;
+          `${prevMsg}\n${label}${msg.content}`;
         return;
       }
       // Format messages with attachments for multimodal support
@@ -192,6 +206,10 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
     const msgUUID = v4();
     let textResponse = "";
     let reasoningText = "";
+    // Step 3 (agent-full-context-trace): clean reasoning accumulator for the
+    // return value — the UnTooled tool-pick path previously discarded
+    // reasoning entirely on tool-call turns.
+    let fullReasoning = "";
     const historyMessages = this.buildToolCallMessages(history, functions);
     const stream = await chatCb({ messages: historyMessages });
 
@@ -212,6 +230,7 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
         choice.delta?.reasoning;
 
       if (reasoningToken) {
+        fullReasoning += reasoningToken;
         if (reasoningText.length === 0) {
           eventHandler?.("reportStreamEvent", {
             type: "textResponseChunk",
@@ -238,7 +257,9 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
             uuid: msgUUID,
             content: combined,
           });
-          textResponse += combined;
+          // Step 3.1: reasoning stays out of textResponse (returned
+          // separately) — fixes the stray-`</thought>` artifact on text turns.
+          textResponse += choice.delta.content;
           reasoningText = "\u003c/thought\u003e"; // preserve for any downstream logic, but we'll reset to avoid duplicate closes
           reasoningText = "";
           continue; // handled this chunk's content
@@ -255,7 +276,12 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
 
     const call = safeJsonParse(textResponse, null);
     if (call === null)
-      return { toolCall: null, text: textResponse, uuid: msgUUID }; // failed to parse, so must be regular text response.
+      return {
+        toolCall: null,
+        text: textResponse,
+        uuid: msgUUID,
+        reasoning: fullReasoning,
+      }; // failed to parse, so must be regular text response.
 
     const { valid, reason } = this.validFuncCall(call, functions);
     if (!valid) {
@@ -266,7 +292,12 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
         content:
           "The model attempted to make an invalid function call - it was ignored.",
       });
-      return { toolCall: null, text: null, uuid: msgUUID };
+      return {
+        toolCall: null,
+        text: null,
+        uuid: msgUUID,
+        reasoning: fullReasoning,
+      };
     }
 
     const { isDuplicate, reason: duplicateReason } =
@@ -281,7 +312,12 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
         content:
           "The model tried to call a function with the same arguments as a previous call - it was ignored.",
       });
-      return { toolCall: null, text: null, uuid: msgUUID };
+      return {
+        toolCall: null,
+        text: null,
+        uuid: msgUUID,
+        reasoning: fullReasoning,
+      };
     }
 
     eventHandler?.("reportStreamEvent", {
@@ -289,7 +325,12 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
       type: "toolCallInvocation",
       content: `Parsed Tool Call: ${call.name}(${JSON.stringify(call.arguments)})`,
     });
-    return { toolCall: call, text: null, uuid: msgUUID };
+    return {
+      toolCall: call,
+      text: null,
+      uuid: msgUUID,
+      reasoning: fullReasoning,
+    };
   }
 
   /**
@@ -312,11 +353,13 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
     // eslint-disable-next-line
     try {
       let completion = { content: "" };
+      let reasoning = "";
       if (functions.length > 0) {
         const {
           toolCall,
           text,
           uuid: msgUUID,
+          reasoning: pickReasoning,
         } = await this.streamingFunctionCall(
           messages,
           functions,
@@ -336,6 +379,9 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
               arguments: toolCall.arguments,
             },
             cost: 0,
+            // Step 3 (agent-full-context-trace): reasoning surfaced from the
+            // tool-pick stream (previously discarded on tool-call turns).
+            reasoning: pickReasoning ?? "",
           };
         }
 
@@ -344,6 +390,7 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
             `No tool call found in the response - will send as a full text response.`
           );
           completion.content = text;
+          reasoning = pickReasoning ?? "";
           eventHandler?.("reportStreamEvent", {
             type: "removeStatusResponse",
             uuid: msgUUID,
@@ -417,6 +464,9 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
               uuid: msgUUID,
               content: combined,
             });
+            // Path C keeps the matched tag pair embedded in content (the
+            // frontend ThoughtContainer renders it); the aibitat handler layer
+            // splits the pair via the shared extractThought helper.
             completion.content += combined;
             reasoningText = ""; // Reset to prevent double-closing
             continue; // handled this chunk
@@ -440,6 +490,11 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
       return {
         textResponse: completion.content,
         cost: 0,
+        // Step 3: reasoning from the tool-pick round when the text branch was
+        // taken; on the plain-chat fallback the reasoning stays tag-embedded in
+        // content (extractThought splits it at the handler layer), so only the
+        // clean accumulator wins here when it exists.
+        reasoning,
       };
     } catch (error) {
       throw error;
@@ -478,6 +533,8 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
               arguments: toolCall.arguments,
             },
             cost: 0,
+            // Non-streaming tool-pick captures no reasoning deltas.
+            reasoning: "",
           };
         }
         completion.content = text;
@@ -507,6 +564,9 @@ ${JSON.stringify(def.parameters.properties, null, 4)}\n`;
       return {
         textResponse: completion.content,
         cost: 0,
+        // Step 3: non-streaming UnTooled responses carry no reasoning deltas —
+        // any reasoning arrives tag-embedded in content; extractThought handles it.
+        reasoning: "",
       };
     } catch (error) {
       throw error;

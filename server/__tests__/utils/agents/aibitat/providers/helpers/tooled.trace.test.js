@@ -1,0 +1,701 @@
+/**
+ * Step 3 tests (agent-full-context-trace): provider reasoning threading +
+ * next-turn history reconstruction.
+ *
+ * Covers:
+ * - `tooledStream`/`tooledComplete` return `reasoning` (Step 3.1) on tool-call
+ *   and text branches; reasoning no longer pollutes `textResponse` (stray
+ *   `</thought>` artifact fixed — 0.2).
+ * - UnTooled `streamingFunctionCall` returns `reasoning`; `cleanMsgs` labels
+ *   collapsed function messages (F8/AC7).
+ * - Shared `extractThought` helper splits tag-polluted text (paths C / G,
+ *   legacy rows — AC11).
+ * - F4/AC4: `AgentHandler.#chatHistory` expands a persisted trace into
+ *   intermediate aibitat messages that survive `getOrFormatNodeChatHistory`
+ *   AND `formatMessagesForTools` (assistant tool_calls + role:"tool" pairs
+ *   at the provider boundary).
+ * - N5/AC12: oversized tool_result content truncated in-context with
+ *   `[truncated]` marker.
+ * - AC21/N4: malformed pairs degrade to plain text.
+ * - Feature flag `AGENT_TRACE_RECONSTRUCTION=0` disables reconstruction.
+ */
+
+// Set required env vars before requiring modules (same pattern as
+// defaults.test.js — AgentHandler → updateENV → bedrock SDK needs these).
+process.env.STORAGE_DIR = __dirname;
+process.env.NODE_ENV = "test";
+
+jest.mock("@aws-sdk/client-bedrock-runtime", () => ({
+  BedrockRuntimeClient: jest.fn(),
+  InvokeModelCommand: jest.fn(),
+}));
+jest.mock("@aws-sdk/token-providers", () => ({
+  fromStatic: jest.fn(() => ({ token: jest.fn() })),
+}));
+jest.mock("@langchain/aws", () => ({
+  ChatBedrockConverse: jest.fn(),
+}));
+// MCP SDK's zod-compat needs zod/v3 subpath which jest-resolve can't map
+// through the SDK's export conditions — stub the whole layer (same spirit
+// as defaults.test.js's MCP mock).
+jest.mock("../../../../../../utils/MCP", () => {
+  return jest.fn().mockImplementation(() => ({
+    activeMCPServers: jest.fn().mockResolvedValue([]),
+  }));
+});
+
+jest.mock("../../../../../../utils/agents/aibitat/providers", () => {
+  class FakeProvider {
+    static instances = [];
+    constructor() {
+      this.calls = [];
+      FakeProvider.instances.push(this);
+    }
+    attachHandlerProps(props) {
+      this.handlerProps = props;
+    }
+    getUsage() {
+      return { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 };
+    }
+    get supportsAgentStreaming() {
+      return FakeProvider._streams ?? true;
+    }
+    async stream(messages, functions, eventHandler) {
+      this.calls.push({ type: "stream", messages, functions });
+      if (FakeProvider._script.length > 0) {
+        return FakeProvider._script.shift()();
+      }
+      return { textResponse: "final answer", functionCall: null, uuid: "u" };
+    }
+    async complete(messages, functions) {
+      this.calls.push({ type: "complete", messages, functions });
+      if (FakeProvider._script.length > 0) {
+        return FakeProvider._script.shift()();
+      }
+      return { textResponse: "final answer", functionCall: null };
+    }
+  }
+  return { OpenAIProvider: FakeProvider };
+});
+
+jest.mock("../../../../../../models/workspaceChats", () => ({
+  WorkspaceChats: {
+    new: jest.fn(async ({ response }) => ({
+      chat: { id: 42, response },
+      message: null,
+    })),
+    upsert: jest.fn(async () => ({ chat: {}, message: null })),
+    get: jest.fn(async () => ({ id: 42, response: "{}" })),
+    where: jest.fn(async () => []),
+  },
+}));
+
+jest.mock("../../../../../../models/workspaceThread", () => ({
+  WorkspaceThread: {
+    get: jest.fn(async () => null),
+    autoRenameThread: jest.fn(async () => {}),
+  },
+}));
+
+const AIbitat = require("../../../../../../utils/agents/aibitat/index.js");
+const { tooledStream, tooledComplete, formatMessagesForTools } = require(
+  "../../../../../../utils/agents/aibitat/providers/helpers/tooled.js"
+);
+const UnTooled = require("../../../../../../utils/agents/aibitat/providers/helpers/untooled.js");
+const { extractThought } = require("../../../../../../utils/agents/aibitat/providers/helpers/trace.js");
+const { AgentHandler } = require("../../../../../../utils/agents/index.js");
+const { WorkspaceChats } = require("../../../../../../models/workspaceChats");
+
+const FakeProvider =
+  require("../../../../../../utils/agents/aibitat/providers").OpenAIProvider;
+
+// ---- tooledStream / tooledComplete ----
+
+function makeOpenAIStreamClient(chunks) {
+  return {
+    chat: {
+      completions: {
+        create: async () =>
+          (async function* () {
+            for (const chunk of chunks) yield chunk;
+          })(),
+      },
+    },
+  };
+}
+
+describe("tooledStream reasoning threading (Step 3.1)", () => {
+  test("tool-call turn: reasoning returned separately, textResponse clean", async () => {
+    const client = makeOpenAIStreamClient([
+      {
+        choices: [
+          { delta: { reasoning_content: "I should use the tool because" } },
+        ],
+      },
+      { choices: [{ delta: { reasoning_content: " it is needed." } }] },
+      {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_abc",
+                  function: { name: "my-tool", arguments: '{"x":' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        choices: [
+          { delta: { tool_calls: [{ index: 0, function: { arguments: "1}" } }] } },
+        ],
+      },
+    ]);
+
+    const result = await tooledStream(client, "m", [], [], null);
+    expect(result.reasoning).toBe("I should use the tool because it is needed.");
+    expect(result.textResponse).toBe("");
+    expect(result.functionCall).toEqual({
+      id: "call_abc",
+      name: "my-tool",
+      arguments: { x: 1 },
+    });
+  });
+
+  test("text turn: no stray </thought> in textResponse; reasoning separate", async () => {
+    const client = makeOpenAIStreamClient([
+      { choices: [{ delta: { reasoning_content: "thinking hard" } }] },
+      { choices: [{ delta: { content: "The answer" } }] },
+      { choices: [{ delta: { content: " is 4." } }] },
+    ]);
+
+    const events = [];
+    const result = await tooledStream(
+      client,
+      "m",
+      [],
+      [],
+      (type, data) => events.push(data)
+    );
+
+    expect(result.reasoning).toBe("thinking hard");
+    expect(result.textResponse).toBe("The answer is 4.");
+    // The live stream still carries the wrapped version (frontend contract).
+    expect(events.some((e) => e.content?.includes("<thought>thinking hard"))).toBe(
+      true
+    );
+    expect(events.some((e) => e.content?.includes("</thought>The answer"))).toBe(
+      true
+    );
+  });
+
+  test("no reasoning tokens: reasoning is empty string, behavior unchanged", async () => {
+    const client = makeOpenAIStreamClient([
+      { choices: [{ delta: { content: "hello" } }] },
+    ]);
+    const result = await tooledStream(client, "m", [], [], null);
+    expect(result.reasoning).toBe("");
+    expect(result.textResponse).toBe("hello");
+  });
+});
+
+describe("tooledComplete reasoning capture (Step 3.1)", () => {
+  function makeClient(message) {
+    return {
+      chat: {
+        completions: {
+          create: async () => ({
+            choices: [{ message }],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+        },
+      },
+    };
+  }
+
+  test("reads reasoning_content from the completion message", async () => {
+    const client = makeClient({
+      content: "answer",
+      reasoning_content: "deep thought",
+    });
+    const result = await tooledComplete(client, "m", [], []);
+    expect(result.reasoning).toBe("deep thought");
+    expect(result.textResponse).toBe("answer");
+  });
+
+  test("tool-call branch also carries reasoning", async () => {
+    const client = makeClient({
+      content: null,
+      reasoning: "cerebras-style",
+      tool_calls: [
+        { id: "call_x", function: { name: "t", arguments: '{"a":1}' } },
+      ],
+    });
+    const result = await tooledComplete(client, "m", [], []);
+    expect(result.reasoning).toBe("cerebras-style");
+    expect(result.functionCall.name).toBe("t");
+  });
+
+  test("no reasoning field → empty string", async () => {
+    const client = makeClient({ content: "plain" });
+    const result = await tooledComplete(client, "m", [], []);
+    expect(result.reasoning).toBe("");
+  });
+});
+
+// ---- UnTooled ----
+
+describe("UnTooled streamingFunctionCall reasoning (Step 3)", () => {
+  function makeUntooled(chunks) {
+    const untooled = new UnTooled();
+    // streamingFunctionCall's message-building path calls
+    // this.formatMessageWithAttachments, which lives on the Provider base —
+    // standalone UnTooled instances don't have it. Borrow the base method
+    // (ai-provider.js exports the class directly).
+    const Provider = require("../../../../../../utils/agents/aibitat/providers/ai-provider");
+    untooled.formatMessageWithAttachments =
+      Provider.prototype.formatMessageWithAttachments;
+    const chatCb = async () =>
+      (async function* () {
+        for (const chunk of chunks) yield chunk;
+      })();
+    return { untooled, chatCb };
+  }
+
+  test("tool-pick branch returns reasoning from the stream", async () => {
+    const { untooled, chatCb } = makeUntooled([
+      { choices: [{ delta: { reasoning_content: "I will pick a function" } }] },
+      {
+        choices: [
+          { delta: { content: '{"name":"t","arguments":{"a":1}}' } },
+        ],
+      },
+    ]);
+    const functions = [
+      {
+        name: "t",
+        description: "d",
+        parameters: {
+          type: "object",
+          properties: { a: { type: "number" } },
+          required: ["a"],
+        },
+      },
+    ];
+    const result = await untooled.streamingFunctionCall(
+      [{ role: "user", content: "hi" }],
+      functions,
+      chatCb,
+      null
+    );
+    expect(result.toolCall).toEqual({ name: "t", arguments: { a: 1 } });
+    expect(result.reasoning).toBe("I will pick a function");
+  });
+
+  test("text branch keeps reasoning out of text", async () => {
+    const { untooled, chatCb } = makeUntooled([
+      { choices: [{ delta: { reasoning_content: "pondering" } }] },
+      { choices: [{ delta: { content: "just text, no tool" } }] },
+    ]);
+    const result = await untooled.streamingFunctionCall(
+      [{ role: "user", content: "hi" }],
+      [],
+      chatCb,
+      null
+    );
+    expect(result.toolCall).toBeNull();
+    expect(result.text).toBe("just text, no tool");
+    expect(result.reasoning).toBe("pondering");
+  });
+});
+
+describe("UnTooled cleanMsgs labels (F8/AC7)", () => {
+  const untooled = new UnTooled();
+  const Provider = require("../../../../../../utils/agents/aibitat/providers/ai-provider");
+  untooled.formatMessageWithAttachments =
+    Provider.prototype.formatMessageWithAttachments;
+
+  test("collapsed function messages carry [tool:name(args)] labels", () => {
+    const out = untooled.cleanMsgs([
+      { role: "assistant", content: "Let me check." },
+      {
+        role: "function",
+        name: "file-reader",
+        content: "file contents here",
+        originalFunctionCall: {
+          id: "call_1",
+          name: "file-reader",
+          arguments: { path: "a.txt" },
+        },
+      },
+      {
+        role: "function",
+        name: "file-reader",
+        content: "more contents",
+        originalFunctionCall: {
+          id: "call_2",
+          name: "file-reader",
+          arguments: '{"path":"b.txt"}',
+        },
+      },
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].content).toContain('[tool:file-reader({"path":"a.txt"})]');
+    expect(out[0].content).toContain("file contents here");
+    expect(out[0].content).toContain(
+      '[tool:file-reader({"path":"b.txt"})]'
+    );
+    expect(out[0].content).toContain("more contents");
+  });
+
+  test("function message without originalFunctionCall falls back to name", () => {
+    const out = untooled.cleanMsgs([
+      { role: "assistant", content: "Hi" },
+      { role: "function", name: "legacy-tool", content: "result" },
+    ]);
+    expect(out[0].content).toContain("[tool:legacy-tool({})]");
+  });
+});
+
+// ---- extractThought helper ----
+
+describe("extractThought shared helper (paths C/G, legacy rows)", () => {
+  test("splits matched <thought> pairs out of text", () => {
+    const { text, reasoning } = extractThought(
+      "<thought>plan the work</thought>Here is the answer."
+    );
+    expect(reasoning).toBe("plan the work");
+    expect(text).toBe("Here is the answer.");
+  });
+
+  test("accepts Ollama's <think> spelling (legacy rows, AC11)", () => {
+    const { text, reasoning } = extractThought("<think>legacy</think>Answer.");
+    expect(reasoning).toBe("legacy");
+    expect(text).toBe("Answer.");
+  });
+
+  test("strips a stray unmatched closing tag (pre-Step-3 artifact)", () => {
+    const { text, reasoning } = extractThought("</thought>stray artifact");
+    expect(reasoning).toBe("");
+    expect(text).toBe("stray artifact");
+  });
+
+  test("plain text passes through untouched", () => {
+    expect(extractThought("no tags")).toEqual({
+      text: "no tags",
+      reasoning: "",
+    });
+  });
+});
+
+// ---- F4: next-turn history reconstruction ----
+
+function makeHandler() {
+  // Must be a REAL instance: chatHistory() invokes the private method
+  // #traceToIntermediateMessages, and JS private methods enforce a brand
+  // check — calling them on a mere Object.create(AgentHandler.prototype)
+  // throws (swallowed by chatHistory's try/catch, yielding []). The
+  // constructor only sets the invocation UUID, so this is safe.
+  const handler = new AgentHandler({ uuid: "test-invocation" });
+  handler.invocation = {
+    workspace_id: 1,
+    user_id: null,
+    thread_id: null,
+  };
+  handler.log = () => {};
+  return handler;
+}
+
+describe("AgentHandler #chatHistory trace reconstruction (F4/AC4)", () => {
+  beforeEach(() => {
+    delete process.env.AGENT_TRACE_RECONSTRUCTION;
+    delete process.env.AGENT_TRACE_RESULT_CONTEXT_CHARS;
+    WorkspaceChats.where.mockClear();
+  });
+  afterEach(() => {
+    delete process.env.AGENT_TRACE_RECONSTRUCTION;
+    delete process.env.AGENT_TRACE_RESULT_CONTEXT_CHARS;
+  });
+
+  function mockHistoryRow(trace, text = "final answer") {
+    WorkspaceChats.where.mockResolvedValueOnce([
+      { prompt: "do the thing", response: JSON.stringify({ text, trace }) },
+    ]);
+  }
+
+  test("legacy rows (no trace) expand to exactly the old USER/assistant pair", async () => {
+    mockHistoryRow(undefined, "legacy text");
+    const handler = makeHandler();
+    const history = await handler.chatHistory(20);
+    expect(history).toEqual([
+      {
+        from: "USER",
+        to: "@agent",
+        content: "do the thing",
+        state: "success",
+      },
+      {
+        from: "@agent",
+        to: "USER",
+        content: "legacy text",
+        state: "success",
+      },
+    ]);
+  });
+
+  test("traced rows expand to assistant/function intermediates + final text", async () => {
+    const trace = {
+      entries: [
+        { type: "reasoning", llmCall: 1, text: "I need the file first" },
+        {
+          type: "tool_call",
+          llmCall: 1,
+          callId: "call_9",
+          name: "file-reader",
+          arguments: { path: "a.txt" },
+        },
+        {
+          type: "tool_result",
+          callId: "call_9",
+          name: "file-reader",
+          content: "the file contents",
+        },
+        { type: "llm_text", llmCall: 1, text: "Let me read it." },
+        { type: "llm_text", llmCall: 2, text: "final answer" },
+      ],
+      llmCalls: 2,
+      truncated: false,
+    };
+    mockHistoryRow(trace);
+
+    const handler = makeHandler();
+    const history = await handler.chatHistory(20);
+
+    // USER, reasoning, tool(function), pre-tool text, final text
+    expect(history).toHaveLength(5);
+    expect(history[0].content).toBe("do the thing");
+    expect(history[1]).toMatchObject({
+      traceRole: "assistant",
+      content: "<thought>I need the file first</thought>",
+    });
+    expect(history[2]).toMatchObject({
+      traceRole: "function",
+      name: "file-reader",
+      content: "the file contents",
+    });
+    expect(history[2].originalFunctionCall).toEqual({
+      id: "call_9",
+      name: "file-reader",
+      arguments: { path: "a.txt" },
+    });
+    expect(history[3]).toMatchObject({
+      traceRole: "assistant",
+      content: "Let me read it.",
+    });
+    expect(history[4].content).toBe("final answer");
+    expect(history[4].traceRole).toBeUndefined();
+    // The final text is not duplicated as an intermediate.
+    expect(
+      history.slice(1, -1).filter((m) => m.content === "final answer")
+    ).toHaveLength(0);
+  });
+
+  test("reconstructed intermediates survive getOrFormatNodeChatHistory", async () => {
+    const trace = {
+      entries: [
+        {
+          type: "tool_call",
+          llmCall: 1,
+          callId: "call_9",
+          name: "file-reader",
+          arguments: { path: "a.txt" },
+        },
+        {
+          type: "tool_result",
+          callId: "call_9",
+          name: "file-reader",
+          content: "contents",
+        },
+      ],
+      llmCalls: 1,
+      truncated: false,
+    };
+    mockHistoryRow(trace);
+
+    const handler = makeHandler();
+    const history = await handler.chatHistory(20);
+
+    // Feed through a real aibitat instance's getOrFormatNodeChatHistory.
+    const aibitat = new AIbitat({
+      chats: history,
+      provider: "openai",
+      model: "m",
+    });
+    aibitat.agent("@agent", { role: "a" });
+    // chatHistory emits messages where the agent is "@agent" (WORKSPACE_AGENT.name).
+    // reply() calls this as { from: <replier>, to: <sender> } — i.e. the agent
+    // replying to USER — so route.from = "@agent". The flat role-assignment is
+    // c.from === route.to ? "user" : "assistant", so we must route from the
+    // agent's perspective for the USER prompt to format as role:"user".
+    const formatted = aibitat.getOrFormatNodeChatHistory({
+      from: "@agent",
+      to: "USER",
+    });
+
+    // user prompt, function result w/ originalFunctionCall, final text.
+    expect(formatted).toHaveLength(3);
+    expect(formatted[0]).toEqual({
+      content: "do the thing",
+      role: "user",
+    });
+    expect(formatted[1].role).toBe("function");
+    expect(formatted[1].originalFunctionCall.id).toBe("call_9");
+    expect(formatted[2]).toEqual({
+      content: "final answer",
+      role: "assistant",
+    });
+
+    // And through the provider boundary — the OpenAI-tools converter must
+    // synthesize assistant.tool_calls + role:"tool" pairs (AC4).
+    const providerFormatted = formatMessagesForTools(formatted);
+    const assistantMsg = providerFormatted.find(
+      (m) => m.role === "assistant" && m.tool_calls
+    );
+    expect(assistantMsg.tool_calls[0]).toMatchObject({
+      id: "call_9",
+      type: "function",
+      function: { name: "file-reader", arguments: '{"path":"a.txt"}' },
+    });
+    const toolMsg = providerFormatted.find((m) => m.role === "tool");
+    expect(toolMsg).toMatchObject({
+      tool_call_id: "call_9",
+      content: "contents",
+    });
+  });
+
+  test("N5/AC12: oversized tool_result content truncated in-context with [truncated]", async () => {
+    process.env.AGENT_TRACE_RESULT_CONTEXT_CHARS = "100";
+    const big = "x".repeat(5000);
+    const trace = {
+      entries: [
+        {
+          type: "tool_call",
+          llmCall: 1,
+          callId: "call_1",
+          name: "big-tool",
+          arguments: {},
+        },
+        {
+          type: "tool_result",
+          callId: "call_1",
+          name: "big-tool",
+          content: big,
+        },
+      ],
+      llmCalls: 1,
+      truncated: false,
+    };
+    mockHistoryRow(trace);
+
+    const handler = makeHandler();
+    const history = await handler.chatHistory(20);
+    const fnMsg = history.find((m) => m.traceRole === "function");
+    expect(fnMsg.content.length).toBeLessThan(big.length);
+    expect(fnMsg.content.endsWith("[truncated]")).toBe(true);
+  });
+
+  test("AC21: tool_result without callId degrades to plain assistant text", async () => {
+    const trace = {
+      entries: [
+        {
+          type: "tool_result",
+          callId: null,
+          name: "mystery-tool",
+          content: "orphan result",
+        },
+      ],
+      llmCalls: 1,
+      truncated: false,
+    };
+    mockHistoryRow(trace);
+
+    const handler = makeHandler();
+    const history = await handler.chatHistory(20);
+    const degraded = history.find(
+      (m) => m.traceRole === "assistant" && m.content.includes("orphan result")
+    );
+    expect(degraded).toBeTruthy();
+    expect(history.find((m) => m.traceRole === "function")).toBeUndefined();
+  });
+
+  test("feature flag AGENT_TRACE_RECONSTRUCTION=0 disables expansion", async () => {
+    process.env.AGENT_TRACE_RECONSTRUCTION = "0";
+    const trace = {
+      entries: [
+        {
+          type: "tool_call",
+          llmCall: 1,
+          callId: "call_1",
+          name: "t",
+          arguments: {},
+        },
+      ],
+      llmCalls: 1,
+      truncated: false,
+    };
+    mockHistoryRow(trace);
+
+    const handler = makeHandler();
+    const history = await handler.chatHistory(20);
+    expect(history).toHaveLength(2); // plain pair, flag honored
+  });
+
+  test("malformed trace JSON fails open to the legacy pair", async () => {
+    WorkspaceChats.where.mockResolvedValueOnce([
+      { prompt: "q", response: "not-json{{" },
+    ]);
+    const handler = makeHandler();
+    const history = await handler.chatHistory(20);
+    expect(history).toHaveLength(2);
+    expect(history[1].content).toBe("");
+  });
+});
+
+describe("trace-reconstructed messages do not inflate max rounds", () => {
+  test("hasReachedMaximumRounds counts real exchanges only", () => {
+    const aibitat = new AIbitat({
+      chats: [
+        {
+          from: "USER",
+          to: "agent",
+          content: "q",
+          state: "success",
+        },
+        ...Array.from({ length: 15 }, (_, i) => ({
+          from: "agent",
+          to: "USER",
+          content: `intermediate ${i}`,
+          state: "success",
+          traceRole: "assistant",
+          traceReconstructed: true,
+        })),
+        {
+          from: "agent",
+          to: "USER",
+          content: "final",
+          state: "success",
+        },
+      ],
+      maxRounds: 3,
+    });
+    aibitat.agent("USER", { role: "u" });
+    aibitat.agent("agent", { role: "a" });
+    // The point is the 15 reconstructed intermediates don't count as rounds.
+    // getHistory counts BOTH directions, so the real messages are the user
+    // prompt + the final reply = 2, which must stay under maxRounds: 3.
+    expect(aibitat.hasReachedMaximumRounds("agent", "USER")).toBe(false);
+  });
+});

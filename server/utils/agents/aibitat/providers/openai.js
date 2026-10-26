@@ -226,6 +226,10 @@ class OpenAIProvider extends Provider {
           },
           cost: this.getCost(),
           uuid: msgUUID,
+          // Step 3 (agent-full-context-trace): Responses API reasoning items
+          // are never requested (store:false, no reasoning summaries) —
+          // always empty, kept for a uniform provider return shape.
+          reasoning: "",
         };
       }
 
@@ -234,6 +238,7 @@ class OpenAIProvider extends Provider {
         functionCall: null,
         cost: this.getCost(),
         uuid: msgUUID,
+        reasoning: "",
       };
     } catch (error) {
       if (error instanceof OpenAI.AuthenticationError) throw error;
@@ -310,6 +315,7 @@ class OpenAIProvider extends Provider {
           },
           cost: this.getCost(),
           usage: this.getUsage(),
+          reasoning: "",
         };
       }
 
@@ -318,6 +324,7 @@ class OpenAIProvider extends Provider {
         functionCall: null,
         cost: this.getCost(),
         usage: this.getUsage(),
+        reasoning: "",
       };
     } catch (error) {
       if (error instanceof OpenAI.AuthenticationError) throw error;

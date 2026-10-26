@@ -4,6 +4,7 @@ const { APIError } = require("./error.js");
 const Providers = require("./providers/index.js");
 const { v4 } = require("uuid");
 const { ToolReranker } = require("./utils/toolReranker.js");
+const { extractThought } = require("./providers/helpers/trace.js");
 
 /**
  * AIbitat is a class that manages the conversation between agents.
@@ -393,6 +394,27 @@ class AIbitat {
   _nextTraceLlmCall() {
     this._traceLlmCalls += 1;
     return this._traceLlmCalls;
+  }
+
+  /**
+   * Split a completion's text/reasoning pair for trace capture (Step 3,
+   * agent-full-context-trace). When the provider surfaced reasoning as a
+   * separate field (tooled path), use it as-is. Otherwise reasoning may be
+   * tag-embedded in textResponse (UnTooled plain-chat fallback, Ollama
+   * legacy shape) — run the shared extractThought helper to split the pair.
+   * @param {{reasoning?: string, textResponse?: string}} completion
+   * @returns {{reasoning: string, text: string}}
+   */
+  #traceTextParts(completion) {
+    const rawText =
+      typeof completion?.textResponse === "string"
+        ? completion.textResponse
+        : "";
+    const provided =
+      typeof completion?.reasoning === "string" ? completion.reasoning : "";
+    if (provided.trim()) return { reasoning: provided, text: rawText };
+    const split = extractThought(rawText);
+    return { reasoning: split.reasoning, text: split.text };
   }
 
   /**
@@ -1025,9 +1047,26 @@ Only return the role.
 
   /**
    * Check if the chat has reached the maximum number of rounds.
+   * Trace-reconstructed intermediate messages (Step 3.3) do not count —
+   * rounds measure real user/agent exchanges, and a trace-heavy turn could
+   * otherwise trip the limit spuriously.
    */
   hasReachedMaximumRounds(from = "", to = "") {
-    return this.getHistory({ from, to }).length >= this.maxRounds;
+    return (
+      this.getHistory({ from, to }).filter((c) => !c.traceReconstructed)
+        .length >= this.maxRounds
+    );
+  }
+
+  /**
+   * Whether trace-based history reconstruction is enabled for the next
+   * turn's context (F4). Feature-flagged per the Step 9 risk table:
+   * default-on post-audit; `AGENT_TRACE_RECONSTRUCTION=0` exempts a
+   * misbehaving provider without redeploy.
+   * @returns {boolean}
+   */
+  static traceReconstructionEnabled() {
+    return process.env.AGENT_TRACE_RECONSTRUCTION !== "0";
   }
 
   /**
@@ -1057,6 +1096,20 @@ ${this.getHistory({ to: route.to })
     // This is normal chat between user<->agent
     // Include attachments if present (for vision/multimodal support)
     return this.getHistory(route).map((c) => {
+      // Step 3.3 (agent-full-context-trace): trace-reconstructed
+      // intermediate messages carry an explicit role (`assistant` for
+      // reasoning/pre-tool text, `function` for tool results) plus
+      // `originalFunctionCall` metadata so the provider layer synthesizes
+      // the native tool-call pairs for free (formatMessagesForTools,
+      // Anthropic #prepareMessages, Gemini #formatMessages, etc.). Pass
+      // them through instead of the flat role-assignment below.
+      if (c.traceRole) {
+        const message = { content: c.content, role: c.traceRole };
+        if (c.originalFunctionCall)
+          message.originalFunctionCall = c.originalFunctionCall;
+        if (c.name) message.name = c.name;
+        return message;
+      }
       const message = {
         content: c.content,
         role: c.from === route.to ? "user" : "assistant",
@@ -1315,27 +1368,22 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       this.providerInstance.stream(messages, functions, eventHandler)
     );
 
-    // Trace capture for this round (Step 2 — agent-full-context-trace):
+    // Trace capture for this round (Step 2/3 — agent-full-context-trace):
     // reasoning (when the provider surfaced it) then the assistant's
     // pre-tool / final text, in the order the model produced them.
-    if (
-      typeof completionStream?.reasoning === "string" &&
-      completionStream.reasoning.trim()
-    ) {
+    const traceParts = this.#traceTextParts(completionStream);
+    if (traceParts.reasoning.trim()) {
       this._appendTraceEntry({
         type: "reasoning",
         llmCall: traceLlmCall,
-        text: completionStream.reasoning,
+        text: traceParts.reasoning,
       });
     }
-    if (
-      typeof completionStream?.textResponse === "string" &&
-      completionStream.textResponse
-    ) {
+    if (traceParts.text) {
       this._appendTraceEntry({
         type: "llm_text",
         llmCall: traceLlmCall,
-        text: completionStream.textResponse,
+        text: traceParts.text,
       });
     }
 
@@ -1542,27 +1590,22 @@ https://docs.anythingllm.com/agent/intelligent-tool-selection
       this.providerInstance.complete(messages, functions)
     );
 
-    // Trace capture for this round (Step 2 — agent-full-context-trace):
+    // Trace capture for this round (Step 2/3 — agent-full-context-trace):
     // reasoning (when the provider surfaced it) then the assistant's
     // pre-tool / final text, in the order the model produced them.
-    if (
-      typeof completion?.reasoning === "string" &&
-      completion.reasoning.trim()
-    ) {
+    const traceParts = this.#traceTextParts(completion);
+    if (traceParts.reasoning.trim()) {
       this._appendTraceEntry({
         type: "reasoning",
         llmCall: traceLlmCall,
-        text: completion.reasoning,
+        text: traceParts.reasoning,
       });
     }
-    if (
-      typeof completion?.textResponse === "string" &&
-      completion.textResponse
-    ) {
+    if (traceParts.text) {
       this._appendTraceEntry({
         type: "llm_text",
         llmCall: traceLlmCall,
-        text: completion.textResponse,
+        text: traceParts.text,
       });
     }
 

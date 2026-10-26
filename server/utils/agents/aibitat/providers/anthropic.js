@@ -126,7 +126,72 @@ class AnthropicProvider extends Provider {
       (processedMessages, message, index) => {
         // Normalize `function` role to Anthropic's `tool_result` format.
         if (message.role === "function") {
+          // Step 3.3 (agent-full-context-trace): synthesize the matching
+          // `tool_use` block from `originalFunctionCall` when the preceding
+          // assistant message carries no content-array tool_use block.
+          // Aibitat assistant messages are plain strings, so the old lookup
+          // found nothing and the tool_result was silently dropped (a
+          // pre-existing in-turn bug that history reconstruction would
+          // otherwise inherit).
           const prevMessage = chatMessages[index - 1];
+          const prevAssistantIsLast =
+            processedMessages.length > 0 &&
+            processedMessages[processedMessages.length - 1].role ===
+              "assistant";
+          const call = message.originalFunctionCall;
+          if (call?.id) {
+            if (prevAssistantIsLast) {
+              const prev = processedMessages[processedMessages.length - 1];
+              // Merge the synthesized tool_use into the existing assistant
+              // message's content array if not already present.
+              if (!prev.content.some((item) => item.type === "tool_use")) {
+                prev.content.push({
+                  type: "tool_use",
+                  id: call.id,
+                  name: call.name,
+                  input:
+                    typeof call.arguments === "string"
+                      ? safeJsonParse(call.arguments, {})
+                      : (call.arguments ?? {}),
+                });
+              }
+            } else {
+              processedMessages.push({
+                role: "assistant",
+                content: [
+                  {
+                    type: "text",
+                    text: `I'll use the ${call.name} tool.`,
+                  },
+                  {
+                    type: "tool_use",
+                    id: call.id,
+                    name: call.name,
+                    input:
+                      typeof call.arguments === "string"
+                        ? safeJsonParse(call.arguments, {})
+                        : (call.arguments ?? {}),
+                  },
+                ],
+              });
+            }
+            processedMessages.push({
+              role: "user",
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: call.id,
+                  content: message.content
+                    ? String(message.content)
+                    : "Tool executed successfully.",
+                },
+              ],
+            });
+            return processedMessages;
+          }
+
+          // No originalFunctionCall: legacy behavior — try to pair with a
+          // tool_use block on the immediately preceding assistant message.
           if (prevMessage?.role === "assistant") {
             const toolUse = prevMessage.content.find(
               (item) => item.type === "tool_use"
@@ -354,6 +419,10 @@ class AnthropicProvider extends Provider {
           },
           cost: 0,
           uuid: msgUUID,
+          // Step 3 (agent-full-context-trace): extended thinking is never
+          // requested (no thinking/budget_tokens param), so no reasoning
+          // blocks exist — always empty, kept for a uniform return shape.
+          reasoning: "",
         };
       }
 
@@ -362,6 +431,7 @@ class AnthropicProvider extends Provider {
         functionCall: null,
         cost: 0,
         uuid: msgUUID,
+        reasoning: "",
       };
     } catch (error) {
       // If invalid Auth error we need to abort because no amount of waiting
@@ -458,6 +528,9 @@ class AnthropicProvider extends Provider {
           },
           cost: 0,
           usage: this.getUsage(),
+          // Step 3: extended thinking is never requested — the chain-of-thought
+          // text block above is API-shape filler, not reasoning capture.
+          reasoning: "",
         };
       }
 
@@ -468,6 +541,7 @@ class AnthropicProvider extends Provider {
           "The model failed to complete the task and return back a valid response.",
         cost: 0,
         usage: this.getUsage(),
+        reasoning: "",
       };
     } catch (error) {
       // If invalid Auth error we need to abort because no amount of waiting

@@ -269,6 +269,10 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
     let token = "";
     let textResponse = "";
     let reasoningText = "";
+    // Step 3 (agent-full-context-trace): clean reasoning accumulator for the
+    // return value — Ollama's UnTooled override previously discarded thinking
+    // tokens entirely on tool-call turns.
+    let fullReasoning = "";
     const historyMessages = this.buildToolCallMessages(history, functions);
     const stream = await chatCb({ messages: historyMessages });
 
@@ -284,6 +288,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       const content = chunk.message?.content;
       const reasoningToken = chunk.message?.thinking;
       if (reasoningToken) {
+        fullReasoning += reasoningToken;
         if (reasoningText.length === 0) {
           reasoningText = `\u003cthought\u003e${reasoningToken}`;
           token = reasoningText;
@@ -314,7 +319,12 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
 
     const call = safeJsonParse(textResponse, null);
     if (call === null)
-      return { toolCall: null, text: textResponse, uuid: msgUUID }; // failed to parse, so must be regular text response.
+      return {
+        toolCall: null,
+        text: textResponse,
+        uuid: msgUUID,
+        reasoning: fullReasoning,
+      }; // failed to parse, so must be regular text response.
 
     const { valid, reason } = this.validFuncCall(call, functions);
     if (!valid) {
@@ -325,7 +335,12 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         content:
           "The model attempted to make an invalid function call - it was ignored.",
       });
-      return { toolCall: null, text: null, uuid: msgUUID };
+      return {
+        toolCall: null,
+        text: null,
+        uuid: msgUUID,
+        reasoning: fullReasoning,
+      };
     }
 
     const { isDuplicate, reason: duplicateReason } =
@@ -340,7 +355,12 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         content:
           "The model tried to call a function with the same arguments as a previous call - it was ignored.",
       });
-      return { toolCall: null, text: null, uuid: msgUUID };
+      return {
+        toolCall: null,
+        text: null,
+        uuid: msgUUID,
+        reasoning: fullReasoning,
+      };
     }
 
     eventHandler?.("reportStreamEvent", {
@@ -348,7 +368,12 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       type: "toolCallInvocation",
       content: `Parsed Tool Call: ${call.name}(${JSON.stringify(call.arguments)})`,
     });
-    return { toolCall: call, text: null, uuid: msgUUID };
+    return {
+      toolCall: call,
+      text: null,
+      uuid: msgUUID,
+      reasoning: fullReasoning,
+    };
   }
 
   /**
@@ -388,6 +413,11 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       let textResponse = "";
       let toolCalls = null;
       let reasoningText = "";
+      // Step 3 (agent-full-context-trace): clean reasoning accumulator.
+      // Previously thinking tokens were appended INTO textResponse wrapped in
+      // <thought> tags (tag-polluted persistence); they now return separately
+      // and textResponse stays clean.
+      let fullReasoning = "";
 
       for await (const chunk of stream) {
         // Capture usage from final chunk (Ollama sends usage when done=true)
@@ -403,15 +433,14 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         // Handle Ollama thinking/reasoning tokens
         const reasoningToken = chunk.message?.thinking;
         if (reasoningToken) {
+          fullReasoning += reasoningToken;
           if (reasoningText.length === 0) {
-            textResponse += `\u003cthought\u003e${reasoningToken}`;
             eventHandler?.("reportStreamEvent", {
               type: "textResponseChunk",
               uuid: msgUUID,
               content: `\u003cthought\u003e${reasoningToken}`,
             });
           } else {
-            textResponse += reasoningToken;
             eventHandler?.("reportStreamEvent", {
               type: "textResponseChunk",
               uuid: msgUUID,
@@ -428,12 +457,14 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         let _contentHandled = false;
         if (!!reasoningText && !reasoningToken && chunk.message.content) {
           const combined = `\u003c/thought\u003e${chunk.message.content}`;
-          textResponse += combined;
           eventHandler?.("reportStreamEvent", {
             type: "textResponseChunk",
             uuid: msgUUID,
             content: combined,
           });
+          // Reasoning stays out of textResponse (Step 3) — the closing tag
+          // chunk still streams so the frontend thought renderer closes.
+          textResponse += chunk.message.content;
           reasoningText = ""; // Reset to prevent double-closing
           _contentHandled = true;
         }
@@ -473,10 +504,17 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
           },
           cost: 0,
           uuid: msgUUID,
+          reasoning: fullReasoning,
         };
       }
 
-      return { textResponse, functionCall: null, cost: 0, uuid: msgUUID };
+      return {
+        textResponse,
+        functionCall: null,
+        cost: 0,
+        uuid: msgUUID,
+        reasoning: fullReasoning,
+      };
     }
 
     // Fallback: UnTooled prompt-based approach via the native Ollama SDK
@@ -588,6 +626,13 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       return {
         textResponse: completion.content,
         cost: 0,
+        // Step 3 (agent-full-context-trace): reasoning surfaced separately.
+        // The plain-chat fallback keeps the <think>-tagged text in
+        // textResponse (the completion stream concatenates raw tokens into
+        // content) — the aibitat handler layer runs it through the shared
+        // extractThought helper to split the pair. The thinking tokens are
+        // not re-accumulated here (they are already embedded in
+        // textResponse via the <think> tag, unlike the native/tooled paths).
       };
     } catch (error) {
       throw error;
@@ -643,6 +688,9 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
           },
           cost: 0,
           usage: this.getUsage(),
+          // Step 3 (agent-full-context-trace): surface thinking tokens from
+          // non-streaming tool-call completions.
+          reasoning: response.message?.thinking || "",
         };
       }
 
@@ -650,6 +698,7 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
         textResponse: response.message?.content || null,
         cost: 0,
         usage: this.getUsage(),
+        reasoning: response.message?.thinking || "",
       };
     }
 
@@ -698,6 +747,10 @@ class OllamaProvider extends InheritMultiple([Provider, UnTooled]) {
       return {
         textResponse: completion.content,
         cost: 0,
+        // Step 3: non-streaming UnTooled fallback has no thinking stream
+        // (the non-stream chat callback returns content only) — reasoning
+        // arrives tag-embedded in content if at all; extractThought handles it.
+        reasoning: "",
       };
     } catch (error) {
       throw error;

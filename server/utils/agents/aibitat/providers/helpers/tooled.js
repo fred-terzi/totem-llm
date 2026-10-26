@@ -184,7 +184,10 @@ function formatMessagesForTools(messages, options = {}) {
  * @param {{injectReasoningContent?: boolean, provider?: object, signal?: AbortSignal}} options - Provider-specific options
  *   - provider: If passed, automatically handles usage tracking via provider.resetUsage()/recordUsage()
  *   - signal: Optional AbortSignal - tearing it down cancels the in-flight upstream request
- * @returns {Promise<{textResponse: string, functionCall: object|null, uuid: string, usage: object|null}>}
+ * @returns {Promise<{textResponse: string, functionCall: object|null, uuid: string, usage: object|null, reasoning: string}>}
+ *   - reasoning: the model's reasoning tokens for this call, with the
+ *     `<thought>` stream wrapper stripped (agent-full-context-trace, Step 3.1).
+ *     Empty string when the model produced none. Never mixed into textResponse.
  */
 async function tooledStream(
   client,
@@ -230,6 +233,11 @@ async function tooledStream(
   let usage = null;
   let time_info = null;
   let reasoningText = "";
+  // Clean reasoning accumulator for the return value (Step 3.1). Unlike
+  // `reasoningText` (a tag-state tracker for the live stream, reset on the
+  // reasoning→content transition), this collects every reasoning token
+  // un-wrapped for the whole call.
+  let fullReasoning = "";
 
   for await (const chunk of stream) {
     // Capture usage from final chunk (some providers send usage after finish_reason)
@@ -246,6 +254,7 @@ async function tooledStream(
       choice.delta?.reasoning_content || choice.delta?.reasoning;
 
     if (reasoningToken) {
+      fullReasoning += reasoningToken;
       if (reasoningText.length === 0) {
         // First reasoning chunk - wrap with opening tag
         eventHandler?.("reportStreamEvent", {
@@ -274,7 +283,13 @@ async function tooledStream(
         uuid: msgUUID,
         content: combined,
       });
-      result.textResponse += combined;
+      // Step 3.1 (agent-full-context-trace): keep the closing-tag chunk on
+      // the live stream (the frontend thought renderer depends on it) but
+      // stop persisting it into textResponse — reasoning is returned
+      // separately, which also fixes the stray-`</thought>` artifact (0.2):
+      // a text turn from a reasoning model used to save an unmatched closing
+      // tag with no opening tag into the persisted response text.
+      result.textResponse += choice.delta.content;
       reasoningText = ""; // Reset so we don't close again for subsequent content chunks
       continue; // we've handled the content for this chunk
     }
@@ -346,6 +361,7 @@ async function tooledStream(
     functionCall: result.functionCall,
     uuid: msgUUID,
     usage,
+    reasoning: fullReasoning,
   };
 }
 
@@ -361,7 +377,10 @@ async function tooledStream(
  * @param {{injectReasoningContent?: boolean, provider?: object, signal?: AbortSignal}} options - Provider-specific options
  *   - provider: If passed, automatically handles usage tracking via provider.resetUsage()/recordUsage()
  *   - signal: Optional AbortSignal - tearing it down cancels the in-flight upstream request
- * @returns {Promise<{textResponse: string|null, functionCall: object|null, cost: number, usage: object|null}>}
+ * @returns {Promise<{textResponse: string|null, functionCall: object|null, cost: number, usage: object|null, reasoning: string}>}
+ *   - reasoning: the model's reasoning tokens for this call, if the provider
+ *     surfaced them (`reasoning_content` / `reasoning` on the completion
+ *     message). Empty string when absent (agent-full-context-trace, Step 3.1).
  */
 async function tooledComplete(
   client,
@@ -399,6 +418,9 @@ async function tooledComplete(
   const completion = response.choices[0].message;
   const cost = getCostFn(response.usage);
   const usage = response.usage || null;
+  // Step 3.1 (agent-full-context-trace): surface reasoning tokens from
+  // non-streaming completions — previously captured nothing at all.
+  const reasoning = completion.reasoning_content ?? completion.reasoning ?? "";
 
   // Auto-record usage if provider is passed and usage is available
   if (provider?.recordUsage && usage) {
@@ -426,6 +448,7 @@ async function tooledComplete(
         },
         cost,
         usage,
+        reasoning,
       };
     }
 
@@ -438,6 +461,7 @@ async function tooledComplete(
       },
       cost,
       usage,
+      reasoning,
     };
   }
 
@@ -445,6 +469,7 @@ async function tooledComplete(
     textResponse: completion.content,
     cost,
     usage,
+    reasoning,
   };
 }
 

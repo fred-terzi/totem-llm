@@ -36,9 +36,9 @@ class VeniceImageManager {
    *    are dropped; if `width`/`height` are present, `aspect_ratio`/`resolution`
    *    are dropped. Never send both idioms.
    *  - The deprecated `inpaint` field is never sent.
- *  - One-image-per-turn lock (F15): the `variants` parameter is stripped from every
- *    request body unconditionally. Multi-image generation is not reachable through
- *    this plugin, even if a caller (or a hallucinating model) passes `variants`.
+   *  - One-image-per-turn lock (F15): the `variants` parameter is stripped from every
+   *    request body unconditionally. Multi-image generation is not reachable through
+   *    this plugin, even if a caller (or a hallucinating model) passes `variants`.
    * @param {{prompt: string, negative_prompt?: string, width?: number, height?: number,
    *          aspect_ratio?: string, resolution?: string, cfg_scale?: number, steps?: number,
    *          seed?: number, style_preset?: string,

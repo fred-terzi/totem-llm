@@ -73,7 +73,178 @@ class AgentHandler {
     return false;
   }
 
-  async #chatHistory(limit = 10) {
+  /**
+   * Maximum characters of a tool_result's content replayed into the next
+   * turn's reconstructed context (N5). The full text always stays in the DB
+   * trace; oversized results are cut here with an explicit `[truncated]`
+   * marker (AC12).
+   * @returns {number}
+   */
+  static #traceResultContextChars() {
+    const envMax = parseInt(process.env.AGENT_TRACE_RESULT_CONTEXT_CHARS, 10);
+    return !isNaN(envMax) && envMax > 0 ? envMax : 8_000;
+  }
+
+  /**
+   * Expand one persisted chat row (prompt + response.trace) into the aibitat
+   * message pair list for the next turn's context (F4, Step 3.3,
+   * agent-full-context-trace):
+   * - USER message (unchanged),
+   * - per trace entry in order: reasoning / pre-tool text → assistant
+   *   messages; tool calls+results → `role:"function"` messages carrying
+   *   `originalFunctionCall`, so every provider converter synthesizes the
+   *   native tool-call pairs for free (formatMessagesForTools,
+   *   Anthropic #prepareMessages, Gemini #formatMessages, Bedrock/LangChain,
+   *   OpenAI Responses #formatToResponsesInput — Step 1 table).
+   * - final assistant text message (unchanged).
+   *
+   * Safety rails:
+   * - N5/AC12: oversized tool_result content is truncated in-context with a
+   *   `[truncated]` marker (full text stays in the DB).
+   * - AC21/N4: malformed entries (missing callId on a tool_result) degrade
+   *   to a plain-text assistant line — a strict-shape provider never
+   *   receives an unusable pair (the converters also skip those defensively).
+   * - Gated by `AIbitat.traceReconstructionEnabled()`
+   *   (`AGENT_TRACE_RECONSTRUCTION=0` exempts a bad provider — Step 9).
+   *
+   * @param {object|null} trace - Parsed `response.trace` from the row
+   * @param {string} finalText - The row's final assistant text (response.text)
+   * @returns {Array<object>} Intermediate aibitat messages (may be empty)
+   */
+  #traceToIntermediateMessages(trace, finalText) {
+    if (!AIbitat.traceReconstructionEnabled()) return [];
+    const entries = trace?.entries;
+    if (!Array.isArray(entries) || entries.length === 0) return [];
+
+    const maxResultChars = AgentHandler.#traceResultContextChars();
+    const messages = [];
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      switch (entry?.type) {
+        case "reasoning": {
+          if (!entry.text) break;
+          // Replay as <thought>-tagged assistant text — universally accepted
+          // (N4). Native reasoning_content replay is Step 4 (capability
+          // flags); DeepSeek's injectReasoningContent requirement is already
+          // satisfied by formatMessagesForTools synthesizing the field.
+          messages.push({
+            from: WORKSPACE_AGENT.name,
+            to: USER_AGENT.name,
+            traceRole: "assistant",
+            content: `<thought>${entry.text}</thought>`,
+            state: "success",
+            traceReconstructed: true,
+          });
+          break;
+        }
+        case "llm_text": {
+          // The final LLM call's text is the row's response.text — replaying
+          // it here would duplicate the final assistant message. Match on
+          // content so direct-output turns (whose final text is the tool
+          // result, not this entry) keep their pre-tool text.
+          if (!entry.text) break;
+          if (entry.text === finalText) break;
+          messages.push({
+            from: WORKSPACE_AGENT.name,
+            to: USER_AGENT.name,
+            traceRole: "assistant",
+            content: entry.text,
+            state: "success",
+            traceReconstructed: true,
+          });
+          break;
+        }
+        case "tool_call": {
+          // Paired with its tool_result below (the function message carries
+          // name/arguments via originalFunctionCall). A dangling call with no
+          // result (aborted mid-execution) still gets a function message so
+          // the assistant tool_call isn't lost.
+          const resultEntry = entries.find(
+            (e, j) =>
+              j > i &&
+              e?.type === "tool_result" &&
+              (e.callId ?? null) === (entry.callId ?? null) &&
+              e.name === entry.name
+          );
+          if (resultEntry) break; // emitted with the tool_result
+          messages.push({
+            from: WORKSPACE_AGENT.name,
+            to: USER_AGENT.name,
+            traceRole: "function",
+            name: entry.name,
+            content: "[tool call did not complete - no result recorded]",
+            originalFunctionCall: {
+              id: entry.callId ?? null,
+              name: entry.name,
+              arguments: entry.arguments ?? {},
+            },
+            state: "success",
+            traceReconstructed: true,
+          });
+          break;
+        }
+        case "tool_result": {
+          // AC21/N4: a tool_result without a usable callId cannot form a
+          // valid tool pair on strict providers — degrade to plain text.
+          if (!entry.callId) {
+            messages.push({
+              from: WORKSPACE_AGENT.name,
+              to: USER_AGENT.name,
+              traceRole: "assistant",
+              content: `[tool ${entry.name ?? "unknown"} result (uncallibrated id)]: ${entry.content ?? ""}`,
+              state: "success",
+              traceReconstructed: true,
+            });
+            break;
+          }
+          const rawContent =
+            typeof entry.content === "string"
+              ? entry.content
+              : JSON.stringify(entry.content ?? null);
+          const contextContent =
+            rawContent.length > maxResultChars
+              ? `${rawContent.slice(0, maxResultChars)}[truncated]`
+              : rawContent;
+          messages.push({
+            from: WORKSPACE_AGENT.name,
+            to: USER_AGENT.name,
+            traceRole: "function",
+            name: entry.name,
+            content: contextContent,
+            originalFunctionCall: {
+              id: entry.callId,
+              name: entry.name,
+              arguments:
+                entries.find(
+                  (e, j) =>
+                    j < i &&
+                    e?.type === "tool_call" &&
+                    (e.callId ?? null) === entry.callId
+                )?.arguments ?? {},
+            },
+            state: "success",
+            traceReconstructed: true,
+          });
+          break;
+        }
+        default:
+          break; // truncation_marker and unknown types carry no context
+      }
+    }
+
+    return messages;
+  }
+
+  /**
+   * Internal (not part of the public handler surface) but deliberately NOT a
+   * `#private` method: it is the F4 test injection point and JS private
+   * methods cannot be invoked outside the class body. Marked `@private` in
+   * docs; treat as internal API.
+   * @param {number} limit
+   * @returns {Promise<Array<object>>}
+   */
+  async chatHistory(limit = 10) {
     try {
       const rawHistory = (
         await WorkspaceChats.where(
@@ -91,20 +262,28 @@ class AgentHandler {
 
       const agentHistory = [];
       rawHistory.forEach((chatLog) => {
+        agentHistory.push({
+          from: USER_AGENT.name,
+          to: WORKSPACE_AGENT.name,
+          content: chatLog.prompt,
+          state: "success",
+        });
+
+        // F4 (Step 3.3): expand a persisted trace into the intermediate
+        // assistant/function messages between the user prompt and the final
+        // text. Legacy rows (no trace) get exactly today's pair (AC11/N3).
+        const responseData = safeJsonParse(chatLog.response) || {};
+        const finalText = responseData?.text || "";
         agentHistory.push(
-          {
-            from: USER_AGENT.name,
-            to: WORKSPACE_AGENT.name,
-            content: chatLog.prompt,
-            state: "success",
-          },
-          {
-            from: WORKSPACE_AGENT.name,
-            to: USER_AGENT.name,
-            content: safeJsonParse(chatLog.response)?.text || "",
-            state: "success",
-          }
+          ...this.#traceToIntermediateMessages(responseData?.trace, finalText)
         );
+
+        agentHistory.push({
+          from: WORKSPACE_AGENT.name,
+          to: USER_AGENT.name,
+          content: finalText,
+          state: "success",
+        });
       });
       return agentHistory;
     } catch (e) {
@@ -819,7 +998,7 @@ class AgentHandler {
     this.aibitat = new AIbitat({
       provider: this.provider ?? "openai",
       model: this.model ?? "gpt-4o",
-      chats: await this.#chatHistory(20),
+      chats: await this.chatHistory(20),
       handlerProps: {
         invocation: this.invocation,
         log: this.log,

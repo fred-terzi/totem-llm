@@ -330,6 +330,10 @@ class GeminiProvider extends Provider {
           },
           cost: this.getCost(),
           uuid: msgUUID,
+          // Step 3 (agent-full-context-trace): Gemini reasoning is encrypted
+          // server-side — only the thought_signature round-trips (carried on
+          // extra_content in functionCall, preserved through reconstruction).
+          reasoning: "",
         };
       }
 
@@ -338,6 +342,7 @@ class GeminiProvider extends Provider {
         functionCall: null,
         cost: this.getCost(),
         uuid: msgUUID,
+        reasoning: "",
       };
     } catch (error) {
       this.#logAPIError(error);
@@ -406,6 +411,7 @@ class GeminiProvider extends Provider {
           },
           cost,
           usage: this.getUsage(),
+          reasoning: "",
         };
       }
 
@@ -413,6 +419,7 @@ class GeminiProvider extends Provider {
         textResponse: completion.content,
         cost,
         usage: this.getUsage(),
+        reasoning: "",
       };
     } catch (error) {
       this.#logAPIError(error);

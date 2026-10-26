@@ -367,10 +367,13 @@ class AWSBedrockProvider extends InheritMultiple([Provider, UnTooled]) {
             arguments: toolCall.args || {},
           },
           cost: 0,
+          // Step 3 (agent-full-context-trace): no explicit reasoning capture
+          // on the LangChain Bedrock path (string content only).
+          reasoning: "",
         };
       }
 
-      return { textResponse, functionCall: null, cost: 0 };
+      return { textResponse, functionCall: null, cost: 0, reasoning: "" };
     } catch (e) {
       AWSBedrockLLM.errorToHumanReadable(e, {
         method: "stream",
@@ -423,6 +426,7 @@ class AWSBedrockProvider extends InheritMultiple([Provider, UnTooled]) {
             arguments: toolCall.args || {},
           },
           cost: 0,
+          reasoning: "",
         };
       }
 
@@ -432,6 +436,7 @@ class AWSBedrockProvider extends InheritMultiple([Provider, UnTooled]) {
             ? response.content
             : JSON.stringify(response.content),
         cost: 0,
+        reasoning: "",
       };
     } catch (e) {
       AWSBedrockLLM.errorToHumanReadable(e, {
