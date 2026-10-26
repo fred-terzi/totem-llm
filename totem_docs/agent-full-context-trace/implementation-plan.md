@@ -711,6 +711,99 @@ Run: `npx jest server/__tests__/utils/agents` plus full `yarn test` before merge
 | 7 (frontend) | Trace dropped by the server-side history serializer before it reaches the browser | **Resolved (0.8)** | `convertToChatHistory` whitelists keys and would silently drop `trace`; Step 7 now explicitly adds the passthrough and a serializer-level test. |
 | 8 (tests) | Provider matrix drift (new providers added without trace support) | Low | Capability-flag default `false` → provider degrades to today's behavior, never breaks. |
 
+## Step 9b — Live-validation debugging log (2026-10-26)
+
+Post-implementation end-to-end validation (Ollama + `qwen3.8-mtp` via `yarn dev:all`)
+uncovered a series of environment and integration issues not reproducible under
+unit tests. Recorded chronologically because several findings **reverse** earlier
+hypotheses; the final verdict is that the shipped feature works and every observed
+failure traced to environment or history contamination.
+
+### Issue 1 — Stale server processes served the test session (false "model is blind" signal)
+
+- **Symptom:** model denied seeing its own chain-of-thought and tool calls from prior turns.
+- **Diagnosis journey:** trace capture verified in DB; reconstruction logic verified
+  in isolation; provider payload builder verified; direct-to-Ollama probes recalled
+  perfectly. Root cause: the session was served by a **pre-feature npm-installed
+  instance** (port 18686, Oct 23) while the dev `yarn dev:all` process had died —
+  DB rows showed the pre-Step-2 response shape (no `trace`/`stopReason`, stray
+  leading `</thought>` artifacts). Lesson: **check what's actually serving before
+  debugging the feature** — this environment has three coexisting stacks (repo dev
+  on 13000/28686, npm-installed on 18686, root Docker beta).
+
+### Issue 2 — CORS rejects the dev frontend origin (port mismatch)
+
+- **Symptom:** `Error: CORS: origin http://localhost:13000 not allowed`.
+- **Cause:** `dev:all` pins `FRONTEND_PORT=13000`, the Vite proxy forwards the
+  browser `Origin` header to the server, and the server's CORS allowlist
+  (`CORS_ORIGIN`, commit `06d333cd`) had no entry for it — and the documented
+  "empty/unset = reflect any origin" fallback **does not exist in the code**
+  (docs/code mismatch in AGENTS.md).
+- **Fix:** `CORS_ORIGIN=http://localhost:13000` in `server/.env.development`
+  (requires server restart, nodemon won't reload env). Follow-up: implement the
+  documented empty-list fallback + restore docs/code agreement.
+
+### Issue 3 — Prisma create-branch validation silently killed three writers (hotfix `674995a2`)
+
+- See the hotfix deviation in Step 10. Discovered only via the first real run;
+  unit-test mocks of `WorkspaceChats.upsert` bypass Prisma's static validation.
+- **Follow-up found during live validation:** the crash-recovery promotion upsert
+  (`server/utils/agents/index.js` ~line 306) has the same latent flaw — it passes
+  no `prompt`, so Prisma rejects it on the create branch. It is fail-open today,
+  but promotion (F13) will never succeed in production until it also passes
+  `prompt` (needs the row's original prompt — `row.prompt` is available on the
+  fetched record).
+
+### Issue 4 — Self-inflicted denial spiral: a poisoned assistant turn makes the model distrust perfect context
+
+- **Symptom (persisted after all environment fixes):** with **verified-correct**
+  wire payloads (native `tool_calls` + `role:"tool"` + `<thought>` blocks, sent to
+  a live Ollama and recalled verbatim in probes), the model still answered
+  "I never ran that command; I fabricated the output."
+- **Root cause:** the history contained the model's own **earlier denial turns** —
+  honest at the time they were made (produced under Issue 1's stale server), but
+  now permanent assistant messages. Given conflicting evidence (native tool_calls
+  saying "I ran it" vs. its own prior text saying "I made it up"), the model
+  deferred to its confession and doubled down. Each denial turn made the next
+  more certain. **An A/B/A2 probe proved it:** stripping `<thought>` blocks →
+  partial recall; removing the denial turns while keeping everything else →
+  **perfect verbatim recall through the exact production pipeline**.
+- **Secondary factor:** qwen3 renders historical assistant `tool_calls` as
+  directive text, unlike the streaming format the model "remembers" producing —
+  so it can fail to recognize its own real tool calls even in a clean history.
+- **Lessons:** (a) ask **neutral factual recall questions**, never "can you see
+  X?" — that phrasing anchors a denial spiral that is self-fulfilling through
+  chat history; (b) **one bad turn can permanently poison a thread's agent
+  memory** — recovery requires a fresh thread/workspace or deleting the poisoned
+  rows; (c) model self-reports about its own context are unreliable evidence —
+  probe the wire payload instead.
+- **Possible future mitigation (feature decision, not a bug):** a thread-level
+  "recalibrate" affordance that drops assistant turns matching denial patterns.
+
+### Issue 5 — Probe-environment traps (methodology)
+
+Several intermediate "bugs" were artifacts of the probes themselves and are
+recorded to prevent repeat confusion: (a) Prisma resolves `DATABASE_URL` to the
+production `~/totem-llm/totem-llm.db` unless the probe pins the dev env —
+probing the wrong DB mimics empty history; (b) `getOrFormatNodeChatHistory` is
+direction-sensitive — calling it with the wrong route (`{from: USER, to:
+'@agent'}`) flips every role; the live flow always calls `{to: 'USER'}`;
+(c) Ollama's native `/api/chat` requires `tool_calls.function.arguments` as an
+**object** while the OpenAI-compat `/v1` endpoint requires a **string** — mixed
+up, both 400. Related latent bug: the shared `formatMessagesForTools`
+(`helpers/tooled.js`) emits `arguments` as a JSON string, which the native
+Ollama endpoint rejects — unaffected today (Ollama uses its own converter) but
+should be normalized before any Ollama-style provider routes through the shared
+helper.
+
+### Net status after validation
+
+No feature-code defect remains open from live validation: capture, persistence,
+stop reason, serialization, and reconstruction all verified against the live DB
+and live model. Open follow-ups: the Issue 2 docs/code CORS mismatch, the Issue 3
+promotion-upsert `prompt` gap, and the Issue 5 `arguments`-type normalization —
+all small, all recorded here.
+
 ## Step 10 — PR / status log
 
 ### Hotfix deviation (2026-10-26, commit `674995a2`)
