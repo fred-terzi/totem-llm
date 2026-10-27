@@ -282,9 +282,20 @@ export function emitContextUsage(metrics = {}) {
  */
 export function lastContextUsageFromHistory(history = []) {
   for (let i = history.length - 1; i >= 0; i--) {
-    const promptTokens = Number(history?.[i]?.metrics?.prompt_tokens);
+    const metrics = history?.[i]?.metrics ?? {};
+    // Agent turns persist SESSION-CUMULATIVE prompt_tokens in metrics
+    // (sum across every LLM call in the turn — accurate for billing, wrong
+    // for the context bar). The size of the context package actually sent
+    // to the model is the LAST call's prompt tokens, which agent rows carry
+    // under metrics.lastCall. Normal chat rows have no lastCall field and
+    // their top-level prompt_tokens IS the context size, so fall back to it.
+    const promptTokens = Number(
+      metrics?.lastCall?.prompt_tokens > 0
+        ? metrics.lastCall.prompt_tokens
+        : metrics?.prompt_tokens
+    );
     if (Number.isFinite(promptTokens) && promptTokens > 0)
-      return { promptTokens, model: history[i].metrics.model ?? null };
+      return { promptTokens, model: metrics.model ?? null };
   }
   return null;
 }

@@ -4,6 +4,7 @@ import {
   AGENT_TOKEN_USAGE_EVENT,
   CONTEXT_USAGE_CLEAR_EVENT,
 } from "@/utils/constants";
+import { AGENT_SESSION_START } from "@/utils/chat/agent";
 
 /**
  * Tracks the most recent context (prompt) token usage reported by an LLM turn.
@@ -38,6 +39,15 @@ export default function useContextUsage(initialUsage = null) {
     window.addEventListener(CONTEXT_USAGE_EVENT, handler);
     window.addEventListener(AGENT_TOKEN_USAGE_EVENT, handler);
 
+    // A new turn (chat submit or agent session start) means a fresh context
+    // package is being built. The model's context usage can legitimately be
+    // SMALLER than the previous turn's (shorter prompt, prior turn's
+    // session-cumulative seed, /reset, provider switch). Seed from history
+    // is replaced by the first real usage report of the turn, so the
+    // monotonic guard above must not lock in stale inflated values.
+    const newTurnHandler = () => setUsage(initialUsage);
+    window.addEventListener(AGENT_SESSION_START, newTurnHandler);
+
     // When the chat is reset (e.g. /reset command) drop the tracked usage so
     // the context usage indicator hides instead of showing the previous bar.
     const clearHandler = () => setUsage(null);
@@ -46,9 +56,10 @@ export default function useContextUsage(initialUsage = null) {
     return () => {
       window.removeEventListener(CONTEXT_USAGE_EVENT, handler);
       window.removeEventListener(AGENT_TOKEN_USAGE_EVENT, handler);
+      window.removeEventListener(AGENT_SESSION_START, newTurnHandler);
       window.removeEventListener(CONTEXT_USAGE_CLEAR_EVENT, clearHandler);
     };
-  }, []);
+  }, [initialUsage]);
 
   return usage;
 }
