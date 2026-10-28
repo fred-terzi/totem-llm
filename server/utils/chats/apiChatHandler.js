@@ -203,7 +203,8 @@ async function chatSync({
             outputs: allOutputs,
             metrics,
           },
-          include: false,
+          include: true,
+          threadId: thread?.id || null,
           apiSessionId: sessionId,
         });
         return {
