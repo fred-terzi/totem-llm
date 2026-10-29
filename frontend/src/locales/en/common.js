@@ -1341,6 +1341,19 @@ const TRANSLATIONS = {
         "Public email registration disabled — sign-up is hidden from the login screen.",
       "toast-failed": "Failed to update public registration: {{error}}",
     },
+    wallet_login: {
+      title: "Wallet Login",
+      description:
+        "Allow users to sign in with an Ethereum wallet (Sign-In with Ethereum) from the browser extension or the mobile app.",
+      "toggle-label": "Allow wallet login",
+      "toggle-description":
+        "When enabled, the Connect Wallet / mobile pairing options appear on the login screen, and the first wallet login auto-creates an account with the standard welcome credit. When disabled, new wallet logins are refused — existing wallet sessions remain valid until their token expires (up to 30 days). Login attempts are rate-limited.",
+      "toast-enabled":
+        "Wallet login enabled — the Connect Wallet option is now available on the login screen.",
+      "toast-disabled":
+        "Wallet login disabled — the Connect Wallet option is hidden from the login screen and wallet auth is refused. Existing sessions remain valid until they expire.",
+      "toast-failed": "Failed to update wallet login: {{error}}",
+    },
     password: {
       title: "Password Protection",
       description:

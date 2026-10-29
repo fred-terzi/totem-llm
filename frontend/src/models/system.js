@@ -321,8 +321,9 @@ const System = {
   },
   /**
    * Reads the public registration flags (unauthenticated endpoint).
-   * Used by the login screen to decide whether to show a Sign Up option.
-   * @returns {Promise<{multiUserMode: boolean, publicRegistration: boolean}>}
+   * Used by the login screen to decide whether to show a Sign Up option and
+   * whether to render the wallet login buttons.
+   * @returns {Promise<{multiUserMode: boolean, publicRegistration: boolean, walletLogin: boolean}>}
    */
   publicRegistration: async function () {
     return await fetch(`${API_BASE}/system/public-registration`, {
@@ -332,8 +333,16 @@ const System = {
       .then((res) => ({
         multiUserMode: !!res?.multiUserMode,
         publicRegistration: !!res?.publicRegistration,
+        walletLogin: !!res?.walletLogin,
       }))
-      .catch(() => ({ multiUserMode: false, publicRegistration: false }));
+      .catch(() => ({
+        multiUserMode: false,
+        publicRegistration: false,
+        // Fail-open for wallet to match the server-side default (on when the
+        // row is absent): a transient network error on page load should not
+        // hide the primary login mechanism from existing users.
+        walletLogin: true,
+      }));
   },
 
   /**

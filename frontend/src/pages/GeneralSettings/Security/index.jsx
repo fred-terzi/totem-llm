@@ -48,6 +48,7 @@ export default function GeneralSecurity() {
         multi-user mode — only the settings that remain actionable are shown. */}
         {multiUserEnabled && !multiUserModeActive && <MultiUserMode />}
         {multiUserEnabled && <PublicRegistration />}
+        {multiUserEnabled && <WalletLogin />}
         {!multiUserModeActive && <PasswordProtection />}
       </div>
     </div>
@@ -291,6 +292,93 @@ function PublicRegistration() {
           disabled={saving}
           label={t("security.public_registration.toggle-label")}
           description={t("security.public_registration.toggle-description")}
+          enabled={enabled}
+          onChange={handleToggle}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Admin toggle for wallet (SIWE) login (allow_wallet_login).
+// Persisted via the standard admin system-preferences endpoint; the login
+// screen reads it through the unauthenticated /system/public-registration
+// endpoint to decide whether to render the Connect Wallet / mobile pairing
+// buttons. NOTE: disabling stops NEW wallet logins and account creation, but
+// existing wallet sessions remain valid until their JWT expires (30 days).
+function WalletLogin() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    async function fetchWalletLogin() {
+      setLoading(true);
+      const { settings } = await Admin.systemPreferencesByFields([
+        "allow_wallet_login",
+      ]);
+      const value = settings?.allow_wallet_login;
+      // Absent row = default on (wallet is the primary login on existing installs).
+      setEnabled(
+        value === undefined ||
+          value === null ||
+          value === true ||
+          value === "true"
+      );
+      setLoading(false);
+    }
+    fetchWalletLogin();
+  }, []);
+
+  const handleToggle = async (checked) => {
+    setSaving(true);
+    setEnabled(checked);
+    const { success, error } = await Admin.updateSystemPreferences({
+      allow_wallet_login: checked,
+    });
+    if (success) {
+      showToast(
+        checked
+          ? t("security.wallet_login.toast-enabled")
+          : t("security.wallet_login.toast-disabled"),
+        "success"
+      );
+    } else {
+      showToast(t("security.wallet_login.toast-failed", { error }), "error");
+      setEnabled(!checked);
+    }
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <div className="h-1/2 transition-all duration-500 relative md:ml-[2px] md:mr-[8px] md:my-[16px] md:rounded-[26px] p-[18px] h-full overflow-y-scroll">
+        <div className="w-full h-full flex justify-center items-center">
+          <PreLoader />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col w-full px-1 md:pl-6 md:pr-[50px] pb-6 border-white light:border-theme-sidebar-border border-b-2 border-opacity-10">
+      <div className="w-full flex flex-col gap-y-1">
+        <div className="items-center flex gap-x-4">
+          <p className="text-base font-bold text-white mt-6">
+            {t("security.wallet_login.title")}
+          </p>
+        </div>
+        <p className="text-xs leading-[18px] font-base text-white text-opacity-60">
+          {t("security.wallet_login.description")}
+        </p>
+      </div>
+      <div className="my-4 w-full max-w-[640px]">
+        <Toggle
+          size="lg"
+          disabled={saving}
+          label={t("security.wallet_login.toggle-label")}
+          description={t("security.wallet_login.toggle-description")}
           enabled={enabled}
           onChange={handleToggle}
         />

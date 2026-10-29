@@ -271,6 +271,9 @@ export default function MultiUserAuth() {
   const [showResetPasswordForm, setShowResetPasswordForm] = useState(false);
   const [showSignUp, setShowSignUp] = useState(false);
   const [canSignUp, setCanSignUp] = useState(false);
+  // Default true for back-compat: wallet is the primary login on existing
+  // installs and the flag fetch is async — never flash the buttons away.
+  const [walletLogin, setWalletLogin] = useState(true);
   const [customAppName, setCustomAppName] = useState(null);
 
   const {
@@ -362,9 +365,12 @@ export default function MultiUserAuth() {
     };
     fetchCustomAppName();
     // Sign-up option is only offered when the admin has opened the door.
+    // Same response decides whether the wallet buttons render at all.
     const fetchPublicRegistration = async () => {
-      const { publicRegistration } = await System.publicRegistration();
+      const { publicRegistration, walletLogin } =
+        await System.publicRegistration();
       setCanSignUp(publicRegistration);
+      setWalletLogin(walletLogin);
     };
     fetchPublicRegistration();
   }, []);
@@ -410,11 +416,14 @@ export default function MultiUserAuth() {
           </div>
         </div>
 
-        {/* Wallet login (primary) */}
-        <div className="flex items-center w-[300px] flex-col gap-y-6">
-          <WalletConnectButton />
-          <WalletConnectMobile />
-        </div>
+        {/* Wallet login (primary) — hidden when the admin disabled wallet
+        login. The password form below always renders. */}
+        {walletLogin && (
+          <div className="flex items-center w-[300px] flex-col gap-y-6">
+            <WalletConnectButton />
+            <WalletConnectMobile />
+          </div>
+        )}
 
         {/* Official install — password login */}
         <div className="flex items-center w-[300px] mt-3">

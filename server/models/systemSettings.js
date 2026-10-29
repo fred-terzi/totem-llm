@@ -62,6 +62,7 @@ const SystemSettings = {
     "custom_app_name",
     "feature_flags",
     "allow_public_registration",
+    "allow_wallet_login",
     "meta_page_title",
     "meta_page_favicon",
     "memory_enabled",
@@ -93,6 +94,7 @@ const SystemSettings = {
 
     // Multi-user mode extras
     "allow_public_registration",
+    "allow_wallet_login",
 
     // Meta page customization
     "meta_page_title",
@@ -415,6 +417,10 @@ const SystemSettings = {
       if (typeof update === "boolean") return update ? "true" : "false";
       return String(update) === "true" ? "true" : "false";
     },
+    allow_wallet_login: (update) => {
+      if (typeof update === "boolean") return update ? "true" : "false";
+      return String(update) === "true" ? "true" : "false";
+    },
     experimental_live_file_sync: (update) => {
       if (typeof update === "boolean")
         return update === true ? "enabled" : "disabled";
@@ -717,6 +723,23 @@ const SystemSettings = {
     } catch (error) {
       console.error(error.message);
       return false;
+    }
+  },
+
+  /**
+   * Whether wallet (SIWE) login is enabled. Only meaningful in multi-user
+   * mode. Defaults to TRUE when the setting row is absent — wallet login is
+   * the primary auth mechanism on existing installs and predates this flag,
+   * so the fallback preserves current behavior.
+   * @returns {Promise<boolean>}
+   */
+  isWalletLoginEnabled: async function () {
+    try {
+      const setting = await this.get({ label: "allow_wallet_login" });
+      return !setting || setting.value === "true";
+    } catch (error) {
+      console.error(error.message);
+      return true;
     }
   },
 

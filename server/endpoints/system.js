@@ -687,14 +687,20 @@ function systemEndpoints(app) {
   });
 
   // Unauthenticated: the login page needs to know whether to render a
-  // public sign-up option. Exposes nothing beyond the two boolean flags.
+  // public sign-up option and/or the wallet login buttons. Exposes nothing
+  // beyond the three boolean flags.
   app.get("/system/public-registration", async (_, response) => {
     try {
       const multiUserMode = await SystemSettings.isMultiUserMode();
       const publicRegistration = multiUserMode
         ? await SystemSettings.isPublicRegistrationEnabled()
         : false;
-      response.status(200).json({ multiUserMode, publicRegistration });
+      const walletLogin = multiUserMode
+        ? await SystemSettings.isWalletLoginEnabled()
+        : false;
+      response
+        .status(200)
+        .json({ multiUserMode, publicRegistration, walletLogin });
     } catch (e) {
       console.error(e.message, e);
       response.sendStatus(500).end();

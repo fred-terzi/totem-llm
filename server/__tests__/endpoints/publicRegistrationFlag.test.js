@@ -128,20 +128,30 @@ describe("allow_public_registration setting", () => {
     expect(await SystemSettings.isPublicRegistrationEnabled()).toBe(false);
   });
 
-  it("the flag endpoint reports multiUserMode=false and publicRegistration=false on a fresh DB", async () => {
+  it("the flag endpoint reports multiUserMode=false, publicRegistration=false and walletLogin=false on a fresh DB", async () => {
     await setSetting("multi_user_mode", "false");
     await setSetting("allow_public_registration", null);
+    await setSetting("allow_wallet_login", null);
     const { status, body } = await getFlag();
     expect(status).toBe(200);
-    expect(body).toEqual({ multiUserMode: false, publicRegistration: false });
+    expect(body).toEqual({
+      multiUserMode: false,
+      publicRegistration: false,
+      walletLogin: false,
+    });
   });
 
   it("the flag endpoint reports publicRegistration=false when the setting is off", async () => {
     await setSetting("multi_user_mode", "true");
     await setSetting("allow_public_registration", "false");
+    await setSetting("allow_wallet_login", null);
     const { status, body } = await getFlag();
     expect(status).toBe(200);
-    expect(body).toEqual({ multiUserMode: true, publicRegistration: false });
+    expect(body).toEqual({
+      multiUserMode: true,
+      publicRegistration: false,
+      walletLogin: true,
+    });
   });
 
   it("the flag endpoint reports publicRegistration=true when enabled in multi-user mode", async () => {
@@ -149,14 +159,22 @@ describe("allow_public_registration setting", () => {
     await setSetting("allow_public_registration", "true");
     const { status, body } = await getFlag();
     expect(status).toBe(200);
-    expect(body).toEqual({ multiUserMode: true, publicRegistration: true });
+    expect(body).toEqual({
+      multiUserMode: true,
+      publicRegistration: true,
+      walletLogin: true,
+    });
   });
 
   it("the flag endpoint reports publicRegistration=false when enabled but multi-user mode is off", async () => {
     await setSetting("multi_user_mode", "false");
     await setSetting("allow_public_registration", "true");
     const { body } = await getFlag();
-    expect(body).toEqual({ multiUserMode: false, publicRegistration: false });
+    expect(body).toEqual({
+      multiUserMode: false,
+      publicRegistration: false,
+      walletLogin: false,
+    });
   });
 
   it("toggling the setting via SystemSettings.updateSettings persists and reverts", async () => {

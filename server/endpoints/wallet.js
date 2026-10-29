@@ -6,6 +6,7 @@ const { totemConfig, fetchTotemBalance } = require("../utils/totemBalance");
 const { Workspace } = require("../models/workspace");
 const { EventLogs } = require("../models/eventLogs");
 const { CacheData } = require("../models/cacheData");
+const { SystemSettings } = require("../models/systemSettings");
 const { rateLimiter } = require("../utils/middleware/rateLimiter");
 const prisma = require("../utils/prisma");
 
@@ -66,6 +67,52 @@ function buildWalletMessage(domain, origin, nonce) {
     `Nonce: ${nonce}`,
     `Issued At: ${new Date().toISOString()}`,
   ].join("\n");
+}
+
+/**
+ * Wallet login gate. Wallet auth endpoints are only usable when the instance
+ * is in multi-user mode AND the admin has not disabled wallet login. Returns
+ * true (allowed) or responds with the appropriate error and returns false —
+ * call at the very top of each handler, before any nonce/DB work.
+ * @param {string} endpoint - "nonce" | "verify" — selects the error shape:
+ *   verify mirrors the { valid, user, token, message } contract of
+ *   /request-token so the FE flows render the failure gracefully; nonce uses
+ *   the simple { error } shape.
+ * @returns {Promise<boolean>}
+ */
+async function walletLoginAllowed(request, response, endpoint = "nonce") {
+  const multiUserMode = await SystemSettings.isMultiUserMode();
+  const walletLogin = multiUserMode
+    ? await SystemSettings.isWalletLoginEnabled()
+    : false;
+  if (multiUserMode && walletLogin) return true;
+
+  const reason = !multiUserMode ? "not-multi-user-mode" : "wallet-login-disabled";
+  console.error(
+    `[wallet] ${endpoint}: BLOCKED reason=${reason} ip=${request.ip || "unknown"}`
+  );
+  await EventLogs.logEvent(
+    "wallet_login_blocked",
+    {
+      ip: request.ip || "unknown",
+      reason,
+      endpoint,
+    }
+  );
+
+  if (endpoint === "verify") {
+    response.status(403).json({
+      valid: false,
+      user: null,
+      token: null,
+      message: "Wallet login is disabled. Use your username and password.",
+    });
+  } else {
+    response.status(403).json({
+      error: "Wallet login is disabled. Use your username and password.",
+    });
+  }
+  return false;
 }
 
 function walletEndpoints(app) {
@@ -151,6 +198,8 @@ function walletEndpoints(app) {
     [authRateLimiter],
     async (request, response) => {
       try {
+        if (!(await walletLoginAllowed(request, response, "nonce"))) return;
+
         const { origin } = reqBody(request);
         console.log(
           `[wallet:nonce] request from ip=${request.ip} host=${request.headers.host} origin=${origin || "(none)"}`
@@ -210,6 +259,10 @@ function walletEndpoints(app) {
     [authRateLimiter],
     async (request, response) => {
       try {
+        // Gate before ANY nonce lookup/consumption — a disabled endpoint
+        // should not burn DB round-trips or mutate replay state.
+        if (!(await walletLoginAllowed(request, response, "verify"))) return;
+
         const { signature, nonce } = reqBody(request);
 
         // --- Input validation ---
