@@ -30,3 +30,6 @@ server/storage/chatgpt_import_example
 server/__tests__/utils/models/
 
 .skills
+
+# Media instance: pre-seeded MCP server config (contains the bot token)
+docker/media/mcp-servers.seed.json

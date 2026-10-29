@@ -1,0 +1,144 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Totem LLM — Media (dedicated, team-only) Docker Compose
+#
+# Purpose:
+#   A DEDICATED instance of the same Totem LLM product that `docker/beta` runs,
+#   scoped to the totemai-media website team. It gets:
+#
+#       • A permanent URL  https://media-totem.totemai.xyz
+#       • Access to the WordPress MCP tools (totemai/* abilities) on the
+#         totemai-media site, so the team can draft / review / publish stories
+#         and make site changes through chat.
+#       • NO wallet / payments / WalletConnect (irrelevant for an internal tool)
+#       • Access restricted to the media team via Cloudflare Access + the
+#         instance's own logins (fred creates the accounts; no public signup)
+#
+# Relationship to docker/beta:
+#   • Same image, same build, same product — this is a second, narrower run.
+#   • Reuses the beta Dockerfile + run.sh (identical runtime behaviour).
+#   • Sits on its OWN compose project (name: totem-media) with its own
+#     volumes, so beta and media never share state.
+#   • Joins the `totemai-media_default` network (external) so it can reach the
+#     WordPress MCP endpoint by service name:  http://wordpress:8080
+#
+# Usage:
+#   # 1. Fill in docker/media/.env (TUNNEL_TOKEN, OPENROUTER_API_KEY, CORS_ORIGIN)
+#   # 2. Create a Cloudflare named tunnel + route media-totem.totemai.xyz → it
+#   #    (Zero Trust dashboard), with an Access policy for the media team.
+#   # 3. Start it:
+#   docker compose -f docker/media/docker-compose.yml up --build -d
+#   docker compose -f docker/media/docker-compose.yml logs -f totem-media
+#
+#   # 4. (Optional, auto) The WordPress MCP server is pre-registered via
+#   #    docker/media/mcp-servers.seed.json + seed.sh on first boot. If you'd rather
+#   #    add it by hand: admin UI → MCP → new server, with:
+#   #      name: totemai-website
+#   #      url:  http://wordpress:8080/wp-json/mcp/mcp-adapter-default-server
+#   #      type: streamable
+#   #      headers: X-Totemai-Bot-Token: <TOTEMAI_BOT_TOKEN from totemai-media/.env>
+#
+# Tear down (keeps volumes so state persists):
+#   docker compose -f docker/media/docker-compose.yml down
+# Full reset (wipes clone, node_modules, DB, storage):
+#   docker compose -f docker/media/docker-compose.yml down --volumes
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: totem-media
+
+services:
+  totem-media:
+    # Reuse the beta build — identical runtime. context is the repo root because
+    # the Dockerfile COPYs docker/beta/run.sh.
+    build:
+      context: ../..
+      dockerfile: docker/beta/Dockerfile
+    image: totem-media
+    container_name: totem-media
+    restart: unless-stopped
+    ports:
+      # Off to the 33k range so it never collides with beta (31k) or any local
+      # dev instance (default ports). Override if you must:
+      #   33300:13000  — Vite dev (user-facing; proxies /api)  ← tunnel target
+      #   33686:28686  — Express API (direct debugging)
+      #   33888:28888  — Collector (internal; debugging)
+      - "${HOST_FRONTEND_PORT:-33300}:13000"
+      - "${HOST_SERVER_PORT:-33686}:28686"
+      - "${HOST_COLLECTOR_PORT:-33888}:28888"
+    volumes:
+      # /app holds the git clone + node_modules (persisted across restarts).
+      - totem-media-work:/app
+      # /app/totem-storage holds the SQLite DB, secrets, vector cache, uploads.
+      - totem-media-data:/app/totem-storage
+      # Seed for the MCP server config (read-only). docker/media/entrypoint.sh copies it
+      # into the (read-write) storage volume on first boot, so the WordPress MCP server
+      # is pre-registered without any UI clicking. The volume stays read-write, so the
+      # instance can still toggle/delete servers later. See the `entrypoint:` override.
+      - ./mcp-servers.seed.json:/seed/anythingllm_mcp_servers.json:ro
+      # Seed wrapper (run.sh is already baked in at /usr/local/bin/run.sh by the Dockerfile).
+      - ./entrypoint.sh:/usr/local/bin/totem-media-entrypoint.sh:ro
+    # Override the image's ENTRYPOINT: seed the MCP config, then exec the real run.sh.
+    entrypoint: ["/bin/bash", "/usr/local/bin/totem-media-entrypoint.sh"]
+    environment:
+      # ── Repo (defaults from Dockerfile: fred-terzi/totem-llm, dev-totem) ──
+      # REPO_URL: https://github.com/fred-terzi/totem-llm.git
+      # REPO_BRANCH: dev-totem
+
+      # ── Feature flags (baked into the Vite bundle) ─────────────────────
+      # "beta" profile = hosted + filesystem tool + text splitter
+      # (no terminal access, no community hub, no model router) — same as beta.
+      TOTEM_BUILD_PROFILE: beta
+
+      # ── OpenRouter ("Totem Free" inference option) ─────────────────────
+      # Required for inference. Lives in docker/media/.env (gitignored).
+      OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+      OPENROUTER_MODEL_PREF: "${OPENROUTER_MODEL_PREF:-nvidia/nemotron-3.5-lightning:free}"
+
+      # ── CORS allowlist ─────────────────────────────────────────────────
+      # The browser sends "https://media-totem.totemai.xyz" over the tunnel.
+      # Read from docker/media/.env (gitignored).
+      CORS_ORIGIN: "${CORS_ORIGIN:-https://media-totem.totemai.xyz}"
+
+      # ── NOTE: payments / WalletConnect / TOTEM address are intentionally ──
+      # ── NOT set here. Leaving PAYMENTS_TREASURY_ADDRESS unset disables the  ──
+      # ── wallet-payment flow and the wallet badge for this internal instance. ──
+
+      # ── Storage ────────────────────────────────────────────────────────
+      # All persistent data MUST live on the totem-media-data volume.
+      STORAGE_DIR: "/app/totem-storage"
+
+      # ── Telemetry ──────────────────────────────────────────────────────
+      DISABLE_TELEMETRY: "true"
+
+      # ── Permanent URL ──────────────────────────────────────────────────
+      # Passed through to run.sh. Read from docker/media/.env (gitignored).
+      # Create a NAMED tunnel in the Zero Trust dashboard, route
+      # media-totem.totemai.xyz → http://localhost:13000, then paste the token.
+      TUNNEL_TOKEN: "${TUNNEL_TOKEN:-}"
+
+    # Reach the WordPress MCP endpoint by service name. The media container
+    # joins the totemai-media compose project's bridge network (declared as an
+    # external network below), so `http://wordpress:8080` resolves to the
+    # site's WordPress container — no host port, no extra routing.
+    networks:
+      - totem_media_default   # own (isolates state from beta)
+      - totemai_media_ext     # external → totemai-media_default
+
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:13000/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 240s
+      retries: 5
+
+volumes:
+  totem-media-work:
+  totem-media-data:
+
+networks:
+  totem_media_default:
+  # The totemai-media compose project auto-creates a network named
+  # `totemai-media_default`. Reference it as external so this project can
+  # attach its container to the same bridge and reach `wordpress:8080`.
+  totemai_media_ext:
+    external: true
+    name: totemai-media_default
