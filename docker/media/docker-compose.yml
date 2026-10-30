@@ -93,6 +93,10 @@ services:
       OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
       OPENROUTER_MODEL_PREF: "${OPENROUTER_MODEL_PREF:-nvidia/nemotron-3.5-lightning:free}"
 
+            # ── Venice AI ──────────────────────────────────────────────────────
+      VENICE_API_KEY: "${VENICE_API_KEY:-}"
+      VENICE_MODEL_PREF: "${VENICE_MODEL_PREF:-zai-org-glm-5-1}"
+
       # ── CORS allowlist ─────────────────────────────────────────────────
       # The browser sends "https://media-totem.totemai.xyz" over the tunnel.
       # Read from docker/media/.env (gitignored).
