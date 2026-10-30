@@ -172,7 +172,7 @@
     "hosted": {
       "communityHub": false,
       "modelRouter": false,
-      "llmProviders": ["ollama", "venice"],
+      "llmProviders": ["ollama", "venice", "openrouter"],
       "brandingWhitelabel": false,
       "filesystemAgent": false,
       "documentationLink": false,
@@ -197,7 +197,7 @@
     "beta": {
       "communityHub": false,
       "modelRouter": false,
-      "llmProviders": ["ollama", "venice"],
+      "llmProviders": ["ollama", "venice", "openrouter"],
       "brandingWhitelabel": false,
       "filesystemAgent": true,
       "documentationLink": false,
